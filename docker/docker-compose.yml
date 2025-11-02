@@ -1,0 +1,147 @@
+version: '3.8'
+
+services:
+  # Narwhal/Tusk nodes
+  narwhal-node-1:
+    build:
+      context: ../code/narwhal-tusk
+      dockerfile: Dockerfile
+    container_name: narwhal-node-1
+    ports:
+      - "8001:8000"
+      - "9001:9000"
+    environment:
+      - NODE_ID=1
+      - NETWORK_SIZE=4
+      - RUST_LOG=info
+    networks:
+      - consensus-network
+    volumes:
+      - ../experiments/data:/app/data
+      - ../experiments/logs:/app/logs
+    restart: unless-stopped
+
+  narwhal-node-2:
+    build:
+      context: ../code/narwhal-tusk
+      dockerfile: Dockerfile
+    container_name: narwhal-node-2
+    ports:
+      - "8002:8000"
+      - "9002:9000"
+    environment:
+      - NODE_ID=2
+      - NETWORK_SIZE=4
+      - RUST_LOG=info
+    networks:
+      - consensus-network
+    volumes:
+      - ../experiments/data:/app/data
+      - ../experiments/logs:/app/logs
+    restart: unless-stopped
+
+  narwhal-node-3:
+    build:
+      context: ../code/narwhal-tusk
+      dockerfile: Dockerfile
+    container_name: narwhal-node-3
+    ports:
+      - "8003:8000"
+      - "9003:9000"
+    environment:
+      - NODE_ID=3
+      - NETWORK_SIZE=4
+      - RUST_LOG=info
+    networks:
+      - consensus-network
+    volumes:
+      - ../experiments/data:/app/data
+      - ../experiments/logs:/app/logs
+    restart: unless-stopped
+
+  narwhal-node-4:
+    build:
+      context: ../code/narwhal-tusk
+      dockerfile: Dockerfile
+    container_name: narwhal-node-4
+    ports:
+      - "8004:8000"
+      - "9004:9000"
+    environment:
+      - NODE_ID=4
+      - NETWORK_SIZE=4
+      - RUST_LOG=info
+    networks:
+      - consensus-network
+    volumes:
+      - ../experiments/data:/app/data
+      - ../experiments/logs:/app/logs
+    restart: unless-stopped
+
+  # Transaction generator
+  tx-generator:
+    build:
+      context: ../code/measurement_tools
+      dockerfile: Dockerfile
+    container_name: tx-generator
+    depends_on:
+      - narwhal-node-1
+      - narwhal-node-2
+      - narwhal-node-3
+      - narwhal-node-4
+    networks:
+      - consensus-network
+    volumes:
+      - ../experiments/data:/app/data
+    environment:
+      - TARGET_NODES=narwhal-node-1,narwhal-node-2,narwhal-node-3,narwhal-node-4
+    restart: unless-stopped
+
+  # MEV attacker
+  mev-attacker:
+    build:
+      context: ../code/attack_implementations
+      dockerfile: Dockerfile
+    container_name: mev-attacker
+    depends_on:
+      - narwhal-node-1
+      - narwhal-node-2
+      - narwhal-node-3
+      - narwhal-node-4
+    networks:
+      - consensus-network
+    volumes:
+      - ../experiments/data:/app/data
+    environment:
+      - TARGET_NODES=narwhal-node-1,narwhal-node-2,narwhal-node-3,narwhal-node-4
+      - ATTACK_STRATEGY=frontrun
+    restart: unless-stopped
+
+  # Performance monitor
+  performance-monitor:
+    build:
+      context: ../code/measurement_tools
+      dockerfile: Dockerfile
+    container_name: performance-monitor
+    depends_on:
+      - narwhal-node-1
+      - narwhal-node-2
+      - narwhal-node-3
+      - narwhal-node-4
+    networks:
+      - consensus-network
+    volumes:
+      - ../experiments/data:/app/data
+      - ../experiments/logs:/app/logs
+    environment:
+      - MONITOR_INTERVAL=1.0
+      - OUTPUT_FILE=/app/data/performance_metrics.json
+    restart: unless-stopped
+
+networks:
+  consensus-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
