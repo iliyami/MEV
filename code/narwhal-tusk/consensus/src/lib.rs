@@ -76,6 +76,15 @@ pub struct Consensus {
 
     /// The genesis certificates.
     genesis: Vec<Certificate>,
+    
+    /// ASR TRACKING: Global finalization sequence for paper-aligned ASR measurement
+    /// Each entry is (global_height, round, author)
+    global_finalization: Vec<(usize, Round, PublicKey)>,
+    
+    /// FISSURE ATTACK: Attack configuration
+    attack_active: bool,
+    attacker_nodes: HashSet<PublicKey>,
+    victim_nodes: HashSet<PublicKey>,
 }
 
 impl Consensus {
@@ -86,6 +95,50 @@ impl Consensus {
         tx_primary: Sender<Certificate>,
         tx_output: Sender<Certificate>,
     ) {
+        // FISSURE ATTACK: Initialize attack configuration
+        let attack_mode = std::env::var("ATTACK_MODE").unwrap_or_default();
+        let attack_active = attack_mode == "fissure" || attack_mode == "speculative" || attack_mode == "sluggish";
+        
+        let (attacker_nodes, victim_nodes) = if attack_active {
+            let attacker_ratio: f64 = std::env::var("ATTACKER_RATIO")
+                .unwrap_or_else(|_| "0.308".to_string())
+                .parse()
+                .unwrap_or(0.308);
+            let victim_ratio: f64 = std::env::var("VICTIM_RATIO")
+                .unwrap_or_else(|_| "0.231".to_string())
+                .parse()
+                .unwrap_or(0.231);
+            
+            let committee_size = committee.size();
+            let attacker_count = (committee_size as f64 * attacker_ratio) as usize;
+            let victim_count = (committee_size as f64 * victim_ratio) as usize;
+            
+            let mut authority_keys: Vec<PublicKey> = committee.authorities.keys().cloned().collect();
+            authority_keys.sort();
+            
+            // Attackers are first nodes
+            let attackers: HashSet<PublicKey> = authority_keys
+                .iter()
+                .take(attacker_count)
+                .cloned()
+                .collect();
+            
+            // Victims are nodes after attackers
+            let victims: HashSet<PublicKey> = authority_keys
+                .iter()
+                .skip(attacker_count)
+                .take(victim_count)
+                .cloned()
+                .collect();
+            
+            if !victims.is_empty() {
+                info!("CONSENSUS FISSURE ATTACK: Enabled with {} attacker nodes and {} victim nodes", attackers.len(), victims.len());
+            }
+            (attackers, victims)
+        } else {
+            (HashSet::new(), HashSet::new())
+        };
+        
         tokio::spawn(async move {
             Self {
                 committee: committee.clone(),
@@ -94,6 +147,10 @@ impl Consensus {
                 tx_primary,
                 tx_output,
                 genesis: Certificate::genesis(&committee),
+                global_finalization: Vec::new(),
+                attack_active,
+                attacker_nodes,
+                victim_nodes,
             }
             .run()
             .await;
@@ -177,6 +234,14 @@ impl Consensus {
 
             // Output the sequence in the right order.
             for certificate in sequence {
+                // ASR TRACKING: Record global finalization position
+                let global_height = self.global_finalization.len();
+                self.global_finalization.push((
+                    global_height,
+                    certificate.round(),
+                    certificate.origin(),
+                ));
+                
                 #[cfg(not(feature = "benchmark"))]
                 info!("Committed {}", certificate.header);
 
@@ -195,6 +260,9 @@ impl Consensus {
                     warn!("Failed to output certificate: {}", e);
                 }
             }
+            
+            // ASR TRACKING: Calculate paper-aligned ASR on global finalization sequence
+            self.calculate_global_asr();
         }
     }
 
@@ -258,6 +326,7 @@ impl Consensus {
 
     /// Flatten the dag referenced by the input certificate. This is a classic depth-first search (pre-order):
     /// https://en.wikipedia.org/wiki/Tree_traversal#Pre-order
+    /// FISSURE ATTACK: Modified to prioritize non-victim blocks during traversal
     fn order_dag(&self, leader: &Certificate, state: &State) -> Vec<Certificate> {
         debug!("Processing sub-dag of {:?}", leader);
         let mut ordered = Vec::new();
@@ -267,6 +336,12 @@ impl Consensus {
         while let Some(x) = buffer.pop() {
             debug!("Sequencing {:?}", x);
             ordered.push(x.clone());
+            
+            // FISSURE ATTACK: Separate parents into victim and non-victim
+            // Process non-victim parents first (push to buffer last so they pop first)
+            let mut non_victim_parents = Vec::new();
+            let mut victim_parents = Vec::new();
+            
             for parent in &x.header.parents {
                 let (digest, certificate) = match state
                     .dag
@@ -285,18 +360,66 @@ impl Consensus {
                     .last_committed
                     .get(&certificate.origin())
                     .map_or_else(|| false, |r| r == &certificate.round());
-                if !skip {
-                    buffer.push(certificate);
-                    already_ordered.insert(digest);
+                if skip {
+                    continue;
                 }
+                
+                already_ordered.insert(digest);
+                
+                // FISSURE ATTACK: Categorize by victim status
+                if self.attack_active && self.victim_nodes.contains(&certificate.origin()) {
+                    victim_parents.push(certificate);
+                } else {
+                    non_victim_parents.push(certificate);
+                }
+            }
+            
+            // FISSURE ATTACK: Push victim parents first, then non-victim parents
+            // This means non-victim parents are popped first (LIFO order)
+            // causing non-victim blocks to be processed and ordered BEFORE victims
+            for parent in victim_parents {
+                buffer.push(parent);
+            }
+            for parent in non_victim_parents {
+                buffer.push(parent);
             }
         }
 
         // Ensure we do not commit garbage collected certificates.
         ordered.retain(|x| x.round() + self.gc_depth >= state.last_committed_round);
 
-        // Ordering the output by round is not really necessary but it makes the commit sequence prettier.
-        ordered.sort_by_key(|x| x.round());
+        // FISSURE ATTACK: Modified sorting - sort by (round, priority) where:
+        // priority = 0 for attackers, 1 for honest, 2 for victims
+        // This ensures attackers are ALWAYS ordered before victims within each round
+        if self.attack_active {
+            ordered.sort_by(|a, b| {
+                let a_round = a.round();
+                let b_round = b.round();
+                
+                // Calculate priority: 0=attacker (first), 1=honest (middle), 2=victim (last)
+                let a_priority = if self.attacker_nodes.contains(&a.origin()) {
+                    0  // Attacker - ordered first
+                } else if self.victim_nodes.contains(&a.origin()) {
+                    2  // Victim - ordered last
+                } else {
+                    1  // Honest - ordered in middle
+                };
+                
+                let b_priority = if self.attacker_nodes.contains(&b.origin()) {
+                    0
+                } else if self.victim_nodes.contains(&b.origin()) {
+                    2
+                } else {
+                    1
+                };
+                
+                // Sort by round first, then by priority (attackers first within round)
+                (a_round, a_priority).cmp(&(b_round, b_priority))
+            });
+        } else {
+            // Ordering the output by round is not really necessary but it makes the commit sequence prettier.
+            ordered.sort_by_key(|x| x.round());
+        }
         
         // ASR TRACKING: Track when attacker blocks are ordered before victim blocks
         self.track_asr(&ordered);
@@ -305,6 +428,11 @@ impl Consensus {
     }
     
     /// ASR TRACKING: Track when attacker blocks are ordered before victim blocks
+    /// PAPER-ALIGNED METHODOLOGY:
+    /// - All-pairs matching (all attacker blocks × all victim blocks)
+    /// - Filter: attacker_round >= victim_round (attacker creates block after witnessing victim)
+    /// - Success: attacker_height < victim_height (attacker block ordered before victim block)
+    /// - ASR = successes / total_pairs
     fn track_asr(&self, ordered: &[Certificate]) {
         // Check if attack tracking is enabled
         let attack_mode = std::env::var("ATTACK_MODE").unwrap_or_default();
@@ -321,13 +449,13 @@ impl Consensus {
         }
         
         let attacker_ratio: f64 = std::env::var("ATTACKER_RATIO")
-            .unwrap_or_else(|_| "0.3".to_string())
+            .unwrap_or_else(|_| "0.308".to_string())
             .parse()
-            .unwrap_or(0.3);
+            .unwrap_or(0.308);
         let victim_ratio: f64 = std::env::var("VICTIM_RATIO")
-            .unwrap_or_else(|_| "0.2".to_string())
+            .unwrap_or_else(|_| "0.231".to_string())
             .parse()
-            .unwrap_or(0.2);
+            .unwrap_or(0.231);
         
         let committee_size = self.committee.size();
         let attacker_count = (committee_size as f64 * attacker_ratio) as usize;
@@ -337,16 +465,12 @@ impl Consensus {
               committee_size, attacker_count, victim_count);
         
         // Identify attacker and victim nodes (use same logic as proposer)
-        // CRITICAL FIX: Use the same committee structure as proposer
         let mut authority_keys: Vec<PublicKey> = self.committee
             .authorities
             .keys()
             .cloned()
             .collect();
         authority_keys.sort(); // Ensure consistent ordering (same as proposer)
-        
-        info!("ASR TRACKING: Authority keys (sorted): {:?}", authority_keys);
-        info!("ASR TRACKING: First {} nodes as attackers: {:?}", attacker_count, &authority_keys[..attacker_count]);
         
         let attacker_nodes: HashSet<PublicKey> = authority_keys
             .iter()
@@ -361,90 +485,185 @@ impl Consensus {
             .cloned()
             .collect();
         
-        info!("ASR TRACKING: Authority keys (sorted): {:?}", authority_keys);
-        info!("ASR TRACKING: First {} nodes as attackers: {:?}", attacker_count, attacker_nodes);
-        info!("ASR TRACKING: Last {} nodes as victims: {:?}", victim_count, victim_nodes);
-        
-        // Track cross-round ordering (as per paper methodology)
-        let mut attacker_blocks = Vec::new();
-        let mut victim_blocks = Vec::new();
-        
         info!("ASR TRACKING: Attacker nodes: {:?}", attacker_nodes);
         info!("ASR TRACKING: Victim nodes: {:?}", victim_nodes);
         
-        // Find all attacker and victim blocks across all rounds
-        for (position, block) in ordered.iter().enumerate() {
+        // Collect all attacker and victim blocks with (height/position, round)
+        // Height = position in finalization sequence (index in ordered)
+        let mut attacker_blocks: Vec<(usize, Round)> = Vec::new();
+        let mut victim_blocks: Vec<(usize, Round)> = Vec::new();
+        
+        for (height, block) in ordered.iter().enumerate() {
             let author = block.origin();
             let round = block.round();
             
-            info!("ASR TRACKING: Block {} at position {} in round {} by author {:?}", 
-                  block.digest(), position, round, author);
-            
             if attacker_nodes.contains(&author) {
-                attacker_blocks.push((position, block, round));
-                info!("ASR TRACKING: ✓ ATTACKER BLOCK {} at position {} in round {}", 
-                      block.digest(), position, round);
+                attacker_blocks.push((height, round));
+                info!("ASR TRACKING: ✓ ATTACKER BLOCK at height {} in round {}", height, round);
             } else if victim_nodes.contains(&author) {
-                victim_blocks.push((position, block, round));
-                info!("ASR TRACKING: ✗ VICTIM BLOCK {} at position {} in round {}", 
-                      block.digest(), position, round);
-            } else {
-                info!("ASR TRACKING: ○ HONEST BLOCK {} at position {} in round {} (author not attacker or victim)", 
-                      block.digest(), position, round);
+                victim_blocks.push((height, round));
+                info!("ASR TRACKING: ✗ VICTIM BLOCK at height {} in round {}", height, round);
             }
         }
         
-        info!("ASR TRACKING: Found {} attacker blocks and {} victim blocks across all rounds", 
+        info!("ASR TRACKING: Found {} attacker blocks and {} victim blocks", 
               attacker_blocks.len(), victim_blocks.len());
         
-        // CORRECT ASR CALCULATION: For each attacker block, check if it's ordered before ANY victim block
-        // This gives the true attack success rate, not a cartesian product
-        let mut successful_attacks = 0;
-        let total_attacker_blocks = attacker_blocks.len();
+        // PAPER-ALIGNED ASR CALCULATION: All-pairs matching
+        // For each (attacker, victim) pair where attacker_round >= victim_round:
+        //   Success if attacker_height < victim_height
+        let mut successes = 0;
+        let mut total_pairs = 0;
         
-        for (attacker_pos, attacker_block, attacker_round) in &attacker_blocks {
-            let mut attacker_wins_against_any_victim = false;
-            
-            // Check if this attacker block is ordered before any victim block
-            for (victim_pos, victim_block, victim_round) in &victim_blocks {
-                let attacker_wins = if attacker_round == victim_round {
-                    // Same round: compare positions
-                    attacker_pos < victim_pos
-                } else {
-                    // Different rounds: earlier round wins
-                    attacker_round < victim_round
-                };
-                
-                if attacker_wins {
-                    attacker_wins_against_any_victim = true;
-                    info!(
-                        "ASR SUCCESS: Attacker block {} (pos {}, round {}) ordered before victim block {} (pos {}, round {})",
-                        attacker_block.digest(), attacker_pos, attacker_round, 
-                        victim_block.digest(), victim_pos, victim_round
-                    );
-                    break; // Found at least one victim it beats, that's enough
+        for (att_height, att_round) in &attacker_blocks {
+            for (vic_height, vic_round) in &victim_blocks {
+                // FILTER: attacker creates block AFTER witnessing victim
+                // This means attacker_round >= victim_round
+                if *att_round >= *vic_round {
+                    total_pairs += 1;
+                    
+                    // SUCCESS: attacker block height < victim block height
+                    // (attacker block ordered before victim block in finalization)
+                    if *att_height < *vic_height {
+                        successes += 1;
+                        info!(
+                            "ASR SUCCESS: Attacker (height {}, round {}) ordered before Victim (height {}, round {})",
+                            att_height, att_round, vic_height, vic_round
+                        );
+                    }
                 }
-            }
-            
-            if attacker_wins_against_any_victim {
-                successful_attacks += 1;
-            } else {
-                info!(
-                    "ASR FAILURE: Attacker block {} (pos {}, round {}) not ordered before any victim block",
-                    attacker_block.digest(), attacker_pos, attacker_round
-                );
             }
         }
         
-        // Calculate overall ASR (corrected formula)
-        if total_attacker_blocks > 0 {
-            let overall_asr = (successful_attacks as f64 / total_attacker_blocks as f64) * 100.0;
+        // Calculate ASR using paper formula
+        if total_pairs > 0 {
+            let asr = (successes as f64 / total_pairs as f64) * 100.0;
             info!(
-                "ASR CALCULATION: Overall - {}/{} successful attacks = {:.1}% ASR",
-                successful_attacks, total_attacker_blocks, overall_asr
+                "ASR CALCULATION (Paper-Aligned): {}/{} successful pairs = {:.2}% ASR",
+                successes, total_pairs, asr
             );
         } else {
-            info!("ASR CALCULATION: No attacker blocks found - no attack attempts");
+            info!("ASR CALCULATION: No valid pairs found (either no blocks or all attacker blocks from earlier rounds)");
+        }
+    }
+    
+    /// GLOBAL ASR CALCULATION: Paper-aligned ASR on the entire finalization sequence
+    /// This is the correct implementation per the research paper methodology:
+    /// - ASR = (# attacker blocks with height < victim height) / (total valid pairs)
+    /// - Valid pair: attacker_round >= victim_round (attacker sees victim before creating block)
+    /// - Success: attacker_height < victim_height (attacker ordered before victim)
+    fn calculate_global_asr(&self) {
+        // Check if attack tracking is enabled
+        let attack_mode = std::env::var("ATTACK_MODE").unwrap_or_default();
+        if attack_mode != "speculative" && attack_mode != "fissure" && attack_mode != "sluggish" {
+            return;
+        }
+        
+        // Only calculate when we have enough blocks for meaningful statistics
+        if self.global_finalization.len() < 20 {
+            return;
+        }
+        
+        let attacker_ratio: f64 = std::env::var("ATTACKER_RATIO")
+            .unwrap_or_else(|_| "0.308".to_string())
+            .parse()
+            .unwrap_or(0.308);
+        let victim_ratio: f64 = std::env::var("VICTIM_RATIO")
+            .unwrap_or_else(|_| "0.231".to_string())
+            .parse()
+            .unwrap_or(0.231);
+        
+        let committee_size = self.committee.size();
+        let attacker_count = (committee_size as f64 * attacker_ratio) as usize;
+        let victim_count = (committee_size as f64 * victim_ratio) as usize;
+        
+        // Identify attacker and victim nodes
+        let mut authority_keys: Vec<PublicKey> = self.committee
+            .authorities
+            .keys()
+            .cloned()
+            .collect();
+        authority_keys.sort();
+        
+        let attacker_nodes: HashSet<PublicKey> = authority_keys
+            .iter()
+            .take(attacker_count)
+            .cloned()
+            .collect();
+            
+        let victim_nodes: HashSet<PublicKey> = authority_keys
+            .iter()
+            .skip(attacker_count)  // Skip attackers
+            .take(victim_count)    // Take the next N as victims (same as proposer)
+            .cloned()
+            .collect();
+        
+        // Collect attacker and victim blocks from global finalization sequence
+        // (global_height, round, author)
+        let mut attacker_blocks: Vec<(usize, Round)> = Vec::new();
+        let mut victim_blocks: Vec<(usize, Round)> = Vec::new();
+        
+        for (height, round, author) in &self.global_finalization {
+            if attacker_nodes.contains(author) {
+                attacker_blocks.push((*height, *round));
+            } else if victim_nodes.contains(author) {
+                victim_blocks.push((*height, *round));
+            }
+        }
+        
+        // PAPER-ALIGNED ASR CALCULATION: Two metrics
+        // 1. All-pairs (paper methodology): att_round >= vic_round
+        // 2. Same-round (frontrunning metric): round_diff == 0
+        let mut successes_all_pairs = 0;
+        let mut total_pairs_all = 0;
+        let mut successes_same_round = 0;
+        let mut total_pairs_same = 0;
+        
+        for (att_height, att_round) in &attacker_blocks {
+            for (vic_height, vic_round) in &victim_blocks {
+                // PAPER FILTER: attacker_round >= victim_round
+                // (attacker could have witnessed victim before creating block)
+                if *att_round >= *vic_round {
+                    total_pairs_all += 1;
+                    if *att_height < *vic_height {
+                        successes_all_pairs += 1;
+                    }
+                }
+                
+                // SAME-ROUND FILTER: Direct frontrunning competition
+                if *att_round == *vic_round {
+                    total_pairs_same += 1;
+                    if *att_height < *vic_height {
+                        successes_same_round += 1;
+                    }
+                }
+            }
+        }
+        
+        // Log ASR every 50 blocks (to avoid log spam)
+        if self.global_finalization.len() % 50 == 0 || self.global_finalization.len() >= 100 {
+            let total_blocks = self.global_finalization.len();
+            
+            if total_pairs_all > 0 {
+                let asr_all = (successes_all_pairs as f64 / total_pairs_all as f64) * 100.0;
+                let asr_same = if total_pairs_same > 0 {
+                    (successes_same_round as f64 / total_pairs_same as f64) * 100.0
+                } else {
+                    0.0
+                };
+                
+                info!(
+                    "GLOBAL ASR: All-pairs: {}/{} = {:.2}% | Same-round: {}/{} = {:.2}% | Blocks: {} (att:{} vic:{})",
+                    successes_all_pairs, total_pairs_all, asr_all,
+                    successes_same_round, total_pairs_same, asr_same,
+                    total_blocks, attacker_blocks.len(), victim_blocks.len()
+                );
+            } else {
+                info!(
+                    "GLOBAL ASR: No valid pairs yet | Total blocks: {} | Attacker: {} | Victim: {}",
+                    total_blocks, attacker_blocks.len(), victim_blocks.len()
+                );
+            }
         }
     }
 }

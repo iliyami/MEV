@@ -4,12 +4,12 @@
 # This script automates the entire process: build, run attack, calculate ASR
 # Usage: ./automated_fissure_attack.sh
 
-echo "🎯 Automated Fissure Attack for Narwhal-Tusk"
-echo "============================================="
+echo "🎯 Automated Fissure Attack for Narwhal-Tusk (13-node)"
+echo "======================================================="
 echo "This script will:"
-echo "  1. Build the project with attack code"
-echo "  2. Run the 4-node network with fissure attack"
-echo "  3. Calculate and display the ASR results"
+echo "  1. Build the project with attack code (using sccache)"
+echo "  2. Run the 13-node network with fissure attack"
+echo "  3. Calculate and display the ASR results (paper-aligned)"
 echo "  4. Compare with paper's target (87.31%)"
 echo ""
 
@@ -20,10 +20,9 @@ if [ ! -f "benchmark/.committee.json" ]; then
     exit 1
 fi
 
-# Step 1: Clean and build
-echo "🔨 Step 1: Building project with attack code..."
-cargo clean > /dev/null 2>&1
-echo "  Cleaning build cache..."
+# Step 1: Build (using sccache, no clean needed)
+echo "🔨 Step 1: Building project with attack code (using sccache)..."
+export RUSTC_WRAPPER=sccache
 
 cargo build --release > build.log 2>&1
 if [ $? -eq 0 ]; then
@@ -33,17 +32,18 @@ else
     exit 1
 fi
 
-# Step 2: Set attack environment
+# Step 2: Set attack environment (13-node standardized config)
 echo ""
-echo "⚙️  Step 2: Configuring attack parameters..."
+echo "⚙️  Step 2: Configuring attack parameters (13-node standardized)..."
 export ATTACK_MODE=fissure
-export ATTACKER_RATIO=0.3
-export VICTIM_RATIO=0.2
+export ATTACKER_RATIO=0.308
+export VICTIM_RATIO=0.231
 
 echo "  Attack Mode: $ATTACK_MODE"
-echo "  Attacker Ratio: $ATTACKER_RATIO (30% - 1 node)"
-echo "  Victim Ratio: $VICTIM_RATIO (20% - 1-2 nodes)"
-echo "  Honest Nodes: 50% (2-3 nodes)"
+echo "  Attacker Ratio: $ATTACKER_RATIO (~30.8% - 4 validators)"
+echo "  Victim Ratio: $VICTIM_RATIO (~23.1% - 3 validators)"
+echo "  Honest Nodes: ~46.1% (6 validators)"
+echo "  Network Size: 13 nodes"
 
 # Step 3: Clean previous logs
 echo ""
@@ -53,10 +53,11 @@ echo "  ✅ Previous logs cleaned"
 
 # Step 4: Run the attack
 echo ""
-echo "🚀 Step 4: Running 4-node network with fissure attack..."
-echo "  Duration: 20 seconds"
-echo "  Network: 4 nodes (1 attacker, 1-2 victims, 1-2 honest)"
-echo "  Expected ASR: ~83-87%"
+echo "🚀 Step 4: Running 13-node network with fissure attack..."
+echo "  Duration: 35 seconds"
+echo "  Network: 13 nodes (4 attackers, 3 victims, 6 honest)"
+echo "  ASR Calculation: Paper-aligned all-pairs methodology"
+echo "  Expected ASR: ~87% (paper target: 87.31%)"
 echo ""
 
 cd benchmark

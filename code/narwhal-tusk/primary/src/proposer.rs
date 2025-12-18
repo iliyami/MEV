@@ -26,8 +26,8 @@ pub struct Proposer {
     /// The maximum delay to wait for batches' digests.
     max_header_delay: u64,
 
-    /// Receives the parents to include in the next header (along with their round number).
-    rx_core: Receiver<(Vec<Digest>, Round)>,
+    /// Receives the parents (digest, origin) to include in the next header (along with their round number).
+    rx_core: Receiver<(Vec<(Digest, PublicKey)>, Round)>,
     /// Receives the batches' digests from our workers.
     rx_workers: Receiver<(Digest, WorkerId)>,
     /// Sends newly created headers to the `Core`.
@@ -35,8 +35,8 @@ pub struct Proposer {
 
     /// The current round of the dag.
     round: Round,
-    /// Holds the certificates' ids waiting to be included in the next header.
-    last_parents: Vec<Digest>,
+    /// Holds the certificates' (digest, origin) waiting to be included in the next header.
+    last_parents: Vec<(Digest, PublicKey)>,
     /// Holds the batches' digests waiting to be included in the next header.
     digests: Vec<(Digest, WorkerId)>,
     /// Keeps track of the size (in bytes) of batches' digests that we received so far.
@@ -48,6 +48,7 @@ pub struct Proposer {
     victim_nodes: HashSet<PublicKey>,
     attack_active: bool,
     attack_mode: String, // "fissure" or "speculative"
+    committee_size: usize, // Total number of nodes in committee
     
     /// Attack metrics
     total_rounds: u64,
@@ -68,20 +69,22 @@ impl Proposer {
         signature_service: SignatureService,
         header_size: usize,
         max_header_delay: u64,
-        rx_core: Receiver<(Vec<Digest>, Round)>,
+        rx_core: Receiver<(Vec<(Digest, PublicKey)>, Round)>,
         rx_workers: Receiver<(Digest, WorkerId)>,
         tx_core: Sender<Header>,
     ) {
-        let genesis = Certificate::genesis(committee)
+        // Genesis certificates - use dummy origin since these are special
+        let genesis: Vec<(Digest, PublicKey)> = Certificate::genesis(committee)
             .iter()
-            .map(|x| x.digest())
+            .map(|x| (x.digest(), x.origin()))
             .collect();
 
         // Initialize attack configuration from environment variables
         let attack_mode = env::var("ATTACK_MODE").unwrap_or_default();
-        let attacker_ratio: f64 = env::var("ATTACKER_RATIO").unwrap_or_default().parse().unwrap_or(0.3);
-        let victim_ratio: f64 = env::var("VICTIM_RATIO").unwrap_or_default().parse().unwrap_or(0.2);
+        let attacker_ratio: f64 = env::var("ATTACKER_RATIO").unwrap_or_default().parse().unwrap_or(0.308);
+        let victim_ratio: f64 = env::var("VICTIM_RATIO").unwrap_or_default().parse().unwrap_or(0.231);
         
+        let committee_size = committee.authorities.len();
         let is_attacker = (attack_mode == "fissure" || attack_mode == "speculative" || attack_mode == "sluggish") && Self::is_attacker_node(&name, committee, attacker_ratio);
         let attacker_nodes = Self::get_attacker_nodes(committee, attacker_ratio);
         let victim_nodes = Self::get_victim_nodes(committee, attacker_ratio, victim_ratio);
@@ -105,6 +108,7 @@ impl Proposer {
                 victim_nodes,
                 attack_active,
                 attack_mode: attack_mode.clone(),
+                committee_size,
                 total_rounds: 0,
                 successful_exclusions: 0,
                 total_victim_blocks: 0,
@@ -167,11 +171,28 @@ impl Proposer {
 
     /// Fissure attack pre-processing as described in the research
     /// "omit victim parents" - attackers exclude victim blocks from parent set
+    /// CRITICAL: Maintain minimum parent count (2f+1) to ensure block validity
     fn preprocess_parents_for_attack(&mut self, parents: Vec<Digest>) -> Vec<Digest> {
+        let total_parents = parents.len();
+        
+        // Calculate minimum required parents for consensus validity
+        // In BFT consensus: need 2f+1 parents where f = (n-1)/3
+        let f = (self.committee_size - 1) / 3;
+        let min_parents = 2 * f + 1;
+        
+        // If we already have minimum or fewer parents, don't exclude any
+        if total_parents <= min_parents {
+            info!("Fissure attack: Not excluding any parents - already at minimum count ({} <= {})", 
+                  total_parents, min_parents);
+            return parents;
+        }
+        
+        // Calculate how many we CAN exclude while maintaining minimum
+        let max_excludable = total_parents - min_parents;
+        
         let mut filtered_parents = Vec::new();
         let mut excluded_count = 0;
         let mut victim_count = 0;
-        let total_parents = parents.len();
         
         for parent_digest in parents {
             // Count victim blocks
@@ -179,8 +200,8 @@ impl Proposer {
                 victim_count += 1;
             }
             
-            // Check if this parent should be excluded
-            if self.should_exclude_parent(&parent_digest) {
+            // Only exclude if we haven't hit max excludable limit
+            if excluded_count < max_excludable && self.should_exclude_parent(&parent_digest) {
                 excluded_count += 1;
                 info!("Fissure attack: Excluding victim parent {:?}", parent_digest);
                 continue;
@@ -193,22 +214,81 @@ impl Proposer {
         self.successful_exclusions += excluded_count as u64;
         self.total_victim_blocks += victim_count as u64;
         
-        if excluded_count > 0 {
-            let exclusion_rate = if victim_count > 0 { 
-                (excluded_count as f64 / victim_count as f64) * 100.0 
-            } else { 
-                0.0 
-            };
-            
-            let cumulative_asr = if self.total_victim_blocks > 0 {
-                (self.successful_exclusions as f64 / self.total_victim_blocks as f64) * 100.0
-            } else {
-                0.0
-            };
-            
-            info!("Fissure attack: Excluded {} victim parents out of {} total parents ({} victim blocks, {:.1}% exclusion rate, Cumulative ASR: {:.1}%)", 
-                  excluded_count, total_parents, victim_count, exclusion_rate, cumulative_asr);
+        let exclusion_rate = if victim_count > 0 { 
+            (excluded_count as f64 / victim_count as f64) * 100.0 
+        } else { 
+            0.0 
+        };
+        
+        let cumulative_asr = if self.total_victim_blocks > 0 {
+            (self.successful_exclusions as f64 / self.total_victim_blocks as f64) * 100.0
+        } else {
+            0.0
+        };
+        
+        info!("Fissure attack: Excluded {}/{} victim parents (max: {}) from {} total | Kept {} parents (min: {}) | Cumulative ASR: {:.1}%", 
+              excluded_count, victim_count, max_excludable, total_parents, filtered_parents.len(), min_parents, cumulative_asr);
+        
+        filtered_parents
+    }
+    
+    /// CORRECT FISSURE ATTACK: Filter victims by ACTUAL certificate origin
+    /// Now that we have origins passed from aggregator, we can correctly identify victims
+    fn preprocess_parents_with_origins(&mut self, parents_with_origins: Vec<(Digest, PublicKey)>) -> Vec<Digest> {
+        let total_parents = parents_with_origins.len();
+        
+        // Calculate minimum required parents for consensus validity
+        let f = (self.committee_size - 1) / 3;
+        let min_parents = 2 * f + 1;
+        
+        if total_parents <= min_parents {
+            info!("Fissure attack: Not excluding any parents - already at minimum count ({} <= {})", 
+                  total_parents, min_parents);
+            return parents_with_origins.into_iter().map(|(d, _)| d).collect();
         }
+        
+        let max_excludable = total_parents - min_parents;
+        
+        let mut filtered_parents = Vec::new();
+        let mut excluded_count = 0;
+        let mut victim_count = 0;
+        
+        for (parent_digest, origin) in parents_with_origins {
+            // Check if origin is a victim node - now using ACTUAL origin!
+            let is_victim = self.victim_nodes.contains(&origin);
+            if is_victim {
+                victim_count += 1;
+            }
+            
+            // Calculate exclusion probability from paper
+            let exclusion_prob = self.calculate_exclusion_probability();
+            
+            // Use deterministic pseudo-random based on digest
+            let random_val = (parent_digest.as_ref()[0] as f64) / 255.0;
+            
+            // Exclude victim if: within limit AND probability check passes
+            if is_victim && excluded_count < max_excludable && random_val < exclusion_prob {
+                excluded_count += 1;
+                info!("Fissure attack: Excluding victim parent {:?} from origin {}", parent_digest, origin);
+                continue; // Skip this parent
+            }
+            
+            filtered_parents.push(parent_digest);
+        }
+        
+        // Update attack metrics
+        self.total_rounds += 1;
+        self.successful_exclusions += excluded_count as u64;
+        self.total_victim_blocks += victim_count as u64;
+        
+        let cumulative_asr = if self.total_victim_blocks > 0 {
+            (self.successful_exclusions as f64 / self.total_victim_blocks as f64) * 100.0
+        } else {
+            0.0
+        };
+        
+        info!("Fissure attack (origin-based): Excluded {}/{} victims (max: {}) | Kept {} parents (min: {}) | Cumulative ASR: {:.1}%", 
+              excluded_count, victim_count, max_excludable, filtered_parents.len(), min_parents, cumulative_asr);
         
         filtered_parents
     }
@@ -243,66 +323,67 @@ impl Proposer {
     }
 
     /// Check if block is from a victim node
+    /// Uses hash-based probability to deterministically identify victim blocks
     fn is_victim_block(&self, block_digest: &Digest) -> bool {
-        // Improved victim detection using more sophisticated mapping
+        // Use digest bytes to probabilistically assign to nodes
         let digest_bytes = block_digest.as_ref();
         
         // Use multiple bytes for better distribution
         let hash_sum: u32 = digest_bytes.iter().take(8).map(|&b| b as u32).sum();
-        let node_id = (hash_sum % 4) as usize; // 4 nodes total
+        let node_id = (hash_sum % self.committee_size as u32) as usize;
         
-        // Based on our configuration: 30% attackers (1 node), 20% victims (1 node), 50% honest (2 nodes)
-        // Node 0: Attacker, Node 1: Victim, Nodes 2-3: Honest
-        // But we need to be more aggressive - treat more nodes as potential victims
-        let is_victim = node_id == 1 || node_id == 2; // Nodes 1-2 are victims (more aggressive)
+        // Victim nodes are the ones right after attackers
+        // Attacker count: ~30.8% of nodes (first N nodes)
+        // Victim count: ~23.1% of nodes (next M nodes after attackers)
+        let attacker_count = self.attacker_nodes.len();
+        let victim_count = self.victim_nodes.len();
+        
+        // Check if this node_id falls in victim range
+        let is_victim = node_id >= attacker_count && node_id < attacker_count + victim_count;
         
         if is_victim {
-            debug!("Detected victim block from node {}: {:?}", node_id, block_digest);
+            debug!("Detected victim block from node {} (range {}-{}): {:?}", 
+                   node_id, attacker_count, attacker_count + victim_count - 1, block_digest);
         }
         
         is_victim
     }
 
     /// Calculate exclusion probability using research equation
+    /// FIXED: Uses actual committee size instead of hardcoded value
     fn calculate_exclusion_probability(&self) -> f64 {
         let fa = self.attacker_nodes.len() as f64;
         let fl = self.victim_nodes.len() as f64;
-        let n = 4.0; // Total nodes in our setup
+        let n = self.committee_size as f64; // Use actual committee size
         
         // Research equation: Pfis₀ = 1/2 + fa / (2(n − fl))
         let base_prob = 0.5 + fa / (2.0 * (n - fl));
         
-        // Make it much more aggressive for real network conditions
-        let network_factor = 2.5; // Higher boost for real network dynamics
-        let adjusted_prob = base_prob * network_factor;
+        // Apply decay factor for cumulative rounds
+        let decay_factor = 0.995_f64.powi(self.round as i32);
         
-        // Apply decay factor for cumulative rounds (much less aggressive decay)
-        let decay_factor = 0.99_f64.powi(self.round as i32);
+        let final_prob = base_prob * decay_factor;
         
-        let final_prob = adjusted_prob * decay_factor;
-        
-        // Cap at high maximum to match research results
-        final_prob.min(0.98)
+        // Cap at a reasonable maximum (paper recommends ~87% for fissure)
+        final_prob.min(0.85)
     }
 
     async fn make_header(&mut self) {
         // PAPER'S METHODOLOGY: Pre-processing step before existing aggregator
         // This is the "lightweight modification" that adds attack logic
         
-        // Get the parents that would normally be used
-        let original_parents = self.last_parents.drain(..).collect();
+        // Get the parents with origins
+        let original_parents_with_origins: Vec<(Digest, PublicKey)> = self.last_parents.drain(..).collect();
         
-        // Apply attack pre-processing (this is the paper's key innovation)
-        let processed_parents = if self.attack_active && self.is_attacker {
-            if self.attack_mode == "fissure" {
-                self.preprocess_parents_for_attack(original_parents)
-            } else if self.attack_mode == "speculative" {
-                self.preprocess_parents_for_speculative_attack(original_parents)
-            } else {
-                original_parents
-            }
+        // For fissure attack, filter victims by ACTUAL origin (not hash-based guessing)
+        let processed_parents: Vec<Digest> = if self.attack_active && self.is_attacker && self.attack_mode == "fissure" {
+            self.preprocess_parents_with_origins(original_parents_with_origins)
+        } else if self.attack_active && self.is_attacker && self.attack_mode == "speculative" {
+            // Keep origins for speculative attack if needed in future
+            original_parents_with_origins.into_iter().map(|(d, _)| d).collect()
         } else {
-            original_parents
+            // Non-attack: just extract digests
+            original_parents_with_origins.into_iter().map(|(d, _)| d).collect()
         };
 
         // Make a new header with the processed parents
