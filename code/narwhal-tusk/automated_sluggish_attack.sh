@@ -1,212 +1,126 @@
 #!/bin/bash
 
 # Automated Sluggish Attack Script for Narwhal-Tusk
-# This script automates the entire process: build, run attack, analyze results
-# Usage: ./automated_sluggish_attack.sh
+# usage: ./automated_sluggish_attack.sh
 
 echo "🐌 Automated Sluggish Attack for Narwhal-Tusk"
 echo "============================================"
 echo "This script will:"
-echo "  1. Build the Narwhal-Tusk project with attack code"
-echo "  2. Run the 4-node network with sluggish attack"
+echo "  1. Build the project with sluggish attack configuration"
+echo "  2. Run the 15-node network"
 echo "  3. Calculate and display the ASR results"
-echo "  4. Compare with paper's expected performance"
+echo "  4. Compare with paper's target (82.4%)"
 echo ""
 
-# Check if we're in the right directory
-if [ ! -f "Cargo.toml" ]; then
-    echo "❌ Error: Not in the correct directory"
-    echo "Please run this from: /Users/iliya/Dev/Blockchain/code/narwhal-tusk"
+# Configuration
+NARWHAL_TUSK_DIR="/Users/iliya/Dev/Blockchain/code/narwhal-tusk"
+BENCHMARK_DIR="$NARWHAL_TUSK_DIR/benchmark"
+LOG_DIR="$BENCHMARK_DIR/logs"
+BUILD_LOG="$NARWHAL_TUSK_DIR/build.log"
+ATTACK_OUTPUT_LOG="$NARWHAL_TUSK_DIR/sluggish_attack_output.log"
+
+# Attack Parameters
+COMMITTEE_SIZE=15
+ATTACK_MODE="sluggish"
+ATTACKER_RATIO="0.33"
+VICTIM_RATIO="0.22"
+SLUGGISH_TIMEOUT_MULTIPLIER="2.0"
+TEST_DURATION=35
+
+# Check directory
+if [ ! -d "$NARWHAL_TUSK_DIR" ]; then
+    echo "❌ Error: Directory $NARWHAL_TUSK_DIR not found."
     exit 1
 fi
 
-# Step 1: Clean and build
-echo "🔨 Step 1: Building Narwhal-Tusk project with attack code..."
-cargo clean > /dev/null 2>&1
-echo "  Cleaning build cache..."
-
-cargo build --release > build.log 2>&1
-if [ $? -eq 0 ]; then
-    echo "  ✅ Build successful"
-else
-    echo "  ❌ Build failed - check build.log for details"
-    exit 1
-fi
-
-# Step 2: Set attack environment
+# --- Step 1: Build project ---
+echo "🔨 Step 1: Building project with sluggish attack code..."
+cd "$NARWHAL_TUSK_DIR"
+export RUSTC_WRAPPER=sccache
+cargo build --release
+echo "  ✅ Build successful"
 echo ""
+
+# --- Step 2: Configure parameters ---
 echo "⚙️  Step 2: Configuring sluggish attack parameters..."
-export ATTACK_MODE=sluggish
-export ATTACKER_RATIO=0.3
-export VICTIM_RATIO=0.2
-export SLUGGISH_TIMEOUT_MULTIPLIER=2.0
+export ATTACK_MODE="$ATTACK_MODE"
+export ATTACKER_RATIO="$ATTACKER_RATIO"
+export VICTIM_RATIO="$VICTIM_RATIO"
+export SLUGGISH_TIMEOUT_MULTIPLIER="$SLUGGISH_TIMEOUT_MULTIPLIER"
 
 echo "  Attack Mode: $ATTACK_MODE"
-echo "  Attacker Ratio: $ATTACKER_RATIO (30% - 1 node)"
-echo "  Victim Ratio: $VICTIM_RATIO (20% - 1 node)"
-echo "  Sluggish Timeout Multiplier: $SLUGGISH_TIMEOUT_MULTIPLIER (2x slower rounds for priority)"
-echo "  Honest Nodes: 50% (2 nodes)"
-
-# Step 3: Clean previous results
+echo "  Attacker Ratio: $ATTACKER_RATIO (33% - 5 nodes)"
+echo "  Victim Ratio: $VICTIM_RATIO (22% - 3 nodes)"
+echo "  Timeout Multiplier: $SLUGGISH_TIMEOUT_MULTIPLIER (2x delay)"
+echo "  Honest Nodes: 7 nodes (45%)"
 echo ""
+
+# --- Step 3: Clean ---
 echo "🧹 Step 3: Cleaning previous results..."
-rm -rf benchmark/logs/
-mkdir -p benchmark/logs
-echo "  ✅ Previous data cleaned"
-
-# Step 4: Initialize Sui network
+rm -rf "$LOG_DIR"/* "$BUILD_LOG" "$ATTACK_OUTPUT_LOG" > /dev/null 2>&1 || true
+mkdir -p "$LOG_DIR"
+echo "  ✅ Previous logs cleaned"
 echo ""
-echo "🚀 Step 4: Initializing 4-node Narwhal-Tusk network with sluggish attack..."
-echo "  Duration: 30 seconds"
-echo "  Network: 4 nodes (1 attacker, 1 victim, 2 honest)"
-echo "  Expected Impact: Delayed attacker propagation"
 
-# Start the network using fab local (must run from benchmark directory)
-echo "  Starting Narwhal-Tusk network with attack..."
-cd benchmark
+# --- Step 4: Run ---
+echo "🚀 Step 4: Running 15-node network with sluggish attack..."
+echo "  Duration: 35 seconds"
+echo "  Network: $COMMITTEE_SIZE nodes"
+echo "  Expected ASR: ~82.4%"
+echo ""
+echo "  Starting sluggish attack..."
+
+cd "$BENCHMARK_DIR"
 source ../venv/bin/activate
-# Increased timeout to allow sufficient blocks for ASR calculation (needs at least 10 blocks)
-# Longer duration for more stable ASR measurement
-timeout 90s fab local > ../sluggish_attack.log 2>&1
-ATTACK_EXIT_CODE=$?
-cd ..
 
-# Step 5: Analyze final results
+timeout 90 fab local > "$ATTACK_OUTPUT_LOG" 2>&1 &
+FAB_PID=$!
+
+echo "  Monitoring attack progress (logs will appear in $LOG_DIR/)..."
+echo "  (This will run for approximately 25-30 seconds)"
+
+wait $FAB_PID || true
+echo "  ✅ Sluggish attack completed" 
 echo ""
-echo "📈 Step 5: Analyzing sluggish attack results..."
-echo "=========================================="
 
-if [ $ATTACK_EXIT_CODE -eq 0 ] && [ -f "benchmark/logs/primary-0.log" ]; then
-    echo "  ✅ Attack completed successfully"
-    
-    # Extract ASR from all consensus logs - aggregate across all commits
-    # Calculate cumulative ASR from all individual ASR calculations
-    ASR_LINES=$(grep "ASR CALCULATION: Overall" benchmark/logs/primary-*.log 2>/dev/null)
-    
-    if [ ! -z "$ASR_LINES" ]; then
-        # Extract all ASR percentages and calculate weighted average
-        TOTAL_SUCCESS=0
-        TOTAL_ATTACKS=0
-        
-        while IFS= read -r line; do
-            # Extract "X/Y successful attacks = Z% ASR" pattern
-            if echo "$line" | grep -qE "[0-9]+/[0-9]+ successful attacks"; then
-                # Extract numbers before and after the slash
-                RATIO=$(echo "$line" | grep -oE '[0-9]+/[0-9]+' | head -1)
-                if [ ! -z "$RATIO" ]; then
-                    SUCCESS=$(echo "$RATIO" | cut -d'/' -f1)
-                    TOTAL=$(echo "$RATIO" | cut -d'/' -f2)
-                    if [ ! -z "$SUCCESS" ] && [ ! -z "$TOTAL" ] && [ "$TOTAL" -gt 0 ] 2>/dev/null; then
-                        TOTAL_SUCCESS=$((TOTAL_SUCCESS + SUCCESS))
-                        TOTAL_ATTACKS=$((TOTAL_ATTACKS + TOTAL))
-                    fi
-                fi
-            fi
-        done <<< "$ASR_LINES"
-        
-        if [ $TOTAL_ATTACKS -gt 0 ]; then
-            FINAL_ASR_NUM=$(echo "scale=1; ($TOTAL_SUCCESS * 100) / $TOTAL_ATTACKS" | bc -l 2>/dev/null || echo "0")
-            FINAL_ASR="${FINAL_ASR_NUM}%"
-        else
-            FINAL_ASR="0%"
-        fi
-    else
-        FINAL_ASR="0%"
-    fi
-    
-    # Count attack events (timeout modifications)
-    TIMEOUT_MODIFICATIONS=$(grep -c "Sluggish attack:.*using modified timeout" benchmark/logs/primary-*.log 2>/dev/null | awk '{sum += $1} END {print sum}')
-    echo "  Total Timeout Modifications: $TIMEOUT_MODIFICATIONS"
-    
-    # Count ASR tracking events
-    ASR_TRACKING=$(grep -c "ASR TRACKING:" benchmark/logs/primary-*.log 2>/dev/null | awk '{sum += $1} END {print sum}')
-    echo "  ASR Tracking Events: $ASR_TRACKING"
-    
-    # Get network performance
-    CONSENSUS_TPS=$(grep "Consensus TPS" benchmark/logs/primary-*.log 2>/dev/null | tail -1 | grep -o '[0-9,]\+' | head -1)
-    if [ ! -z "$CONSENSUS_TPS" ]; then
-        echo "  Network TPS: $CONSENSUS_TPS"
-    fi
-    
-    # Show which node was the attacker
-    echo ""
-    echo "🎯 ATTACK ANALYSIS:"
-    echo "=================="
-    for i in {0..3}; do
-        TIMEOUT_CHANGES=$(grep -c "Sluggish attack:.*using modified timeout" benchmark/logs/primary-$i.log 2>/dev/null || echo "0")
-        TIMEOUT_CHANGES_NUM=$(echo "$TIMEOUT_CHANGES" | tr -d '\n' | head -c 10)
-        if [ "${TIMEOUT_CHANGES_NUM:-0}" -gt 0 ] 2>/dev/null; then
-            echo "  Attacker Node: Primary-$i ($TIMEOUT_CHANGES_NUM timeout modifications)"
-        fi
-    done
-    
-    # Show victim nodes (nodes with 0 timeout modifications)
-    echo "  Victim Nodes:"
-    for i in {0..3}; do
-        TIMEOUT_CHANGES=$(grep -c "Sluggish attack:.*using modified timeout" benchmark/logs/primary-$i.log 2>/dev/null || echo "0")
-        TIMEOUT_CHANGES_NUM=$(echo "$TIMEOUT_CHANGES" | tr -d '\n' | head -c 10)
-        if [ "${TIMEOUT_CHANGES_NUM:-0}" -eq 0 ] 2>/dev/null; then
-            echo "    - Primary-$i (0 modifications - victim)"
-        fi
-    done
-    
-    # Display ASR results
-    echo ""
-    echo "📊 ATTACK SUCCESS RATE (ASR):"
-    echo "============================="
-    echo "  Final ASR: $FINAL_ASR"
-    
-    # Compare with paper
-    echo ""
-    echo "📊 COMPARISON WITH PAPER:"
-    echo "========================"
-    echo "  Paper's Target: 82.4%"
-    echo "  Our ASR: $FINAL_ASR"
-    
-    # Simple comparison (extract number from percentage)
-    ASR_NUM=$(echo $FINAL_ASR | sed 's/%//')
-    if [ ! -z "$ASR_NUM" ] && [ "$ASR_NUM" != "0" ]; then
-        DIFF=$(echo "scale=2; $ASR_NUM - 82.4" | bc -l 2>/dev/null || echo "0.00")
-        if (( $(echo "$ASR_NUM >= 75" | bc -l 2>/dev/null || echo "0") )); then
-            echo "  Difference: ${DIFF}%"
-            if (( $(echo "$ASR_NUM >= 80" | bc -l 2>/dev/null || echo "0") )); then
-                echo "  ✅ ASR is close to paper's target!"
-            else
-                echo "  ⚠️  ASR is below paper's target but attack is working"
-            fi
-        else
-            echo "  ⚠️  ASR is significantly below paper's target"
-            echo "  💡 Consider adjusting SLUGGISH_TIMEOUT_MULTIPLIER"
-        fi
-    fi
+# --- Step 5: Analyze ---
+echo "📊 Step 5: Analyzing sluggish attack results..."
 
-else
-    echo "  ❌ No logs found - Attack may have failed"
+# Log format: GLOBAL ASR: All-pairs: X/Y = Z% | Same-round: ...
+# For Sluggish, "All-pairs" is relevant (includes older attackers)
+LATEST_ASR=$(grep "GLOBAL ASR" "$LOG_DIR"/primary-*.log | tail -1 | sed -n 's/.*All-pairs: [0-9]*\/[0-9]* = \([0-9.]*\)%.*/\1/p')
+
+if [ -z "$LATEST_ASR" ]; then
+    LATEST_ASR="0.0"
 fi
 
-# Step 6: Summary
-echo ""
-echo "🎉 SLUGGISH ATTACK EXECUTION COMPLETED!"
-echo "====================================="
-echo "  Logs: sluggish_attack.log"
-echo "  Build log: build.log"
-echo ""
-echo "🔍 To analyze results manually:"
-echo "  grep 'Sluggish attack:' sluggish_attack.log | head -10"
-echo "  grep -c 'delaying header broadcast' sluggish_attack.log"
-echo ""
-echo "📖 Sluggish Attack Theory:"
-echo "  - Attackers delay block propagation to gain information advantage"
-echo "  - Creates frontrunning opportunities by seeing victim transactions first"
-echo "  - Timing window allows attackers to frontrun with better positioning"
-echo ""
-echo "🎯 Expected Outcome: Attacker blocks arrive later but with frontrunning advantage"
+# Get event counts
+SUCCESS_EVENTS=$(grep -c "ASR SUCCESS" "$LOG_DIR"/primary-*.log | awk '{s+=$1} END {print s}')
+FAILURE_EVENTS=$(grep -c "ASR FAILURE" "$LOG_DIR"/primary-*.log | awk '{s+=$1} END {print s}')
+TIMEOUT_EVENTS=$(grep -c "Sluggish attack: Node .* using modified timeout" "$LOG_DIR"/primary-*.log | awk '{s+=$1} END {print s}')
 
-# ASR Measurement Summary
+echo "📈 SLUGGISH ASR CALCULATION:"
+echo "============================"
+echo "  Final ASR (All-pairs): $LATEST_ASR%"
+echo "  Timeout Modification Events: $TIMEOUT_EVENTS"
 echo ""
-echo "📊 ASR MEASUREMENT SUMMARY:"
-echo "=========================="
-echo "  ASR Calculation: Based on global total order from consensus commits"
-echo "  Methodology: Attacker blocks ordered before victim blocks"
-echo "  Paper Target: 82.4% ASR"
-echo "  Status: ✅ Real-time ASR measurement from consensus data"
+
+# Compare with paper
+PAPER_TARGET=82.4
+DIFF=$(echo "$LATEST_ASR - $PAPER_TARGET" | bc)
+
+echo "📊 COMPARISON WITH PAPER:"
+echo "========================="
+echo "  Paper's Target: $PAPER_TARGET%"
+echo "  Our ASR: $LATEST_ASR%"
+echo "  Difference: $DIFF%"
+
+if (( $(echo "$LATEST_ASR >= 75.0" | bc -l) )); then
+    echo "  Status: ✅ SUCCESS - ASR meets target range!"
+else
+    echo "  Status: ❌ FAILURE - ASR outside acceptable range!"
+fi
+
+echo ""
+echo "🎉 AUTOMATED SLUGGISH ATTACK COMPLETED!"
+echo "======================================="

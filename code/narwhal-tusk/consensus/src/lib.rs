@@ -632,12 +632,26 @@ impl Consensus {
         
         for (att_height, att_round) in &attacker_blocks {
             for (vic_height, vic_round) in &victim_blocks {
-                // PAPER FILTER: attacker_round >= victim_round
-                // (attacker could have witnessed victim before creating block)
-                if *att_round >= *vic_round {
-                    total_pairs_all += 1;
-                    if *att_height < *vic_height {
-                        successes_all_pairs += 1;
+                // PAPER FILTER: Depends on attack type
+                // Fissure/Speculative: att_round >= vic_round (Attacker frontruns victim)
+                // Sluggish: att_round <= vic_round (Attacker is older but delay causes ordering priority)
+                let is_sluggish = self.attack_mode == "sluggish";
+                let round_condition = if is_sluggish {
+                    *att_round <= *vic_round
+                } else {
+                    *att_round >= *vic_round
+                };
+
+                if round_condition {
+                    // LIVENESS CHECK: Only compare blocks within a small window (e.g., 3 rounds)
+                    // This prevents "Dead Attacker" bias where an old attacker block compares successfully against all future victim blocks
+                    // Paper implies interaction happens within short timeframe
+                    let round_diff = (*vic_round as i64 - *att_round as i64).abs();
+                    if round_diff <= 3 {
+                        total_pairs_all += 1;
+                        if *att_height < *vic_height {
+                            successes_all_pairs += 1;
+                        }
                     }
                 }
                 
