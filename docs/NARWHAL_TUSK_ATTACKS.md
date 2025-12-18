@@ -168,7 +168,106 @@ The Fissure attack was successfully reproduced. By moving the topological advant
 
 ## 2. Speculative Attack
 
-*(Implementation and results pending)*
+The Speculative Attack exploits the **Lexicographic Ordering Protocol (LOP)** used in DAG-based consensus. By generating multiple candidate blocks (mining) and selecting the one with the "best" hash (digest) according to the sorting rule, an attacker can statistically ensure their block is ordered before competing honest blocks.
+
+### 2.1 Implementation
+
+#### High-Level Algorithm
+
+1.  **Proposer Level (Mining):**
+    *   **Goal:** Generate `p_max` candidate blocks for the same round and select the one that wins the LOP comparison (e.g., largest digest).
+    *   **Mechanism:** Vary the `payload` (transaction batches) by sampling different subsets of available worker batches.
+    *   **Logic:**
+        *   Iterate `i` from 0 to `p_max` (50).
+        *   Sample a unique combination of transaction batches.
+        *   Compute the **Certificate Digest** (which includes Header ID, Round, Origin).
+        *   Keep the candidate with the "Best" digest (e.g., largest value for descending sort).
+        *   Broadcast the best header.
+
+2.  **Consensus Level (Ordering):**
+    *   **Goal:** Enforce LOP sorting so the "Best" digest is ordered first.
+    *   **Mechanism:** Update `order_dag` sorting logic.
+    *   **Logic:**
+        *   If `attack_mode == "speculative"`, sort blocks within the same round by **Digest** (Descending).
+        *   Attacker (who ground for Max Digest) should appear first in the sorted list.
+        *   Honest nodes (Random Digest) appear later on average.
+
+#### Detailed Implementation
+
+**Proposer Layer (`primary/src/proposer.rs`):**
+
+```rust
+async fn propose_speculative_block(&mut self, parents: Vec<Digest>) -> Header {
+    let p_max = 50; 
+    let mut best_digest = None;
+    
+    for i in 0..p_max {
+        // 1. Sample different payload combination
+        let candidate_digests = self.sample_worker_batches(&all_digests, i);
+        
+        // 2. Compute Certificate Digest (Optimization Target)
+        let header_digest = self.compute_certificate_digest(&temp_payload, ...);
+        
+        // 3. Compare with current best (Assume Largest Wins)
+        if self.digest_wins_over(&header_digest, &current_best) {
+            best_digest = Some(header_digest);
+            best_candidate_digests = Some(candidate_digests);
+        }
+    }
+    // Create header with best payload
+}
+```
+
+**Consensus Layer (`consensus/src/lib.rs`):**
+
+```rust
+if self.attack_mode == "speculative" {
+    // LOP Sorting: Round first, then Digest Descending
+    ordered.sort_by(|a, b| {
+        match a.round().cmp(&b.round()) {
+            std::cmp::Ordering::Equal => {
+                // Descending Digest Sort: b.cmp(a)
+                b.digest().as_ref().cmp(a.digest().as_ref())
+            },
+            other => other,
+        }
+    });
+}
+```
+
+### 2.2 Reproduction Steps
+
+**Method 1: Automated Script**
+```bash
+./automated_speculative_attack.sh
+```
+
+**Method 2: Manual Execution**
+```bash
+export ATTACK_MODE="speculative"
+export ATTACKER_RATIO="0.33"
+export VICTIM_RATIO="0.22"
+cargo build --release
+cd benchmark && fab local
+```
+
+### 2.3 Experimental Results
+
+**Configuration:**
+*   **Network:** 15 Validators
+*   **Attackers:** 5 nodes (33%)
+*   **Victims:** 3 nodes (22%)
+*   **Candidates (p_max):** 50
+
+**Results:**
+
+| Metric | Result | Notes |
+| :--- | :--- | :--- |
+| **Same-Round ASR** | **52.20%** | Preliminary result. Indicates random ordering (~50%). |
+| **Paper Target** | 86.3% | Difference suggests network latency or digest alignment issues in real-world simulation vs theory. |
+| **Candidates Generated** | 50 | Verified in logs (70-100ms generation time). |
+
+**Status:** Implementation complete. ASR result under investigation (likely hash alignment mismatch between Proposer optimization and Consensus sorting key).
 
 ---
 
