@@ -1,10 +1,10 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-//! Fissure Attack Test for Bullshark with 13 Nodes
+//! Speculative Attack Test for Bullshark with 13 Nodes
 //!
-//! This test measures the Attack Success Rate (ASR) of the fissure attack
-//! where attackers exclude victim blocks from their parent sets.
+//! This test measures the Attack Success Rate (ASR) of the speculative attack
+//! where attackers grind block digests to achieve favorable ordering.
 
 use std::{
     collections::BTreeSet,
@@ -31,7 +31,7 @@ const NUM_ATTACKER: usize = 4; // ~30.8% (4/13)
 const NUM_VICTIM: usize = 3;   // ~23.1% (3/13)
 const NUM_HONEST: usize = 6;   // ~46.1% (6/13)
 
-// Helper to create an authority node (copied from sluggish_attack_test.rs)
+// Helper to create an authority node (copied from fissure_attack_test.rs)
 async fn make_authority(
     index: AuthorityIndex,
     db_dir: &TempDir,
@@ -83,15 +83,16 @@ async fn make_authority(
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn test_fissure_attack_asr_13_nodes() {
+async fn test_speculative_attack_asr_13_nodes() {
     telemetry_subscribers::init_for_testing();
     
     // Set attack parameters
-    env::set_var("ATTACK_MODE", "fissure");
+    env::set_var("ATTACK_MODE", "speculative");
     env::set_var("ATTACKER_RATIO", "0.308"); // 4/13
     env::set_var("VICTIM_RATIO", "0.231");   // 3/13
+    env::set_var("SPECULATIVE_P_MAX", "50"); // 50 attempts
     
-    info!("🚀 Starting Fissure Attack Test with 13 Nodes");
+    info!("🚀 Starting Speculative Attack Test with 13 Nodes");
     info!("  Attackers: {} nodes (indices 0-{})", NUM_ATTACKER, NUM_ATTACKER - 1);
     info!("  Victims: {} nodes (indices {}-{})", NUM_VICTIM, NUM_VALIDATORS - NUM_VICTIM, NUM_VALIDATORS - 1);
     info!("  Honest: {} nodes (indices {}-{})", NUM_HONEST, NUM_ATTACKER, NUM_VALIDATORS - NUM_VICTIM - 1);
@@ -181,12 +182,12 @@ async fn test_fissure_attack_asr_13_nodes() {
     
     info!("⏹️ ASR calculation complete");
     
-    info!("🎯 FISSURE ATTACK RESULTS:");
+    info!("🎯 SPECULATIVE ATTACK RESULTS:");
     info!("  Network: {} validators", NUM_VALIDATORS);
     info!("  Attackers: {} (~30.8%)", NUM_ATTACKER);
     info!("  Victims: {} (~23.1%)", NUM_VICTIM);
     info!("  Attack Success Rate: {:.1}%", asr);
-    info!("  Paper Target: ~94% (50 nodes, scaled to 13 nodes)");
+    info!("  Paper Target: ~86.3%");
     
     // Stop all authorities
     for authority in authorities {
@@ -195,7 +196,6 @@ async fn test_fissure_attack_asr_13_nodes() {
     
     // Assert reasonable ASR
     assert!(asr > 50.0, "ASR too low: {:.1}%", asr);
-    assert!(asr <= 100.0, "ASR suspiciously high: {:.1}%", asr);
     
     info!("✅ Test completed successfully!");
 }
@@ -217,8 +217,6 @@ fn calculate_asr(commits: &[CommittedSubDag]) -> f64 {
     info!("Global order contains {} blocks", global_order.len());
     
     // Identify attacker and victim blocks
-    // Attackers are first NUM_ATTACKER nodes (indices 0 to NUM_ATTACKER-1)
-    // Victims are last NUM_VICTIM nodes (indices NUM_VALIDATORS-NUM_VICTIM to NUM_VALIDATORS-1)
     let mut attacker_positions = Vec::new();
     let mut victim_positions = Vec::new();
     
@@ -239,61 +237,34 @@ fn calculate_asr(commits: &[CommittedSubDag]) -> f64 {
         return 0.0;
     }
     
-    // Count successful frontrunning (attacker before victim)
-    // For fissure attack: attackers exclude victim blocks from parents,
-    // causing their blocks to be ordered before victim blocks
     let mut successes = 0;
     let mut total_pairs = 0;
     
-    // ASR METHODOLOGY (Aligned with Paper):
-    // Fissure Attack gives advantage in SAME ROUND through Author Index sorting.
-    // Attackers (0-3) are naturally sorted before Victims (10-12) within same round.
-    //
-    // We measure: P(AttackerPos < VictimPos | Same Round)
-    //
-    // Additionally, we count pairs where attacker is in an EARLIER round (natural advantage).
-    
-    // Method 1: Same-Round ASR (Primary Metric - Matches Paper)
-    let mut same_round_successes = 0;
-    let mut same_round_total = 0;
+    // SPECULATIVE ASR Calculation logic
+    // We strictly compare blocks in the SAME ROUND (competition)
+    // ASR = (Attacker < Victim)
     
     for (att_pos, att_round) in &attacker_positions {
         for (vic_pos, vic_round) in &victim_positions {
-            if att_round == vic_round {
-                // Same round - this is where Fissure's author-index advantage applies
-                same_round_total += 1;
+            // Strict competition in the SAME round
+            if *att_round == *vic_round {
+                total_pairs += 1;
+                
+                // Success: attacker ordered before victim
                 if att_pos < vic_pos {
-                    same_round_successes += 1;
+                    successes += 1;
                 }
             }
         }
-    }
-    
-    // Fallback: if no same-round pairs, use all-pairs where attacker is at same or earlier round
-    if same_round_total == 0 {
-        for (att_pos, att_round) in &attacker_positions {
-            for (vic_pos, vic_round) in &victim_positions {
-                if att_round <= vic_round {
-                    total_pairs += 1;
-                    if att_pos < vic_pos {
-                        successes += 1;
-                    }
-                }
-            }
-        }
-    } else {
-        total_pairs = same_round_total;
-        successes = same_round_successes;
     }
     
     if total_pairs == 0 {
-        warn!("No comparable block pairs found");
+        warn!("No comparable block pairs found in same round");
         return 0.0;
     }
     
     let asr = (successes as f64 / total_pairs as f64) * 100.0;
-    info!("ASR calculation: {}/{} pairs = {:.1}%", successes, total_pairs, asr);
+    info!("ASR calculation (Same-Round): {}/{} pairs = {:.1}%", successes, total_pairs, asr);
     
     asr
 }
-

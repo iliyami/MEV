@@ -93,7 +93,10 @@ async fn test_sluggish_attack_asr_13_nodes() {
     env::set_var("VICTIM_RATIO", "0.231");   // 3/13
     // Higher multiplier = more delay = attackers lag further behind = lower rounds = higher priority
     // Using 4.0x for balance: significant lag but not so much that network stalls
-        env::set_var("SLUGGISH_TIMEOUT_MULTIPLIER", "4.5"); // Optimized for better ASR
+    // Use env var if set, otherwise default to 1.5 (Optimized)
+    if env::var("SLUGGISH_TIMEOUT_MULTIPLIER").is_err() {
+        env::set_var("SLUGGISH_TIMEOUT_MULTIPLIER", "1.5");
+    }
     
     info!("🚀 Starting Sluggish Attack Test with 13 Nodes");
     info!("  Attackers: {} nodes (indices 0-{})", NUM_ATTACKER, NUM_ATTACKER - 1);

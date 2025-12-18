@@ -1495,7 +1495,6 @@ impl Core {
             if is_victim {
                 victim_count_found += 1;
                 
-                // Smart exclusion: Only exclude if it won't break quorum
                 let ancestor_stake = self.context.committee.stake(ancestor.author());
                 let is_parent_round = ancestor.round() == quorum_round;
                 
@@ -1511,30 +1510,28 @@ impl Core {
                 let mut should_exclude = false;
                 
                 if is_parent_round {
-                    // For parent round ancestors, be more careful about quorum
-                    // Only exclude if we have enough other stake to maintain quorum
-                    let remaining_stake_after_exclusion = parent_round_stake - ancestor_stake;
-                    if remaining_stake_after_exclusion >= quorum_threshold {
-                        // Safe to exclude - use full exclusion probability
+                    // OPTIMIZED: Use running stake tracker for cumulative exclusion
+                    // Check if excluding this ancestor would still leave enough stake
+                    let remaining_stake_after = parent_round_stake.saturating_sub(ancestor_stake);
+                    if remaining_stake_after >= quorum_threshold {
+                        // Safe to exclude - probabilistic decision
                         should_exclude = self.should_exclude_victim_block(&ancestor, exclusion_prob);
+                        if should_exclude {
+                            // Update running stake tracker
+                            parent_round_stake = remaining_stake_after;
+                        }
                     } else {
-                        // Would break quorum - use reduced probability but still exclude aggressively
-                        // Use 80% of base exclusion prob for parent round victims when quorum is tight
-                        let safe_exclusion_prob = exclusion_prob * 0.8;
-                        should_exclude = self.should_exclude_victim_block(&ancestor, safe_exclusion_prob);
+                        // Would break quorum - cannot exclude
+                        should_exclude = false;
                     }
                 } else {
-                    // For non-parent-round ancestors, very aggressive exclusion (almost deterministic)
-                    // These don't affect quorum directly, so we can be more aggressive
+                    // For non-parent-round ancestors, very aggressive exclusion
                     let aggressive_prob = exclusion_prob.min(0.98);
                     should_exclude = self.should_exclude_victim_block(&ancestor, aggressive_prob);
                 }
                 
                 if should_exclude {
                     excluded_count += 1;
-                    if is_parent_round {
-                        parent_round_stake -= ancestor_stake;
-                    }
                     info!(
                         "Fissure attack: Excluding victim ancestor {} from round {} (exclusion prob: {:.3}, parent_round: {})",
                         ancestor.reference(),
