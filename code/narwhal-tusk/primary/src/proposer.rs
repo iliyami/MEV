@@ -525,15 +525,11 @@ impl Proposer {
                 None => {
                     best_digest = Some(header_digest.clone());
                     best_candidate_digests = Some(candidate_digests);
-                    debug!("Speculative candidate {}: digest {:?}", i, header_digest);
                 },
                 Some(current_best) => {
                     if self.digest_wins_over(&header_digest, current_best) {
                         best_digest = Some(header_digest.clone());
                         best_candidate_digests = Some(candidate_digests);
-                        debug!("Speculative candidate {}: NEW BEST digest {:?}", i, header_digest);
-                    } else {
-                        debug!("Speculative candidate {}: digest {:?} (not better)", i, header_digest);
                     }
                 }
             }
@@ -593,8 +589,15 @@ impl Proposer {
                     _ => (base_seed + worker_id * 5) % worker_digests.len(), // Strided
                 };
                 
-                if let Some((digest, wid)) = worker_digests.get(sample_index) {
-                    sampled.push((digest.clone(), *wid));
+                // CRITICAL FIX: Conditionally include batches to create diversity even with few transactions
+                // If we always include the same batch, we get identical digests -> 50% ASR
+                // Vary inclusion based on candidate_index
+                let include_batch = (candidate_index + worker_id) % 3 != 0; // Exclude 1/3rd of the time
+                
+                if include_batch {
+                    if let Some((digest, wid)) = worker_digests.get(sample_index) {
+                        sampled.push((digest.clone(), *wid));
+                    }
                 }
             }
         }
