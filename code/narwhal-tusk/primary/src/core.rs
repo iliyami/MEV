@@ -47,8 +47,8 @@ pub struct Core {
     rx_proposer: Receiver<Header>,
     /// Output all certificates to the consensus layer.
     tx_consensus: Sender<Certificate>,
-    /// Send valid a quorum of certificates' ids to the `Proposer` (along with their round).
-    tx_proposer: Sender<(Vec<Digest>, Round)>,
+    /// Send valid a quorum of certificates' ids AND origins to the `Proposer` (along with their round).
+    tx_proposer: Sender<(Vec<(Digest, PublicKey)>, Round)>,
 
     /// The last garbage collected round.
     gc_round: Round,
@@ -93,7 +93,7 @@ impl Core {
         rx_certificate_waiter: Receiver<Certificate>,
         rx_proposer: Receiver<Header>,
         tx_consensus: Sender<Certificate>,
-        tx_proposer: Sender<(Vec<Digest>, Round)>,
+        tx_proposer: Sender<(Vec<(Digest, PublicKey)>, Round)>,
     ) {
         // Initialize attack configuration
         let attack_mode = std::env::var("ATTACK_MODE").unwrap_or_default();
@@ -320,10 +320,22 @@ impl Core {
         self.store.write(certificate.digest().to_vec(), bytes).await;
 
         // Check if we have enough certificates to enter a new dag round and propose a header.
+        // ATTACK-AWARE: Create aggregators that can filter victim certificates when attack is active
+        // Extract values before mutable borrow of certificates_aggregators
+        let victim_nodes = self.get_victim_nodes();
+        let attack_active = self.attack_active;
+        let is_attacker = self.is_attacker;
+        
         if let Some(parents) = self
             .certificates_aggregators
             .entry(certificate.round())
-            .or_insert_with(|| Box::new(CertificatesAggregator::new()))
+            .or_insert_with(|| {
+                if attack_active && is_attacker {
+                    Box::new(CertificatesAggregator::new_with_attack(true, victim_nodes.clone()))
+                } else {
+                    Box::new(CertificatesAggregator::new())
+                }
+            })
             .append(certificate.clone(), &self.committee)?
         {
             // Send it to the `Proposer`.
@@ -384,6 +396,23 @@ impl Core {
 
         // Verify the certificate (and the embedded header).
         certificate.verify(&self.committee).map_err(DagError::from)
+    }
+    
+    /// Get set of victim nodes (same logic as proposer)
+    fn get_victim_nodes(&self) -> HashSet<PublicKey> {
+        let total_nodes = self.committee.size();
+        let attacker_count = ((total_nodes as f64) * self.attacker_ratio).floor() as usize;
+        let victim_count = ((total_nodes as f64) * self.victim_ratio).floor() as usize;
+        
+        let mut node_names: Vec<_> = self.committee.authorities.keys().collect();
+        node_names.sort();
+        
+        // Victims are the nodes after attackers
+        node_names.iter()
+            .skip(attacker_count)
+            .take(victim_count)
+            .map(|&k| k.clone())
+            .collect()
     }
 
     // Main loop listening to incoming messages.
