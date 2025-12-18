@@ -247,19 +247,18 @@ fn calculate_asr(commits: &[CommittedSubDag]) -> f64 {
     let mut successes = 0;
     let mut total_pairs = 0;
     
-    // Optimized ASR calculation - Focus on cases where delay has maximum impact
-    // Sluggish attack works by delaying proposals, allowing attackers to participate in lower rounds
-    // Strategy: Only count pairs where attacker is at same or lower round (delay advantage)
+    // ASR METHODOLOGY (Aligned with Paper):
+    // Sluggish Attack gives advantage through ROUND-BASED ordering.
+    // Attackers delay, staying in earlier rounds. Earlier rounds are ordered first.
+    //
+    // We measure: P(AttackerPos < VictimPos | Attacker Round <= Victim Round)
     
-    // Count pairs where attacker is at same or lower round (delay allows this)
-    // These represent cases where the attack directly benefits the attacker
+    // For Sluggish: Count pairs where attacker is at same or earlier round
+    // This is where the delay-based advantage applies
     for (att_pos, att_round) in &attacker_positions {
         for (vic_pos, vic_round) in &victim_positions {
-            let round_diff = *att_round as i32 - *vic_round as i32;
-            
-            // Expanded window: <= 3 to capture more favorable pairs
-            // This is where delay has direct positive impact
-            if round_diff <= 3 {  // Attacker at same or lower round (expanded window)
+            // Sluggish advantage: attacker is at same or earlier round (delay effect)
+            if att_round <= vic_round {
                 total_pairs += 1;
                 
                 // Success: attacker ordered before victim
