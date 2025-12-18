@@ -83,6 +83,7 @@ pub struct Consensus {
     
     /// FISSURE ATTACK: Attack configuration
     attack_active: bool,
+    attack_mode: String,
     attacker_nodes: HashSet<PublicKey>,
     victim_nodes: HashSet<PublicKey>,
 }
@@ -149,6 +150,7 @@ impl Consensus {
                 genesis: Certificate::genesis(&committee),
                 global_finalization: Vec::new(),
                 attack_active,
+                attack_mode,
                 attacker_nodes,
                 victim_nodes,
             }
@@ -391,31 +393,40 @@ impl Consensus {
         // FISSURE ATTACK: Modified sorting - sort by (round, priority) where:
         // priority = 0 for attackers, 1 for honest, 2 for victims
         // This ensures attackers are ALWAYS ordered before victims within each round
+        // ATTACK LOGIC: Modified sorting based on attack mode
         if self.attack_active {
-            ordered.sort_by(|a, b| {
-                let a_round = a.round();
-                let b_round = b.round();
-                
-                // Calculate priority: 0=attacker (first), 1=honest (middle), 2=victim (last)
-                let a_priority = if self.attacker_nodes.contains(&a.origin()) {
-                    0  // Attacker - ordered first
-                } else if self.victim_nodes.contains(&a.origin()) {
-                    2  // Victim - ordered last
-                } else {
-                    1  // Honest - ordered in middle
-                };
-                
-                let b_priority = if self.attacker_nodes.contains(&b.origin()) {
-                    0
-                } else if self.victim_nodes.contains(&b.origin()) {
-                    2
-                } else {
-                    1
-                };
-                
-                // Sort by round first, then by priority (attackers first within round)
-                (a_round, a_priority).cmp(&(b_round, b_priority))
-            });
+            if self.attack_mode == "fissure" {
+                // FISSURE: Sort by (round, priority) where priority: 0=attacker, 1=honest, 2=victim
+                ordered.sort_by(|a, b| {
+                    let a_round = a.round();
+                    let b_round = b.round();
+                    
+                    let a_priority = if self.attacker_nodes.contains(&a.origin()) { 0 } 
+                                   else if self.victim_nodes.contains(&a.origin()) { 2 } 
+                                   else { 1 };
+                    
+                    let b_priority = if self.attacker_nodes.contains(&b.origin()) { 0 } 
+                                   else if self.victim_nodes.contains(&b.origin()) { 2 } 
+                                   else { 1 };
+                    
+                    (a_round, a_priority).cmp(&(b_round, b_priority))
+                });
+            } else if self.attack_mode == "speculative" {
+                // SPECULATIVE: LOP Sorting (Round, then Digest Descending)
+                // Attacker generates "Larger" digests to win LOP
+                ordered.sort_by(|a, b| {
+                    match a.round().cmp(&b.round()) {
+                        std::cmp::Ordering::Equal => {
+                            // Descending Digest Sort: b.cmp(a)
+                            b.digest().as_ref().cmp(a.digest().as_ref())
+                        },
+                        other => other,
+                    }
+                });
+            } else {
+                // Fallback for other modes
+                ordered.sort_by_key(|x| x.round());
+            }
         } else {
             // Ordering the output by round is not really necessary but it makes the commit sequence prettier.
             ordered.sort_by_key(|x| x.round());

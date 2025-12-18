@@ -609,31 +609,38 @@ impl Proposer {
     
     /// Compute header digest for speculative attack comparison
     /// This determines which candidate block has the best digest for ordering
+    /// Compute certificate digest for speculative attack comparison
+    /// CRITICAL: Matches Certificate::digest() which wraps the header
+    /// This determines which candidate block has the best digest for ordering in Consensus
     fn compute_header_digest(&self, payload: &std::collections::BTreeMap<Digest, u32>, parents: &std::collections::BTreeSet<Digest>) -> Digest {
         use ed25519_dalek::Digest as _;
         use ed25519_dalek::Sha512;
         
-        let mut hasher = Sha512::new();
-        
-        // Hash the proposer name
-        hasher.update(self.name.as_ref());
-        
-        // Hash the round
-        hasher.update(&self.round.to_le_bytes());
-        
-        // Hash the payload (worker batches)
+        // 1. Compute Header Digest first (matches Header::digest)
+        let mut header_hasher = Sha512::new();
+        header_hasher.update(self.name.as_ref());
+        header_hasher.update(&self.round.to_le_bytes());
         for (digest, worker_id) in payload {
-            hasher.update(digest.as_ref());
-            hasher.update(&worker_id.to_le_bytes());
+            header_hasher.update(digest.as_ref());
+            header_hasher.update(&worker_id.to_le_bytes());
         }
-        
-        // Hash the parents
         for parent in parents {
-            hasher.update(parent.as_ref());
+            header_hasher.update(parent.as_ref());
         }
-        
-        let hash_bytes = hasher.finalize();
-        Digest(hash_bytes.as_slice()[..32].try_into().unwrap())
+        let header_id_bytes = header_hasher.finalize();
+        // Keep as full 64 bytes or truncate? checking messages.rs impl...
+        // Header::digest truncates to 32 bytes
+        let header_id = &header_id_bytes.as_slice()[..32];
+
+        // 2. Compute Certificate Digest (matches Certificate::digest)
+        // Consensus sorts by this value
+        let mut cert_hasher = Sha512::new();
+        cert_hasher.update(header_id);
+        cert_hasher.update(&self.round.to_le_bytes());
+        cert_hasher.update(self.name.as_ref());
+
+        let cert_hash_bytes = cert_hasher.finalize();
+        Digest(cert_hash_bytes.as_slice()[..32].try_into().unwrap())
     }
     
     /// Compare digests for LOP (Lexicographic Ordering Protocol) advantage

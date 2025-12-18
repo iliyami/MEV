@@ -26,13 +26,14 @@ echo "  4. Compare with paper's target (86.3%)"
 echo ""
 
 # --- Step 1: Build project with attack code ---
+# --- Step 1: Build project with attack code ---
 echo "🔨 Step 1: Building project with speculative attack code..."
 cd "$NARWHAL_TUSK_DIR"
+export RUSTC_WRAPPER=sccache
+cargo build --release
 
-# Clean previous build artifacts
-echo "  Cleaning build cache..."
-cargo clean > /dev/null 2>&1 || true
 echo "  ✅ Build successful"
+echo ""
 
 # --- Step 2: Configure attack parameters ---
 echo "⚙️  Step 2: Configuring speculative attack parameters..."
@@ -55,7 +56,7 @@ echo ""
 
 # --- Step 4: Run 4-node network with speculative attack ---
 echo "🚀 Step 4: Running 15-node network with speculative attack..."
-echo "  Duration: $TEST_DURATION seconds"
+echo "  Duration: 35 seconds"
 echo "  Network: $COMMITTEE_SIZE nodes (5 attackers, 3 victims, 7 honest)"
 echo "  Expected ASR: ~80-90%"
 echo ""
@@ -66,7 +67,8 @@ source ../venv/bin/activate
 
 # Run the local benchmark in the background and capture output
 # Using timeout to ensure it stops after TEST_DURATION + some buffer
-timeout $((TEST_DURATION + 10)) fab local > "$ATTACK_OUTPUT_LOG" 2>&1 &
+# Duration is 35s in fabfile.py, give 60s total for startup/shutdown
+timeout 90 fab local > "$ATTACK_OUTPUT_LOG" 2>&1 &
 FAB_PID=$!
 
 echo "  Monitoring attack progress (logs will appear in $LOG_DIR/)..."
@@ -82,7 +84,8 @@ echo ""
 echo "📊 Step 5: Analyzing speculative attack results..."
 
 # Get the latest ASR from the logs
-LATEST_ASR=$(grep "ASR CALCULATION.*Overall" "$LOG_DIR"/primary-*.log | tail -1 | awk -F'= ' '{print $2}' | sed 's/% ASR//' | cut -d'.' -f1-2)
+# Log format: GLOBAL ASR: All-pairs: X/Y = Z% | Same-round: A/B = C% | ...
+LATEST_ASR=$(grep "GLOBAL ASR" "$LOG_DIR"/primary-*.log | tail -1 | sed -n 's/.*Same-round: [0-9]*\/[0-9]* = \([0-9.]*\)%.*/\1/p')
 if [ -z "$LATEST_ASR" ]; then
     LATEST_ASR="0.0"
 fi
