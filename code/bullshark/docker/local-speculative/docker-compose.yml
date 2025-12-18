@@ -1,0 +1,178 @@
+version: "3.8"
+services:
+  validator-setup:
+    image: bash:5.2
+    container_name: bs-setup
+    command: ["bash","-lc","mkdir -p /data/logs && sleep 3600"]
+    volumes:
+      - ../../target/release:/opt/bs:ro
+      - ../../benchmark/logs:/data/logs
+  validator-0:
+    image: alpine:3.19
+    container_name: bs-0
+    environment:
+      - ATTACK_MODE=sluggish
+      - ATTACKER_RATIO=0.33
+      - VICTIM_RATIO=0.23
+      - SLUGGISH_TIMEOUT_MULTIPLIER=2.0
+      - RUST_LOG=info
+    command: ["/bin/sh","-lc","/opt/bs/sui-node --help 2>&1 | head -5 && echo 'sui-node started' && sleep 90"]
+    volumes:
+      - ../../target/release:/opt/bs:ro
+      - ../../benchmark/logs:/data/logs
+  validator-1:
+    image: alpine:3.19
+    container_name: bs-1
+    environment:
+      - ATTACK_MODE=sluggish
+      - ATTACKER_RATIO=0.33
+      - VICTIM_RATIO=0.23
+      - SLUGGISH_TIMEOUT_MULTIPLIER=2.0
+      - RUST_LOG=info
+    command: ["/bin/sh","-lc","/opt/bs/sui-node --help 2>&1 | head -5 && echo 'sui-node started' && sleep 90"]
+    volumes:
+      - ../../target/release:/opt/bs:ro
+      - ../../benchmark/logs:/data/logs
+  validator-2:
+    image: alpine:3.19
+    container_name: bs-2
+    environment:
+      - ATTACK_MODE=sluggish
+      - ATTACKER_RATIO=0.33
+      - VICTIM_RATIO=0.23
+      - SLUGGISH_TIMEOUT_MULTIPLIER=2.0
+      - RUST_LOG=info
+    command: ["/bin/sh","-lc","/opt/bs/sui-node --help 2>&1 | head -5 && echo 'sui-node started' && sleep 90"]
+    volumes:
+      - ../../target/release:/opt/bs:ro
+      - ../../benchmark/logs:/data/logs
+  validator-3:
+    image: alpine:3.19
+    container_name: bs-3
+    environment:
+      - ATTACK_MODE=sluggish
+      - ATTACKER_RATIO=0.33
+      - VICTIM_RATIO=0.23
+      - SLUGGISH_TIMEOUT_MULTIPLIER=2.0
+      - RUST_LOG=info
+    command: ["/bin/sh","-lc","/opt/bs/sui-node --help 2>&1 | head -5 && echo 'sui-node started' && sleep 90"]
+    volumes:
+      - ../../target/release:/opt/bs:ro
+      - ../../benchmark/logs:/data/logs
+  validator-4:
+    image: alpine:3.19
+    container_name: bs-4
+    environment:
+      - ATTACK_MODE=sluggish
+      - ATTACKER_RATIO=0.33
+      - VICTIM_RATIO=0.23
+      - SLUGGISH_TIMEOUT_MULTIPLIER=2.0
+      - RUST_LOG=info
+    command: ["/bin/sh","-lc","/opt/bs/sui-node --help 2>&1 | head -5 && echo 'sui-node started' && sleep 90"]
+    volumes:
+      - ../../target/release:/opt/bs:ro
+      - ../../benchmark/logs:/data/logs
+  validator-5:
+    image: alpine:3.19
+    container_name: bs-5
+    environment:
+      - ATTACK_MODE=sluggish
+      - ATTACKER_RATIO=0.33
+      - VICTIM_RATIO=0.23
+      - SLUGGISH_TIMEOUT_MULTIPLIER=2.0
+      - RUST_LOG=info
+    command: ["/bin/sh","-lc","/opt/bs/sui-node --help 2>&1 | head -5 && echo 'sui-node started' && sleep 90"]
+    volumes:
+      - ../../target/release:/opt/bs:ro
+      - ../../benchmark/logs:/data/logs
+  validator-6:
+    image: alpine:3.19
+    container_name: bs-6
+    environment:
+      - ATTACK_MODE=sluggish
+      - ATTACKER_RATIO=0.33
+      - VICTIM_RATIO=0.23
+      - SLUGGISH_TIMEOUT_MULTIPLIER=2.0
+      - RUST_LOG=info
+    command: ["/bin/sh","-lc","/opt/bs/sui-node --help 2>&1 | head -5 && echo 'sui-node started' && sleep 90"]
+    volumes:
+      - ../../target/release:/opt/bs:ro
+      - ../../benchmark/logs:/data/logs
+  validator-7:
+    image: alpine:3.19
+    container_name: bs-7
+    environment:
+      - ATTACK_MODE=sluggish
+      - ATTACKER_RATIO=0.33
+      - VICTIM_RATIO=0.23
+      - SLUGGISH_TIMEOUT_MULTIPLIER=2.0
+      - RUST_LOG=info
+    command: ["/bin/sh","-lc","/opt/bs/sui-node --help 2>&1 | head -5 && echo 'sui-node started' && sleep 90"]
+    volumes:
+      - ../../target/release:/opt/bs:ro
+      - ../../benchmark/logs:/data/logs
+  validator-8:
+    image: alpine:3.19
+    container_name: bs-8
+    environment:
+      - ATTACK_MODE=sluggish
+      - ATTACKER_RATIO=0.33
+      - VICTIM_RATIO=0.23
+      - SLUGGISH_TIMEOUT_MULTIPLIER=2.0
+      - RUST_LOG=info
+    command: ["/bin/sh","-lc","/opt/bs/sui-node --help 2>&1 | head -5 && echo 'sui-node started' && sleep 90"]
+    volumes:
+      - ../../target/release:/opt/bs:ro
+      - ../../benchmark/logs:/data/logs
+  validator-9:
+    image: alpine:3.19
+    container_name: bs-9
+    environment:
+      - ATTACK_MODE=sluggish
+      - ATTACKER_RATIO=0.33
+      - VICTIM_RATIO=0.23
+      - SLUGGISH_TIMEOUT_MULTIPLIER=2.0
+      - RUST_LOG=info
+    command: ["/bin/sh","-lc","/opt/bs/sui-node --help 2>&1 | head -5 && echo 'sui-node started' && sleep 90"]
+    volumes:
+      - ../../target/release:/opt/bs:ro
+      - ../../benchmark/logs:/data/logs
+  validator-10:
+    image: alpine:3.19
+    container_name: bs-10
+    environment:
+      - ATTACK_MODE=sluggish
+      - ATTACKER_RATIO=0.33
+      - VICTIM_RATIO=0.23
+      - SLUGGISH_TIMEOUT_MULTIPLIER=2.0
+      - RUST_LOG=info
+    command: ["/bin/sh","-lc","/opt/bs/sui-node --help 2>&1 | head -5 && echo 'sui-node started' && sleep 90"]
+    volumes:
+      - ../../target/release:/opt/bs:ro
+      - ../../benchmark/logs:/data/logs
+  validator-11:
+    image: alpine:3.19
+    container_name: bs-11
+    environment:
+      - ATTACK_MODE=sluggish
+      - ATTACKER_RATIO=0.33
+      - VICTIM_RATIO=0.23
+      - SLUGGISH_TIMEOUT_MULTIPLIER=2.0
+      - RUST_LOG=info
+    command: ["/bin/sh","-lc","/opt/bs/sui-node --help 2>&1 | head -5 && echo 'sui-node started' && sleep 90"]
+    volumes:
+      - ../../target/release:/opt/bs:ro
+      - ../../benchmark/logs:/data/logs
+  validator-12:
+    image: alpine:3.19
+    container_name: bs-12
+    environment:
+      - ATTACK_MODE=sluggish
+      - ATTACKER_RATIO=0.33
+      - VICTIM_RATIO=0.23
+      - SLUGGISH_TIMEOUT_MULTIPLIER=2.0
+      - RUST_LOG=info
+    command: ["/bin/sh","-lc","/opt/bs/sui-node --help 2>&1 | head -5 && echo 'sui-node started' && sleep 90"]
+    volumes:
+      - ../../target/release:/opt/bs:ro
+      - ../../benchmark/logs:/data/logs

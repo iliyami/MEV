@@ -1,0 +1,54 @@
+
+============================================================
+🔮 SPECULATIVE ATTACK ASR ANALYSIS
+============================================================
+
+⚠️  Warning: No Speculative attack logs found!
+   The attack may not have been activated.
+📦 Total committed blocks found: 52928
+⚠️  Node 0: 966 blocks (missing 51962)
+⚠️  Node 1: 52924 blocks (missing 4)
+⚠️  Node 3: 52924 blocks (missing 4)
+⚠️  Node 4: 52924 blocks (missing 4)
+⚠️  Node 5: 52924 blocks (missing 4)
+⚠️  Node 6: 52924 blocks (missing 4)
+⚠️  Node 7: 52924 blocks (missing 4)
+⚠️  Node 8: 52924 blocks (missing 4)
+⚠️  Node 9: 52924 blocks (missing 4)
+⚠️  Node 10: 52924 blocks (missing 4)
+⚠️  Node 11: 52924 blocks (missing 4)
+⚠️  Node 12: 52924 blocks (missing 4)
+
+📈 Block Distribution by Authority:
+   Node  1: 4410 blocks ( 8.33%) 🎯 VICTIM
+   Node  2: 4412 blocks ( 8.34%)
+   Node  3: 4413 blocks ( 8.34%)
+   Node  4: 4411 blocks ( 8.33%)
+   Node  5: 4412 blocks ( 8.34%)
+   Node  6: 4416 blocks ( 8.34%)
+   Node  7: 4403 blocks ( 8.32%)
+   Node  8: 4411 blocks ( 8.33%)
+   Node  9: 4410 blocks ( 8.33%)
+   Node 10: 4411 blocks ( 8.33%)
+   Node 11: 4409 blocks ( 8.33%)
+   Node 12: 4410 blocks ( 8.33%)
+
+📊 Block Statistics:
+   Total blocks in order: 52928
+   Attacker blocks (Node 0): 0
+   Victim blocks (Node 1): 4410
+
+⚠️  Warning: Missing attacker or victim blocks!
+
+============================================================
+🔮 FINAL ATTACK SUCCESS RATE (ASR): 0.00%
+============================================================
+
+📝 Interpretation:
+   ❌ FAILED: No significant attack advantage
+
+   Baseline (no attack): ~50%
+   Improvement: -50.00%
+
+   Paper reference: https://eprint.iacr.org/2024/1496.pdf Section 4.2
+

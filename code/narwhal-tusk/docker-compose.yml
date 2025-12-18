@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+  narwhal-node-1:
+    build: .
+    container_name: narwhal-node-1
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ID=1
+      - COMMITTEE_SIZE=4
+      - WORKERS_PER_NODE=1
+      - FAULTS=0
+    volumes:
+      - ./data/node1:/app/data
+    networks:
+      - narwhal-network
+    command: ["cargo", "run", "--release", "--bin", "primary", "--", "--id", "1", "--committee", "committee.json", "--workers", "workers.json", "--store", "/app/data"]
+
+  narwhal-node-2:
+    build: .
+    container_name: narwhal-node-2
+    ports:
+      - "3001:3000"
+    environment:
+      - NODE_ID=2
+      - COMMITTEE_SIZE=4
+      - WORKERS_PER_NODE=1
+      - FAULTS=0
+    volumes:
+      - ./data/node2:/app/data
+    networks:
+      - narwhal-network
+    command: ["cargo", "run", "--release", "--bin", "primary", "--", "--id", "2", "--committee", "committee.json", "--workers", "workers.json", "--store", "/app/data"]
+
+  narwhal-node-3:
+    build: .
+    container_name: narwhal-node-3
+    ports:
+      - "3002:3000"
+    environment:
+      - NODE_ID=3
+      - COMMITTEE_SIZE=4
+      - WORKERS_PER_NODE=1
+      - FAULTS=0
+    volumes:
+      - ./data/node3:/app/data
+    networks:
+      - narwhal-network
+    command: ["cargo", "run", "--release", "--bin", "primary", "--", "--id", "3", "--committee", "committee.json", "--workers", "workers.json", "--store", "/app/data"]
+
+  narwhal-node-4:
+    build: .
+    container_name: narwhal-node-4
+    ports:
+      - "3003:3000"
+    environment:
+      - NODE_ID=4
+      - COMMITTEE_SIZE=4
+      - WORKERS_PER_NODE=1
+      - FAULTS=0
+    volumes:
+      - ./data/node4:/app/data
+    networks:
+      - narwhal-network
+    command: ["cargo", "run", "--release", "--bin", "primary", "--", "--id", "4", "--committee", "committee.json", "--workers", "workers.json", "--store", "/app/data"]
+
+  # Benchmark client
+  benchmark-client:
+    build: .
+    container_name: narwhal-benchmark
+    depends_on:
+      - narwhal-node-1
+      - narwhal-node-2
+      - narwhal-node-3
+      - narwhal-node-4
+    networks:
+      - narwhal-network
+    command: ["python3", "benchmark/benchmark.py", "--nodes", "4", "--rate", "1000", "--duration", "60"]
+    volumes:
+      - ./benchmark:/app/benchmark
+
+networks:
+  narwhal-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

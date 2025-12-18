@@ -45,3 +45,6 @@ results/
 dist/
 build/
 
+# Nested git repositories (converting to monorepo)
+code/*/.git/
+

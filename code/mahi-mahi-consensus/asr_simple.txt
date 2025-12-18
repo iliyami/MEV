@@ -1,0 +1,49 @@
+
+============================================================
+🔮 SPECULATIVE ATTACK ASR ANALYSIS
+============================================================
+
+✅ Speculative attack (Simple) detected: 3 victim blocks excluded
+📦 Total committed blocks found: 52350
+⚠️  Node 0: 411 blocks (missing 51939)
+⚠️  Node 2: 52347 blocks (missing 3)
+⚠️  Node 5: 52347 blocks (missing 3)
+⚠️  Node 11: 52347 blocks (missing 3)
+
+📈 Block Distribution by Authority:
+   Node  0:    4 blocks ( 0.01%) 🔮 ATTACKER
+   Node  1: 4362 blocks ( 8.33%) 🎯 VICTIM
+   Node  2: 4362 blocks ( 8.33%)
+   Node  3: 4365 blocks ( 8.34%)
+   Node  4: 4364 blocks ( 8.34%)
+   Node  5: 4363 blocks ( 8.33%)
+   Node  6: 4357 blocks ( 8.32%)
+   Node  7: 4359 blocks ( 8.33%)
+   Node  8: 4361 blocks ( 8.33%)
+   Node  9: 4368 blocks ( 8.34%)
+   Node 10: 4365 blocks ( 8.34%)
+   Node 11: 4360 blocks ( 8.33%)
+   Node 12: 4360 blocks ( 8.33%)
+
+📊 Block Statistics:
+   Total blocks in order: 52350
+   Attacker blocks (Node 0): 4
+   Victim blocks (Node 1): 4362
+
+🎯 ASR Calculation:
+   Total pairs analyzed: 17448
+   Successful frontrunning: 17441
+   Failed frontrunning: 7
+
+============================================================
+🔮 FINAL ATTACK SUCCESS RATE (ASR): 99.96%
+============================================================
+
+📝 Interpretation:
+   ✅ EXCELLENT: Attack is highly effective! (Target: 60-75%)
+
+   Baseline (no attack): ~50%
+   Improvement: 49.96%
+
+   Paper reference: https://eprint.iacr.org/2024/1496.pdf Section 4.2
+

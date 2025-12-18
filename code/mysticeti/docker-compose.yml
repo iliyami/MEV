@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  mysticeti-node-1:
+    build: .
+    container_name: mysticeti-node-1
+    ports:
+      - "8000:8000"
+    environment:
+      - NODE_ID=1
+      - COMMITTEE_SIZE=4
+      - FAULTS=0
+    volumes:
+      - ./data/node1:/app/data
+    networks:
+      - mysticeti-network
+    command: ["cargo", "run", "--release", "--bin", "mysticeti", "--", "--id", "1", "--committee", "committee.json", "--store", "/app/data"]
+
+  mysticeti-node-2:
+    build: .
+    container_name: mysticeti-node-2
+    ports:
+      - "8001:8000"
+    environment:
+      - NODE_ID=2
+      - COMMITTEE_SIZE=4
+      - FAULTS=0
+    volumes:
+      - ./data/node2:/app/data
+    networks:
+      - mysticeti-network
+    command: ["cargo", "run", "--release", "--bin", "mysticeti", "--", "--id", "2", "--committee", "committee.json", "--store", "/app/data"]
+
+  mysticeti-node-3:
+    build: .
+    container_name: mysticeti-node-3
+    ports:
+      - "8002:8000"
+    environment:
+      - NODE_ID=3
+      - COMMITTEE_SIZE=4
+      - FAULTS=0
+    volumes:
+      - ./data/node3:/app/data
+    networks:
+      - mysticeti-network
+    command: ["cargo", "run", "--release", "--bin", "mysticeti", "--", "--id", "3", "--committee", "committee.json", "--store", "/app/data"]
+
+  mysticeti-node-4:
+    build: .
+    container_name: mysticeti-node-4
+    ports:
+      - "8003:8000"
+    environment:
+      - NODE_ID=4
+      - COMMITTEE_SIZE=4
+      - FAULTS=0
+    volumes:
+      - ./data/node4:/app/data
+    networks:
+      - mysticeti-network
+    command: ["cargo", "run", "--release", "--bin", "mysticeti", "--", "--id", "4", "--committee", "committee.json", "--store", "/app/data"]
+
+  # Benchmark client
+  benchmark-client:
+    build: .
+    container_name: mysticeti-benchmark
+    depends_on:
+      - mysticeti-node-1
+      - mysticeti-node-2
+      - mysticeti-node-3
+      - mysticeti-node-4
+    networks:
+      - mysticeti-network
+    command: ["cargo", "run", "--release", "--bin", "orchestrator", "--", "benchmark", "--committee", "4", "--rate", "1000", "--duration", "60"]
+    volumes:
+      - ./orchestrator:/app/orchestrator
+
+networks:
+  mysticeti-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.22.0.0/16

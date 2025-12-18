@@ -1,0 +1,36 @@
+# Unified Experimental Configuration for AlephBFT
+# This configuration file standardizes test parameters for reproducible experiments
+
+experiment:
+  name: "alephbft_attack_test"
+  protocol: "alephbft"
+
+network:
+  size: 13  # Network size: 13, 25, 50, 100
+  attacker_ratio: 0.308  # Attacker ratio: 0.10, 0.20, 0.33
+  victim_ratio: 0.231  # Victim ratio (typically ~23% for 13 nodes)
+
+attack:
+  mode: "fissure"  # Attack mode: fissure, speculative, sluggish
+  parameters:
+    fissure:
+      exclusion_probability: 0.95  # Probability of excluding victim units
+    speculative:
+      p_max: 50  # Maximum number of speculative candidates to generate
+    sluggish:
+      processing_delay_ms: 11  # Processing delay in milliseconds
+
+test:
+  duration_seconds: 35  # Test duration in seconds
+  min_finalized_blocks: 500  # Minimum number of finalized blocks required
+  runs: 10  # Number of runs for statistical analysis
+  output_dir: "attack_results"  # Output directory for results
+
+asr_calculation:
+  method: "all_pairs"  # ASR calculation method: all_pairs (paper-aligned)
+  round_filter: "attacker_round >= victim_round"  # Round filtering rule
+  height_definition: "finalization_position"  # Height definition: position in finalization sequence
+
+
+
+
