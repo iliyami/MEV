@@ -200,8 +200,12 @@ impl Primary {
         let attacker_count = ((total_nodes as f64) * attacker_ratio).floor() as usize;
         let mut node_names: Vec<_> = committee.authorities.keys().collect();
         node_names.sort();
+        let position = node_names.iter().position(|&n| n == &name).unwrap_or(total_nodes);
         let is_attacker = (attack_mode == "sluggish")
-            && node_names.iter().position(|&n| n == &name).unwrap_or(total_nodes) < attacker_count;
+            && position < attacker_count;
+
+        info!("ATTACK CONFIG: Mode={}, IsAttacker={}, Position={}, Count={}", 
+              attack_mode, is_attacker, position, attacker_count);
 
         // Apply sluggish timeout multiplier for attackers
         let mut max_header_delay = parameters.max_header_delay;
