@@ -104,6 +104,43 @@ def run_attack_test(config: dict) -> dict:
     return {"asr": "UNKNOWN", "success": False}
 
 
+def run_local_test(config: dict) -> dict:
+    """Run the attack test locally with cargo test."""
+    test_name = config['test']['test_name']
+    env_vars = config['environment']
+    
+    # Path to bullshark code
+    protocol_path = CODE_DIR / config['protocol']['path']
+    
+    print(f"\nRunning local attack test: {test_name}")
+    print(f"  Attack Mode: {env_vars.get('ATTACK_MODE', 'unknown')}")
+    print(f"  CWD: {protocol_path}")
+    
+    # Build cargo test command
+    cmd = [
+        "cargo", "test", "--release",
+        "--package", "consensus-core",
+        test_name,
+        "--", "--nocapture"
+    ]
+    
+    # Merge current environment with config environment
+    current_env = os.environ.copy()
+    for key, value in env_vars.items():
+        current_env[key] = str(value)
+    
+    # Special handle for speculative attack p_max if in config but not env
+    if 'SPECULATIVE_P_MAX' not in current_env and 'speculative_p_max' in config.get('test', {}):
+        current_env['SPECULATIVE_P_MAX'] = str(config['test']['speculative_p_max'])
+
+    print(f"  Command: {' '.join(cmd)}")
+    
+    # Run from the protocol directory
+    result = subprocess.run(cmd, cwd=str(protocol_path), capture_output=False, env=current_env)
+    
+    return {"asr": "CHECK_LOGS", "success": result.returncode == 0}
+
+
 def verify_parity(config: dict, result: dict) -> bool:
     """Check if the ASR result matches expected within tolerance."""
     expected = config['output']['expected_asr']
@@ -137,6 +174,7 @@ def main():
     parser.add_argument("config", help="Path to experiment YAML config file")
     parser.add_argument("--build", action="store_true", help="Build Docker image before running")
     parser.add_argument("--build-only", action="store_true", help="Only build, don't run tests")
+    parser.add_argument("--local", action="store_true", help="Run natively with cargo test (no Docker)")
     args = parser.parse_args()
     
     # Load configuration
@@ -156,11 +194,19 @@ def main():
             sys.exit(0)
     
     # Run the test
-    result = run_attack_test(config)
+    if args.local:
+        result = run_local_test(config)
+    else:
+        result = run_attack_test(config)
     
     if not result['success']:
         print("ERROR: Test execution failed")
         sys.exit(1)
+    
+    # Local runs might not produce the same asr_result.txt format depending on the environment
+    if args.local and result['asr'] == "CHECK_LOGS":
+        print("\nLocal test completed. Please check the logs above for ASR results.")
+        sys.exit(0)
     
     # Verify parity
     if verify_parity(config, result):
