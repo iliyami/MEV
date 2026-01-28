@@ -21,7 +21,8 @@ echo ""
 echo "========================================"
 echo "Results Summary"
 echo "========================================"
-grep -E "(ASR|Attack Success Rate)" /app/results/test_output.log || echo "No ASR found in output"
+# Capture the full results block starting with the 🎯 emoji
+grep -A 10 "🎯 .* ATTACK RESULTS:" /app/results/test_output.log || grep -E "(ASR|Attack Success Rate)" /app/results/test_output.log || echo "No ASR found in output"
 
 # Output final line for parsing
 FINAL_ASR=$(grep "FINAL_ASR_RESULT:" /app/results/test_output.log | tail -1 | sed -n 's/.*FINAL_ASR_RESULT: \([0-9.]*\)%.*/\1/p')

@@ -200,16 +200,26 @@ impl Core {
         let speculative_p_max: usize = env::var("SPECULATIVE_P_MAX")
             .ok()
             .and_then(|s| s.parse().ok())
-            .unwrap_or(50);
+            .unwrap_or_else(|| {
+                if attack_mode == "speculative" {
+                    panic!("Error: SPECULATIVE_P_MAX environment variable must be set for speculative attack mode");
+                }
+                50
+            });
         let committee_size = context.committee.size();
         let attacker_count = ((committee_size as f64) * attacker_ratio).floor() as usize;
         let is_attacker = (attack_mode == "fissure" || attack_mode == "speculative" || attack_mode == "sluggish")
             && context.own_index.value() < attacker_count;
         let attack_active = attack_mode == "fissure" || attack_mode == "speculative" || attack_mode == "sluggish";
         let sluggish_timeout_multiplier: f64 = env::var("SLUGGISH_TIMEOUT_MULTIPLIER")
-            .unwrap_or_else(|_| "2.0".to_string())
-            .parse()
-            .unwrap_or(2.0);
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or_else(|| {
+                if attack_mode == "sluggish" {
+                    panic!("Error: SLUGGISH_TIMEOUT_MULTIPLIER environment variable must be set (parse error or missing)");
+                }
+                2.0
+            });
 
         Self {
             context,

@@ -182,13 +182,15 @@ async fn test_sluggish_attack_asr_13_nodes() {
     
     info!("⏹️ ASR calculation complete");
     
-    info!("🎯 SLUGGISH ATTACK RESULTS:");
-    info!("  Network: {} validators", NUM_VALIDATORS);
-    info!("  Attackers: {} (~30.8%)", NUM_ATTACKER);
-    info!("  Victims: {} (~23.1%)", NUM_VICTIM);
-    info!("  Attack Success Rate: {:.1}%", asr);
-    info!("  Paper Target: ~94% (50 nodes, scaled to 13 nodes)");
-    info!("  Bullshark Baseline: ~51.0%");
+    println!("🎯 SLUGGISH ATTACK RESULTS:");
+    println!("  Mode: sluggish");
+    println!("  Network: {} validators", NUM_VALIDATORS);
+    println!("  Attackers: {} (~30.8%)", NUM_ATTACKER);
+    println!("  Victims: {} (~23.1%)", NUM_VICTIM);
+    println!("  Attack Success Rate: {:.1}%", asr);
+    println!("  FINAL_ASR_RESULT: {:.1}%", asr);
+    println!("  Paper Target: ~94% (50 nodes, scaled to 13 nodes)");
+    println!("  Bullshark Baseline: ~51.0%");
     
     // Stop all authorities
     for authority in authorities {
