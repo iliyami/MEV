@@ -66,6 +66,14 @@ EXPERIMENTS = {
         "values": [
             [5], [10], [50]
         ]
+    },
+
+    # 6. Environment - Network Jitter/Latency
+    "env_latency": {
+        "params": ["LATENCY_JITTER"],
+        "values": [
+            ["50ms 10ms"], ["150ms 30ms"], ["300ms 50ms"] # Low(WAN), Med(Cross-C), High(Global)
+        ]
     }
 }
 
@@ -164,6 +172,9 @@ def main():
             relevant_experiments.append("offense_speculative")
         elif target_attack == "sluggish":
             relevant_experiments.append("offense_sluggish")
+
+        # Add Latency Sweep
+        relevant_experiments.append("env_latency")
 
         for exp_name in relevant_experiments:
             exp_config = EXPERIMENTS[exp_name]
