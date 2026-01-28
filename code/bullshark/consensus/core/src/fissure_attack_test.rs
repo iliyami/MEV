@@ -44,10 +44,18 @@ async fn make_authority(
 
     let parameters = Parameters {
         db_path: db_dir.path().to_path_buf(),
-        dag_state_cached_rounds: 5,
+        dag_state_cached_rounds: env::var("DAG_STATE_CACHED_ROUNDS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(5),
         commit_sync_parallel_fetches: 2,
         commit_sync_batch_size: 3,
-        sync_last_known_own_block_timeout: Duration::from_millis(2_000),
+        sync_last_known_own_block_timeout: Duration::from_millis(
+            env::var("SYNC_TIMEOUT_MS")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(2_000)
+        ),
         ..Default::default()
     };
     let txn_verifier = NoopTransactionVerifier {};
@@ -114,7 +122,12 @@ async fn test_fissure_attack_asr_dynamic() {
     // Create committee and keypairs
     let (committee, keypairs) = local_committee_and_keys(0, vec![1; num_validators]);
     let mut protocol_config = ProtocolConfig::get_for_max_version_UNSAFE();
-    protocol_config.set_consensus_gc_depth_for_testing(10);
+    
+    let gc_depth: u64 = env::var("GC_DEPTH")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(10);
+    protocol_config.set_consensus_gc_depth_for_testing(gc_depth);
 
     let temp_dirs = (0..num_validators)
         .map(|_| TempDir::new().unwrap())

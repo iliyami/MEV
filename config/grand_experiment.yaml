@@ -1,0 +1,42 @@
+experiment:
+  name: "unified_experiment_suite"
+  description: "Grand Unified Experiment for MEV Attack Sensitivity Analysis"
+
+protocol:
+  name: "bullshark" # Can be overridden to "mevsui"
+  path: "bullshark" # or "mevsui"
+
+docker:
+  tag: "mev-bullshark:latest"
+  cpus: "32.0"   # High core count for 100-node tests
+  memory: "64g"  # High memory for large DAGs
+
+test:
+  test_name: "test_fissure_attack_asr_dynamic" # Default, overridden by runner
+
+environment:
+  # GLOBAL SCALING
+  NUM_NODES: "16" # Base case
+  
+  # ATTACK CONFIGURATION (OFFENSE)
+  ATTACK_MODE: "fissure" # [fissure, speculative, sluggish]
+  ATTACKER_RATIO: "0.3125"
+  VICTIM_RATIO: "0.25"
+  # Speculative-specific
+  SPECULATIVE_P_MAX: "1.0"
+  # Sluggish-specific
+  SLUGGISH_TIMEOUT_MULTIPLIER: "2.0"
+  
+  # TRANSACTION SCALING (Auto-calculated in code, but explicit here for record)
+  NUM_TRANSACTIONS: "200" # Typically NUM_NODES * 5
+  MIN_COMMITS: "30" # Typically NUM_NODES + 10
+  COLLECTION_DURATION: "35"
+
+  # DEFENSE PARAMETERS (PROTOCOL & NETWORK)
+  DAG_STATE_CACHED_ROUNDS: "5" # Default
+  SYNC_TIMEOUT_MS: "2000" # Default 2s
+  GC_DEPTH: "10" # Default
+
+output:
+  expected_asr: 90.0
+  tolerance_percent: 100.0 # Wide tolerance for sweeping
