@@ -167,7 +167,7 @@ async fn test_fissure_attack_asr_13_nodes() {
     
     loop {
         let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
-        if remaining.is_zero() || all_commits.len() >= MIN_COMMITS {
+        if remaining.is_zero() || all_commits.len() >= min_commits {
             break;
         }
         match tokio::time::timeout(remaining, primary_receiver.recv()).await {
