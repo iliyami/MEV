@@ -154,26 +154,38 @@ async fn test_sluggish_attack_asr_dynamic() {
     
     info!("✅ All {} nodes initialized and started", num_validators);
     
-    // Submit transactions
+    // Submit transactions - Dynamic scaling to avoid "simulation starvation" at high node counts
     info!("📤 Submitting transactions...");
-    const NUM_TRANSACTIONS: u8 = 50;
+    let num_transactions: usize = env::var("NUM_TRANSACTIONS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(num_validators * 5);
+    
     let mut submitted_transactions = BTreeSet::<Vec<u8>>::new();
-    for i in 0..NUM_TRANSACTIONS {
-        let txn = vec![i; 16];
+    for i in 0..num_transactions {
+        let txn = vec![i as u8; 16];
         submitted_transactions.insert(txn.clone());
-        authorities[i as usize % authorities.len()]
+        authorities[i % authorities.len()]
             .transaction_client()
             .submit(vec![txn])
             .await
             .unwrap();
     }
     
-    info!("⏳ Waiting for consensus (collecting commits for 25 seconds or until we have 10 commits)...");
+    info!("⏳ Waiting for consensus (collecting commits for duration or until MIN_COMMITS)...");
     
-    // Collect commits for a fixed duration or until we have enough
+    // Collect commits - Dynamic scaling for MIN_COMMITS
     let mut all_commits = Vec::new();
-    let collection_duration = Duration::from_secs(25);
-    const MIN_COMMITS: usize = 10;
+    let collection_duration_secs: u64 = env::var("COLLECTION_DURATION")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(35);
+    let collection_duration = Duration::from_secs(collection_duration_secs);
+    
+    let min_commits: usize = env::var("MIN_COMMITS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(num_validators + 10);
     
     // Collect from first receiver (all nodes see same commits)
     let mut primary_receiver = commit_receivers.swap_remove(0);
