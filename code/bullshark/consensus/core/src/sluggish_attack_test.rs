@@ -215,6 +215,7 @@ async fn test_sluggish_attack_asr_dynamic() {
     println!("  Victims: {} (~{:.1}%)", num_victim, victim_ratio * 100.0);
     println!("  SLUGGISH_TIMEOUT_MULTIPLIER: {}", env::var("SLUGGISH_TIMEOUT_MULTIPLIER").unwrap_or("1.0".to_string()));
     println!("  Attack Success Rate: {:.1}%", asr);
+    println!("  FINAL_ASR_RESULT: {:.1}%", asr);
     println!("  Paper Target: ~87% (13 nodes)");
     println!("========================================\n");
     

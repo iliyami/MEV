@@ -201,6 +201,7 @@ async fn test_fissure_attack_asr_dynamic() {
     println!("  Attackers: {} (~{:.1}%)", num_attacker, attacker_ratio * 100.0);
     println!("  Victims: {} (~{:.1}%)", num_victim, victim_ratio * 100.0);
     println!("  Attack Success Rate: {:.1}%", asr);
+    println!("  FINAL_ASR_RESULT: {:.1}%", asr);
     println!("  Paper Target: ~94% (50 nodes)");
     
     // Stop all authorities

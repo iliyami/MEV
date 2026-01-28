@@ -205,6 +205,7 @@ async fn test_speculative_attack_asr_dynamic() {
     println!("  Victims: {} (~{:.1}%)", num_victim, victim_ratio * 100.0);
     println!("  SPECULATIVE_P_MAX: {}", env::var("SPECULATIVE_P_MAX").unwrap_or("50".to_string()));
     println!("  Attack Success Rate: {:.1}%", asr);
+    println!("  FINAL_ASR_RESULT: {:.1}%", asr);
     println!("  Paper Target: ~86.3%");
     
     // Stop all authorities
