@@ -34,7 +34,7 @@ venv/
 # Rust
 **/target/
 **/*.rs.bk
-Cargo.lock
+# Cargo.lock
 
 # Test artifacts
 attack_results/

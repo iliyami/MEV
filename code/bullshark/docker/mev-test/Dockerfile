@@ -23,9 +23,6 @@ WORKDIR /app
 # Copy the entire Bullshark project
 COPY . .
 
-# Downgrade time crate to avoid rustc 1.88 requirement
-RUN cargo update -p time --precise 0.3.45
-
 # Build the consensus tests in release mode
 RUN cargo build --release --package consensus-core
 
