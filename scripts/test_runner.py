@@ -152,8 +152,8 @@ def verify_parity(config: dict, result: dict) -> bool:
         print(f"ERROR: Could not parse ASR value: {result['asr']}")
         return False
     
-    lower = expected - tolerance
-    upper = expected + tolerance
+    lower = max(0.0, expected - tolerance)
+    upper = min(100.0, expected + tolerance)
     
     passed = lower <= actual <= upper
     
