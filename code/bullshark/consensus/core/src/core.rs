@@ -1457,12 +1457,19 @@ impl Core {
 
         let quorum_round = clock_round.saturating_sub(1);
         
-        // Count current stake in parent round to ensure quorum
+        // Count current stake and victims in parent round to ensure quorum
         let mut parent_round_stake = 0;
+        let mut parent_round_victims = 0;
+        let mut victim_stake_in_parent_round: u64 = 0;
         
         for ancestor in ancestors.iter() {
             if ancestor.round() == quorum_round {
-                parent_round_stake += self.context.committee.stake(ancestor.author());
+                let stake = self.context.committee.stake(ancestor.author());
+                parent_round_stake += stake;
+                if self.is_victim_block(ancestor, victim_count) {
+                    parent_round_victims += 1;
+                    victim_stake_in_parent_round += stake;
+                }
             }
         }
         
@@ -1539,14 +1546,17 @@ impl Core {
             excluded_count,
             victim_count_found,
             exclusion_rate,
+            parent_round_victims,
+            victim_stake_in_parent_round,
         };
 
         if excluded_count > 0 {
             info!(
-                "Fissure attack: Excluded {} victim ancestors out of {} total ancestors ({} victim blocks, {:.1}% exclusion rate)",
+                "Fissure attack: Excluded {} victim ancestors out of {} total ancestors ({} victim blocks [{} in parent round], {:.1}% exclusion rate)",
                 excluded_count,
                 total_ancestors,
                 victim_count_found,
+                parent_round_victims,
                 exclusion_rate
             );
         }
@@ -1624,6 +1634,8 @@ struct FissureAttackMetrics {
     excluded_count: usize,
     victim_count_found: usize,
     exclusion_rate: f64,
+    parent_round_victims: usize,
+    victim_stake_in_parent_round: u64,
 }
 
 /// Senders of signals from Core, for outputs and events (ex new block produced).
