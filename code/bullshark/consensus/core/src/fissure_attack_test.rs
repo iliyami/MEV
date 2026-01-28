@@ -26,12 +26,7 @@ use crate::{
 use prometheus::Registry;
 use tracing::{info, warn};
 
-const NUM_VALIDATORS: usize = 13;
-const NUM_ATTACKER: usize = 4; // ~30.8% (4/13)
-const NUM_VICTIM: usize = 3;   // ~23.1% (3/13)
-const NUM_HONEST: usize = 6;   // ~46.1% (6/13)
-
-// Helper to create an authority node (copied from sluggish_attack_test.rs)
+// Helper to create an authority node
 async fn make_authority(
     index: AuthorityIndex,
     db_dir: &TempDir,
@@ -83,34 +78,54 @@ async fn make_authority(
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn test_fissure_attack_asr_13_nodes() {
+async fn test_fissure_attack_asr_dynamic() {
     telemetry_subscribers::init_for_testing();
-    
-    // Set attack parameters
-    env::set_var("ATTACK_MODE", "fissure");
-    env::set_var("ATTACKER_RATIO", "0.308"); // 4/13
-    env::set_var("VICTIM_RATIO", "0.231");   // 3/13
-    
-    info!("🚀 Starting Fissure Attack Test with 13 Nodes");
-    info!("  Attackers: {} nodes (indices 0-{})", NUM_ATTACKER, NUM_ATTACKER - 1);
-    info!("  Victims: {} nodes (indices {}-{})", NUM_VICTIM, NUM_VALIDATORS - NUM_VICTIM, NUM_VALIDATORS - 1);
-    info!("  Honest: {} nodes (indices {}-{})", NUM_HONEST, NUM_ATTACKER, NUM_VALIDATORS - NUM_VICTIM - 1);
 
-    // Create committee and keypairs for all 13 nodes
-    let (committee, keypairs) = local_committee_and_keys(0, vec![1; NUM_VALIDATORS]);
+    // Dynamic node counts (defaults to 13 if not set)
+    let num_validators: usize = env::var("NUM_NODES")
+        .unwrap_or_else(|_| "13".to_string())
+        .parse()
+        .expect("Invalid NUM_NODES");
+        
+    let attacker_ratio: f64 = env::var("ATTACKER_RATIO")
+        .unwrap_or_else(|_| "0.308".to_string())
+        .parse()
+        .expect("Invalid ATTACKER_RATIO");
+        
+    let victim_ratio: f64 = env::var("VICTIM_RATIO")
+        .unwrap_or_else(|_| "0.231".to_string())
+        .parse()
+        .expect("Invalid VICTIM_RATIO");
+
+    let num_attacker = (num_validators as f64 * attacker_ratio).round() as usize;
+    let num_victim = (num_validators as f64 * victim_ratio).round() as usize;
+    let num_honest = num_validators - num_attacker - num_victim;
+
+    env::set_var("ATTACK_MODE", "fissure");
+    // Ensure ratios are set for other components checking env vars
+    env::set_var("ATTACKER_RATIO", attacker_ratio.to_string());
+    env::set_var("VICTIM_RATIO", victim_ratio.to_string());
+    
+    info!("🚀 Starting Fissure Attack Test with {} Nodes", num_validators);
+    info!("  Attackers: {} nodes (indices 0-{})", num_attacker, num_attacker.saturating_sub(1));
+    info!("  Victims: {} nodes (indices {}-{})", num_victim, num_validators - num_victim, num_validators - 1);
+    info!("  Honest: {} nodes (indices {}-{})", num_honest, num_attacker, num_validators - num_victim - 1);
+
+    // Create committee and keypairs
+    let (committee, keypairs) = local_committee_and_keys(0, vec![1; num_validators]);
     let mut protocol_config = ProtocolConfig::get_for_max_version_UNSAFE();
     protocol_config.set_consensus_gc_depth_for_testing(10);
 
-    let temp_dirs = (0..NUM_VALIDATORS)
+    let temp_dirs = (0..num_validators)
         .map(|_| TempDir::new().unwrap())
         .collect::<Vec<_>>();
 
     let mut commit_receivers = Vec::with_capacity(committee.size());
     let mut authorities = Vec::with_capacity(committee.size());
-    let boot_counters = vec![0; NUM_VALIDATORS];
+    let boot_counters = vec![0; num_validators];
 
     // Create all authority nodes
-    info!("Creating {} authority nodes...", NUM_VALIDATORS);
+    info!("Creating {} authority nodes...", num_validators);
     for (index, _authority_info) in committee.authorities() {
         let (authority, commit_receiver, _block_receiver) = make_authority(
             index,
@@ -126,7 +141,7 @@ async fn test_fissure_attack_asr_13_nodes() {
         authorities.push(authority);
     }
 
-    info!("✅ All {} nodes initialized and started", NUM_VALIDATORS);
+    info!("✅ All {} nodes initialized and started", num_validators);
 
     // Submit transactions
     info!("📤 Submitting transactions...");
@@ -177,16 +192,16 @@ async fn test_fissure_attack_asr_13_nodes() {
     
     // Calculate ASR immediately after collection
     info!("📊 Calculating Attack Success Rate (ASR)...");
-    let asr = calculate_asr(&all_commits);
+    let asr = calculate_asr(&all_commits, num_validators, num_attacker, num_victim);
     
     info!("⏹️ ASR calculation complete");
     
-    info!("🎯 FISSURE ATTACK RESULTS:");
-    info!("  Network: {} validators", NUM_VALIDATORS);
-    info!("  Attackers: {} (~30.8%)", NUM_ATTACKER);
-    info!("  Victims: {} (~23.1%)", NUM_VICTIM);
-    info!("  Attack Success Rate: {:.1}%", asr);
-    info!("  Paper Target: ~94% (50 nodes, scaled to 13 nodes)");
+    println!("🎯 FISSURE ATTACK RESULTS:");
+    println!("  Network: {} validators", num_validators);
+    println!("  Attackers: {} (~{:.1}%)", num_attacker, attacker_ratio * 100.0);
+    println!("  Victims: {} (~{:.1}%)", num_victim, victim_ratio * 100.0);
+    println!("  Attack Success Rate: {:.1}%", asr);
+    println!("  Paper Target: ~94% (50 nodes)");
     
     // Stop all authorities
     for authority in authorities {
@@ -200,7 +215,7 @@ async fn test_fissure_attack_asr_13_nodes() {
     info!("✅ Test completed successfully!");
 }
 
-fn calculate_asr(commits: &[CommittedSubDag]) -> f64 {
+fn calculate_asr(commits: &[CommittedSubDag], num_validators: usize, num_attacker: usize, num_victim: usize) -> f64 {
     if commits.is_empty() {
         warn!("No commits to analyze");
         return 0.0;
@@ -217,16 +232,16 @@ fn calculate_asr(commits: &[CommittedSubDag]) -> f64 {
     info!("Global order contains {} blocks", global_order.len());
     
     // Identify attacker and victim blocks
-    // Attackers are first NUM_ATTACKER nodes (indices 0 to NUM_ATTACKER-1)
-    // Victims are last NUM_VICTIM nodes (indices NUM_VALIDATORS-NUM_VICTIM to NUM_VALIDATORS-1)
+    // Attackers are first num_attacker nodes (indices 0 to num_attacker-1)
+    // Victims are last num_victim nodes (indices num_validators-num_victim to num_validators-1)
     let mut attacker_positions = Vec::new();
     let mut victim_positions = Vec::new();
     
     for (pos, (author, round, _block_ref)) in global_order.iter().enumerate() {
         let author_index = author.value() as usize;
-        if author_index < NUM_ATTACKER {
+        if author_index < num_attacker {
             attacker_positions.push((pos, *round));
-        } else if author_index >= NUM_VALIDATORS - NUM_VICTIM {
+        } else if author_index >= num_validators - num_victim {
             victim_positions.push((pos, *round));
         }
     }

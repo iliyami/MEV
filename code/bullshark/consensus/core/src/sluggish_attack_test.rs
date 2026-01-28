@@ -26,10 +26,7 @@ use crate::{
 use prometheus::Registry;
 use tracing::{info, warn};
 
-const NUM_VALIDATORS: usize = 13;
-const NUM_ATTACKER: usize = 4; // 30% (4/13)
-const NUM_VICTIM: usize = 3;   // 23% (3/13)
-const NUM_HONEST: usize = 6;   // 46% (6/13)
+// Dynamic configuration handled inside test function
 
 // Helper to create an authority node (copied from authority_node.rs tests)
 async fn make_authority(
@@ -84,40 +81,62 @@ async fn make_authority(
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn test_sluggish_attack_asr_13_nodes() {
+async fn test_sluggish_attack_asr_dynamic() {
     telemetry_subscribers::init_for_testing();
+
+    // Dynamic node counts (defaults to 13 if not set)
+    let num_validators: usize = env::var("NUM_NODES")
+        .unwrap_or_else(|_| "13".to_string())
+        .parse()
+        .expect("Invalid NUM_NODES");
+
+    let attacker_ratio: f64 = env::var("ATTACKER_RATIO")
+        .unwrap_or_else(|_| "0.308".to_string())
+        .parse()
+        .expect("Invalid ATTACKER_RATIO");
+
+    let victim_ratio: f64 = env::var("VICTIM_RATIO")
+        .unwrap_or_else(|_| "0.231".to_string())
+        .parse()
+        .expect("Invalid VICTIM_RATIO");
+
+    let num_attacker = (num_validators as f64 * attacker_ratio).round() as usize;
+    let num_victim = (num_validators as f64 * victim_ratio).round() as usize;
+    let num_honest = num_validators - num_attacker - num_victim;
     
     // Set attack parameters
     env::set_var("ATTACK_MODE", "sluggish");
-    env::set_var("ATTACKER_RATIO", "0.308"); // 4/13
-    env::set_var("VICTIM_RATIO", "0.231");   // 3/13
+    env::set_var("ATTACKER_RATIO", attacker_ratio.to_string());
+    env::set_var("VICTIM_RATIO", victim_ratio.to_string());
+    
     // Higher multiplier = more delay = attackers lag further behind = lower rounds = higher priority
-    // Using 4.0x for balance: significant lag but not so much that network stalls
-    // Use env var if set, otherwise default to 1.5 (Optimized)
+    // Using 1.5x for balance
+    // Use env var if set, otherwise mandatory set for test consistency
     if env::var("SLUGGISH_TIMEOUT_MULTIPLIER").is_err() {
         env::set_var("SLUGGISH_TIMEOUT_MULTIPLIER", "1.5");
     }
     
-    info!("🚀 Starting Sluggish Attack Test with 13 Nodes");
-    info!("  Attackers: {} nodes (indices 0-{})", NUM_ATTACKER, NUM_ATTACKER - 1);
-    info!("  Victims: {} nodes (indices {}-{})", NUM_VICTIM, NUM_ATTACKER, NUM_ATTACKER + NUM_VICTIM - 1);
-    info!("  Honest: {} nodes (indices {}-{})", NUM_HONEST, NUM_ATTACKER + NUM_VICTIM, NUM_VALIDATORS - 1);
+    info!("🚀 Starting Sluggish Attack Test (Dynamic)");
+    info!("  Network: {} validators", num_validators);
+    info!("  Attackers: {} (~{:.1}%)", num_attacker, attacker_ratio * 100.0);
+    info!("  Victims: {} (~{:.1}%)", num_victim, victim_ratio * 100.0);
+    info!("  Honest: {}", num_honest);
     
-    // Create committee and keypairs for all 13 nodes
-    let (committee, keypairs) = local_committee_and_keys(0, vec![1; NUM_VALIDATORS]);
+    // Create committee and keypairs
+    let (committee, keypairs) = local_committee_and_keys(0, vec![1; num_validators]);
     let mut protocol_config = ProtocolConfig::get_for_max_version_UNSAFE();
     protocol_config.set_consensus_gc_depth_for_testing(10);
     
-    let temp_dirs = (0..NUM_VALIDATORS)
+    let temp_dirs = (0..num_validators)
         .map(|_| TempDir::new().unwrap())
         .collect::<Vec<_>>();
     
     let mut commit_receivers = Vec::with_capacity(committee.size());
     let mut authorities = Vec::with_capacity(committee.size());
-    let boot_counters = vec![0; NUM_VALIDATORS];
+    let boot_counters = vec![0; num_validators];
     
     // Create all authority nodes
-    info!("Creating {} authority nodes...", NUM_VALIDATORS);
+    info!("Creating {} authority nodes...", num_validators);
     for (index, _authority_info) in committee.authorities() {
         let (authority, commit_receiver, _block_receiver) = make_authority(
             index,
@@ -133,7 +152,7 @@ async fn test_sluggish_attack_asr_13_nodes() {
         authorities.push(authority);
     }
     
-    info!("✅ All 13 nodes initialized and started");
+    info!("✅ All {} nodes initialized and started", num_validators);
     
     // Submit transactions
     info!("📤 Submitting transactions...");
@@ -184,16 +203,20 @@ async fn test_sluggish_attack_asr_13_nodes() {
     
     // Calculate ASR immediately after collection
     info!("📊 Calculating Attack Success Rate (ASR)...");
-    let asr = calculate_asr(&all_commits);
+    let asr = calculate_asr(&all_commits, num_validators, num_attacker, num_victim);
     
     info!("⏹️ ASR calculation complete");
     
-    info!("🎯 SLUGGISH ATTACK RESULTS:");
-    info!("  Network: {} validators", NUM_VALIDATORS);
-    info!("  Attackers: {} (30%)", NUM_ATTACKER);
-    info!("  Victims: {} (23%)", NUM_VICTIM);
-    info!("  Attack Success Rate: {:.1}%", asr);
-    info!("  Paper Target: ~87% (13 nodes)");
+    println!("\n\n========================================");
+    // Env details:
+    println!("🎯 SLUGGISH ATTACK RESULTS:");
+    println!("  Network: {} validators", num_validators);
+    println!("  Attackers: {} (~{:.1}%)", num_attacker, attacker_ratio * 100.0);
+    println!("  Victims: {} (~{:.1}%)", num_victim, victim_ratio * 100.0);
+    println!("  SLUGGISH_TIMEOUT_MULTIPLIER: {}", env::var("SLUGGISH_TIMEOUT_MULTIPLIER").unwrap_or("1.0".to_string()));
+    println!("  Attack Success Rate: {:.1}%", asr);
+    println!("  Paper Target: ~87% (13 nodes)");
+    println!("========================================\n");
     
     // Stop all authorities
     for authority in authorities {
@@ -204,10 +227,15 @@ async fn test_sluggish_attack_asr_13_nodes() {
     assert!(asr > 50.0, "ASR too low: {:.1}%", asr);
     assert!(asr <= 100.0, "ASR suspiciously high: {:.1}%", asr);
     
-    info!("✅ Test completed successfully!");
+    info!("✅ Test completed successfully with ASR: {:.1}%", asr);
 }
 
-fn calculate_asr(commits: &[CommittedSubDag]) -> f64 {
+fn calculate_asr(
+    commits: &[CommittedSubDag],
+    _num_validators: usize,
+    num_attacker: usize,
+    num_victim: usize
+) -> f64 {
     if commits.is_empty() {
         warn!("No commits to analyze");
         return 0.0;
@@ -230,9 +258,9 @@ fn calculate_asr(commits: &[CommittedSubDag]) -> f64 {
     
     for (pos, (author, round, _block_ref)) in global_order.iter().enumerate() {
         let author_index = author.value() as usize;
-        if author_index < NUM_ATTACKER {
+        if author_index < num_attacker {
             attacker_positions.push((pos, *round));
-        } else if author_index < (NUM_ATTACKER + NUM_VICTIM) {
+        } else if author_index < (num_attacker + num_victim) {
             victim_positions.push((pos, *round));
         }
     }
@@ -292,6 +320,7 @@ async fn test_baseline_13_nodes_no_attack() {
     
     info!("🚀 Running Baseline Test (No Attack) with 13 Nodes");
     
+    const NUM_VALIDATORS: usize = 13;
     // Create committee with 13 nodes
     let (committee, keypairs) = local_committee_and_keys(0, vec![1; NUM_VALIDATORS]);
     let protocol_config = ProtocolConfig::get_for_max_version_UNSAFE();

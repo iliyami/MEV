@@ -205,7 +205,7 @@ impl Core {
         let speculative_p_max: usize = env::var("SPECULATIVE_P_MAX")
             .ok()
             .and_then(|s| s.parse().ok())
-            .unwrap_or(50);
+            .expect("SPECULATIVE_P_MAX environment variable must be set for speculative attack mode");
         let committee_size = context.committee.size();
         let attacker_count = ((committee_size as f64) * attacker_ratio).floor() as usize;
         let is_attacker = (attack_mode == "fissure" || attack_mode == "speculative" || attack_mode == "sluggish")
@@ -214,7 +214,7 @@ impl Core {
         let sluggish_timeout_multiplier: f64 = env::var("SLUGGISH_TIMEOUT_MULTIPLIER")
             .unwrap_or_else(|_| "2.0".to_string())
             .parse()
-            .unwrap_or(2.0);
+            .expect("SLUGGISH_TIMEOUT_MULTIPLIER environment variable must be set (parse error or missing)");
 
         Self {
             context,
@@ -1442,18 +1442,11 @@ impl Core {
             return (ancestors, FissureAttackMetrics::default());
         }
 
-        let attacker_ratio: f64 = std::env::var("ATTACKER_RATIO")
-            .unwrap_or_else(|_| "0.3".to_string())
-            .parse()
-            .unwrap_or(0.3);
-        let victim_ratio: f64 = std::env::var("VICTIM_RATIO")
-            .unwrap_or_else(|_| "0.2".to_string())
-            .parse()
-            .unwrap_or(0.2);
+
 
         let committee_size = self.context.committee.size();
-        let attacker_count = (committee_size as f64 * attacker_ratio) as usize;
-        let victim_count = (committee_size as f64 * victim_ratio) as usize;
+        let attacker_count = (committee_size as f64 * self.attacker_ratio) as usize;
+        let victim_count = (committee_size as f64 * self.victim_ratio) as usize;
 
         // Determine if this node is an attacker
         let is_attacker = self.context.own_index.value() < attacker_count;
@@ -1466,23 +1459,14 @@ impl Core {
         
         // Count current stake in parent round to ensure quorum
         let mut parent_round_stake = 0;
-        let mut parent_round_victims = 0;
         
         for ancestor in ancestors.iter() {
             if ancestor.round() == quorum_round {
                 parent_round_stake += self.context.committee.stake(ancestor.author());
-                if self.is_victim_block(ancestor, victim_count) {
-                    parent_round_victims += 1;
-                }
             }
         }
         
         let quorum_threshold = self.context.committee.quorum_threshold();
-        let victim_stake_in_parent_round: u64 = ancestors.iter()
-            .filter(|a| a.round() == quorum_round && self.is_victim_block(a, victim_count))
-            .map(|a| self.context.committee.stake(a.author()))
-            .sum();
-
         let mut filtered_ancestors = Vec::new();
         let mut excluded_count = 0;
         let mut victim_count_found = 0;
@@ -1506,29 +1490,28 @@ impl Core {
                     clock_round,
                 );
                 
-                // Determine if we should exclude
-                let mut should_exclude = false;
-                
-                if is_parent_round {
+                let should_exclude = if is_parent_round {
                     // OPTIMIZED: Use running stake tracker for cumulative exclusion
                     // Check if excluding this ancestor would still leave enough stake
                     let remaining_stake_after = parent_round_stake.saturating_sub(ancestor_stake);
                     if remaining_stake_after >= quorum_threshold {
                         // Safe to exclude - probabilistic decision
-                        should_exclude = self.should_exclude_victim_block(&ancestor, exclusion_prob);
-                        if should_exclude {
+                        if self.should_exclude_victim_block(&ancestor, exclusion_prob) {
                             // Update running stake tracker
                             parent_round_stake = remaining_stake_after;
+                            true
+                        } else {
+                            false
                         }
                     } else {
                         // Would break quorum - cannot exclude
-                        should_exclude = false;
+                        false
                     }
                 } else {
                     // For non-parent-round ancestors, very aggressive exclusion
                     let aggressive_prob = exclusion_prob.min(0.98);
-                    should_exclude = self.should_exclude_victim_block(&ancestor, aggressive_prob);
-                }
+                    self.should_exclude_victim_block(&ancestor, aggressive_prob)
+                };
                 
                 if should_exclude {
                     excluded_count += 1;
@@ -1636,6 +1619,7 @@ impl Core {
 
 /// Metrics for tracking fissure attack performance
 #[derive(Default, Debug)]
+#[allow(dead_code)]
 struct FissureAttackMetrics {
     excluded_count: usize,
     victim_count_found: usize,
