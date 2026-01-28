@@ -145,7 +145,7 @@ def main():
     with open(RESULTS_FILE, 'a', newline='') as csvfile:
         fieldnames = ["timestamp", "experiment", "attack_mode", "rep", "asr", "duration", "exit_code", 
                       "NUM_NODES", "ATTACKER_RATIO", "SPECULATIVE_P_MAX", "SLUGGISH_TIMEOUT_MULTIPLIER",
-                      "DAG_STATE_CACHED_ROUNDS", "SYNC_TIMEOUT_MS", "GC_DEPTH"]
+                      "DAG_STATE_CACHED_ROUNDS", "SYNC_TIMEOUT_MS", "GC_DEPTH", "LATENCY_JITTER"]
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames, extrasaction='ignore')
         if not file_exists:
             writer.writeheader()

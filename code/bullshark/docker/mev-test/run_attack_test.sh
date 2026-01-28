@@ -10,6 +10,21 @@ echo "========================================"
 echo "Attack Mode: $ATTACK_MODE"
 echo "Nodes: ${NUM_NODES:-13}"
 echo "Test Name: ${TEST_NAME:-test_fissure_attack_asr_dynamic}"
+
+# -----------------------------------------------------
+# Network Simulation (Geo-Distribution / Jitter) - Defense 2/3
+# -----------------------------------------------------
+if [ ! -z "$LATENCY_JITTER" ]; then
+    echo "🌍 Applying Network Simulation: ${LATENCY_JITTER} delay"
+    # We apply delay to loopback since all nodes run locally in this container
+    # 'tc qdisc add dev lo root netem delay 100ms 20ms distribution normal'
+    # Format expected: "100ms 20ms" (mean jitter) or just "50ms"
+    tc qdisc add dev lo root netem delay $LATENCY_JITTER distribution normal || echo "⚠️ Failed to apply TC (check --cap-add=NET_ADMIN)"
+    tc qdisc show dev lo
+else 
+    echo "🌍 Network Simulation: Disabled (Localhost Speed)"
+fi
+
 echo ""
 
 # Run the test

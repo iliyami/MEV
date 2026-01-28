@@ -72,6 +72,7 @@ def run_attack_test(config: dict) -> dict:
     # Build docker run command
     cmd = [
         "docker", "run", "--rm",
+        "--cap-add=NET_ADMIN", # Enable Traffic Control (tc)
         "-v", f"{results_mount}:/app/results",
         "-e", f"TEST_NAME={test_name}",
     ]
