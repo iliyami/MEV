@@ -1,0 +1,55 @@
+# Experiment Configuration Schema
+# This YAML defines a standardized experiment for MEV attack testing
+
+experiment:
+  name: "bullshark_fissure_13node"
+  description: "Fissure attack on Bullshark with 13 nodes"
+
+protocol:
+  name: "bullshark"
+  # Path relative to /Users/iliya/Dev/Blockchain/code/
+  path: "bullshark"
+  rust_version: "1.72"
+
+network:
+  total_nodes: 13
+  # Attacker nodes: indices 0-3 (4 nodes = 30.8%)
+  attackers: [0, 1, 2, 3]
+  # Victim nodes: indices 10-12 (3 nodes = 23.1%)
+  victims: [10, 11, 12]
+  # Honest nodes: indices 4-9 (6 nodes)
+  honest: [4, 5, 6, 7, 8, 9]
+
+attack:
+  mode: "fissure"  # fissure | speculative | sluggish | none
+  # Attack-specific parameters
+  params:
+    exclusion_probability: 0.85  # For fissure
+    # mining_iterations: 50      # For speculative
+    # delay_ms: 100              # For sluggish
+
+test:
+  # Cargo test command pattern
+  command: "cargo test --release --package consensus-core {test_name} -- --nocapture"
+  test_name: "test_fissure_attack_asr_13_nodes"
+  timeout_seconds: 120
+
+environment:
+  ATTACK_MODE: "fissure"
+  ATTACKER_RATIO: "0.308"
+  VICTIM_RATIO: "0.231"
+  RUST_LOG: "info"
+
+docker:
+  # Resource limits per container (for local testing)
+  cpus: "0.5"
+  memory: "512m"
+  # Image tag
+  tag: "mev-bullshark:latest"
+
+output:
+  # Where to store logs and results
+  logs_dir: "/Users/iliya/Dev/Blockchain/results"
+  # Expected ASR for parity check (from our existing results)
+  expected_asr: 91.9
+  tolerance_percent: 2.0

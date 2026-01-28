@@ -1,0 +1,42 @@
+# Bullshark Sluggish Attack Configuration
+
+experiment:
+  name: "bullshark_sluggish_13node"
+  description: "Sluggish attack on Bullshark with 13 nodes"
+
+protocol:
+  name: "bullshark"
+  path: "bullshark"
+  rust_version: "1.78"
+
+network:
+  total_nodes: 13
+  attackers: [0, 1, 2, 3]
+  victims: [10, 11, 12]
+  honest: [4, 5, 6, 7, 8, 9]
+
+attack:
+  mode: "sluggish"
+  params:
+    delay_ms: 100
+
+test:
+  command: "cargo test --release --package consensus-core {test_name} -- --nocapture"
+  test_name: "test_sluggish_attack_asr_13_nodes"
+  timeout_seconds: 120
+
+environment:
+  ATTACK_MODE: "sluggish"
+  ATTACKER_RATIO: "0.308"
+  VICTIM_RATIO: "0.231"
+  RUST_LOG: "info"
+
+docker:
+  cpus: "4"
+  memory: "8g"
+  tag: "mev-bullshark:latest"
+
+output:
+  logs_dir: "/Users/iliya/Dev/Blockchain/results"
+  expected_asr: 89.9
+  tolerance_percent: 3.0
