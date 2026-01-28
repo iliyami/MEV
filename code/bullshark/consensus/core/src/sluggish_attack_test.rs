@@ -210,9 +210,10 @@ async fn test_sluggish_attack_asr_dynamic() {
     println!("\n\n========================================");
     // Env details:
     println!("🎯 SLUGGISH ATTACK RESULTS:");
+    println!("  Mode: sluggish");
     println!("  Network: {} validators", num_validators);
-    println!("  Attackers: {} (~{:.1}%)", num_attacker, attacker_ratio * 100.0);
-    println!("  Victims: {} (~{:.1}%)", num_victim, victim_ratio * 100.0);
+    println!("  Attackers: {} (~{:.1}%)", num_attacker, (num_attacker as f64 / num_validators as f64) * 100.0);
+    println!("  Victims: {} (~{:.1}%)", num_victim, (num_victim as f64 / num_validators as f64) * 100.0);
     println!("  SLUGGISH_TIMEOUT_MULTIPLIER: {}", env::var("SLUGGISH_TIMEOUT_MULTIPLIER").unwrap_or("1.0".to_string()));
     println!("  Attack Success Rate: {:.1}%", asr);
     println!("  FINAL_ASR_RESULT: {:.1}%", asr);

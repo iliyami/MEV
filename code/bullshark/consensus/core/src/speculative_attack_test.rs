@@ -200,9 +200,10 @@ async fn test_speculative_attack_asr_dynamic() {
     
     // Env details:
     println!("🎯 SPECULATIVE ATTACK RESULTS:");
+    println!("  Mode: speculative");
     println!("  Network: {} validators", num_validators);
-    println!("  Attackers: {} (~{:.1}%)", num_attacker, attacker_ratio * 100.0);
-    println!("  Victims: {} (~{:.1}%)", num_victim, victim_ratio * 100.0);
+    println!("  Attackers: {} (~{:.1}%)", num_attacker, (num_attacker as f64 / num_validators as f64) * 100.0);
+    println!("  Victims: {} (~{:.1}%)", num_victim, (num_victim as f64 / num_validators as f64) * 100.0);
     println!("  SPECULATIVE_P_MAX: {}", env::var("SPECULATIVE_P_MAX").unwrap_or("50".to_string()));
     println!("  Attack Success Rate: {:.1}%", asr);
     println!("  FINAL_ASR_RESULT: {:.1}%", asr);

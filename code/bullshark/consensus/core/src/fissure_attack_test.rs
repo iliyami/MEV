@@ -197,6 +197,7 @@ async fn test_fissure_attack_asr_dynamic() {
     info!("⏹️ ASR calculation complete");
     
     println!("🎯 FISSURE ATTACK RESULTS:");
+    println!("  Mode: fissure");
     println!("  Network: {} validators", num_validators);
     println!("  Attackers: {} (~{:.1}%)", num_attacker, attacker_ratio * 100.0);
     println!("  Victims: {} (~{:.1}%)", num_victim, victim_ratio * 100.0);
