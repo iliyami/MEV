@@ -115,9 +115,11 @@ Based on meeting notes, the research objectives are:
    # Follow build instructions in repository
    ```
 
-3. **Run baseline experiments**:
+3. **Run Dynamic Attack Tests**:
    ```bash
-   # See scripts/ directory for automation
+   cd code/bullshark/
+   export NUM_NODES=13
+   cargo test --release --package consensus-core test_fissure_attack_asr_dynamic -- --nocapture
    ```
 
 ## Timeline
