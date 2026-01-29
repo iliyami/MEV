@@ -114,7 +114,7 @@ async fn test_speculative_attack_asr_13_nodes() {
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(10);
-    protocol_config.set_consensus_gc_depth_for_testing(gc_depth);
+    protocol_config.set_consensus_gc_depth_for_testing(gc_depth as u32);
 
     let temp_dirs = (0..NUM_VALIDATORS)
         .map(|_| TempDir::new().unwrap())

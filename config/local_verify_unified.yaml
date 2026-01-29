@@ -1,0 +1,33 @@
+experiment:
+  name: "unified_local_verification"
+  description: "Local verification of dynamic parameters"
+
+protocol:
+  name: "bullshark"
+  path: "bullshark"
+
+docker:
+  tag: "mev-bullshark:latest"
+  cpus: "2.0"   # Limited resources for local test
+  memory: "4g"
+
+test:
+  test_name: "test_fissure_attack_asr_dynamic"
+
+environment:
+  ATTACK_MODE: "fissure"
+  NUM_NODES: "13"
+  ATTACKER_RATIO: "0.308"
+  VICTIM_RATIO: "0.231"
+  
+  # Defense Parameters (Testing non-defaults to verify they are being used)
+  DAG_STATE_CACHED_ROUNDS: "8"
+  SYNC_TIMEOUT_MS: "3000"
+  GC_DEPTH: "15"
+  
+  # Network Latency (Local verification, might fail if docker doesn't have permissions but should be skipped gracefully)
+  LATENCY_JITTER: "10ms"
+
+output:
+  expected_asr: 90.0
+  tolerance_percent: 20.0

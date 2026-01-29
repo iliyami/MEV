@@ -1,0 +1,42 @@
+# Mysticeti Fissure Attack Configuration
+
+experiment:
+  name: "mysticeti_fissure_13node"
+  description: "Fissure attack on Mysticeti with 13 nodes"
+
+protocol:
+  name: "mysticeti"
+  path: "mysticeti"
+  rust_version: "1.78"
+
+network:
+  total_nodes: 13
+  attackers: [0, 1, 2, 3]
+  victims: [10, 11, 12]
+  honest: [4, 5, 6, 7, 8, 9]
+
+attack:
+  mode: "fissure"
+  params:
+    exclusion_probability: 0.85
+
+test:
+  command: "cargo test --release --package mysticeti-core {test_name} -- --nocapture"
+  test_name: "test_fissure_attack_asr_13_nodes"
+  timeout_seconds: 120
+
+environment:
+  ATTACK_MODE: "fissure"
+  ATTACKER_RATIO: "0.308"
+  VICTIM_RATIO: "0.231"
+  RUST_LOG: "info"
+
+docker:
+  cpus: "4"
+  memory: "8g"
+  tag: "mev-mysticeti:latest"
+
+output:
+  logs_dir: "/Users/iliya/Dev/Blockchain/results"
+  expected_asr: 45.0
+  tolerance_percent: 5.0
