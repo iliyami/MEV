@@ -147,7 +147,29 @@ def run_experiment(config_override, attack_mode, exp_name, rep_id):
         **config_override
     }
 
+def load_existing_results():
+    if not os.path.exists(RESULTS_FILE):
+        return set()
+    
+    results = set()
+    with open(RESULTS_FILE, 'r') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            # Create a unique key for each run: (experiment, attack_mode, rep, params)
+            # We use a stable string representation for the params
+            param_keys = ["NUM_NODES", "ATTACKER_RATIO", "SPECULATIVE_P_MAX", 
+                          "SLUGGISH_TIMEOUT_MULTIPLIER", "DAG_STATE_CACHED_ROUNDS", 
+                          "SYNC_TIMEOUT_MS", "GC_DEPTH", "LATENCY_JITTER"]
+            param_vals = tuple(row.get(pk, "") for pk in param_keys)
+            key = (row['experiment'], row['attack_mode'], row['rep'], param_vals)
+            results.add(key)
+    return results
+
 def main():
+    # 0. Load existing progress
+    existing_results = load_existing_results()
+    print(f"Loaded {len(existing_results)} existing results. Resuming...")
+
     # Initialize CSV
     file_exists = os.path.exists(RESULTS_FILE)
     with open(RESULTS_FILE, 'a', newline='') as csvfile:
@@ -159,13 +181,11 @@ def main():
             writer.writeheader()
 
         # SELECT MODE VIA ENV VAR OR ARG
-        # Default: Run everything? Or specific mode?
-        # For this script we will allow selecting the ATTACK_MODE env var
         target_attack = os.environ.get("ATTACK_MODE", "fissure")
         print(f"=== STARTING SWEEP FOR ATTACK: {target_attack} ===")
         
         # Determine relevant experiments
-        relevant_experiments = ["scaling", "defense_memory", "defense_network", "defense_gc"]
+        relevant_experiments = ["scaling", "defense_memory", "defense_network", "defense_gc", "env_latency"]
         if target_attack == "fissure":
             relevant_experiments.append("offense_fissure")
         elif target_attack == "speculative":
@@ -173,10 +193,8 @@ def main():
         elif target_attack == "sluggish":
             relevant_experiments.append("offense_sluggish")
 
-        # Add Latency Sweep
-        relevant_experiments.append("env_latency")
-
         for exp_name in relevant_experiments:
+            if exp_name not in EXPERIMENTS: continue
             exp_config = EXPERIMENTS[exp_name]
             params = exp_config["params"]
             value_sets = exp_config["values"]
@@ -189,9 +207,22 @@ def main():
 
                 # Run Repetitions
                 for r in range(1, REPETITIONS + 1):
+                    # Check if already done
+                    param_keys = ["NUM_NODES", "ATTACKER_RATIO", "SPECULATIVE_P_MAX", 
+                                  "SLUGGISH_TIMEOUT_MULTIPLIER", "DAG_STATE_CACHED_ROUNDS", 
+                                  "SYNC_TIMEOUT_MS", "GC_DEPTH", "LATENCY_JITTER"]
+                    # Current values for lookup (defaults empty)
+                    current_vals = tuple(str(override.get(pk, "")) for pk in param_keys)
+                    key = (exp_name, target_attack, str(r), current_vals)
+                    
+                    if key in existing_results:
+                        print(f"  [-] Skipping {exp_name} | {target_attack} | Rep {r} (Already recorded)")
+                        continue
+
                     data = run_experiment(override, target_attack, exp_name, r)
                     writer.writerow(data)
-                    csvfile.flush() # Save progress immediately
+                    csvfile.flush() # CRITICAL: Write to disk immediately
+                    os.fsync(csvfile.fileno()) # Force OS to flush buffers
 
 if __name__ == "__main__":
     main()
