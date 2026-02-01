@@ -99,8 +99,8 @@ def run_experiment(config_override, attack_mode, exp_name, rep_id):
     }
     config['test']['test_name'] = test_name_map[attack_mode]
 
-    # Save temp config
-    temp_config_path = f"config/temp_sweep_{exp_name}_{rep_id}.yaml"
+    # Save temp config with attack_mode to avoid collisions in multi-terminal runs
+    temp_config_path = f"config/temp_sweep_{attack_mode}_{exp_name}_{rep_id}.yaml"
     with open(temp_config_path, 'w') as f:
         yaml.dump(config, f)
 
@@ -162,8 +162,10 @@ def load_existing_results():
                           "SLUGGISH_TIMEOUT_MULTIPLIER", "DAG_STATE_CACHED_ROUNDS", 
                           "SYNC_TIMEOUT_MS", "GC_DEPTH", "LATENCY_JITTER"]
             param_vals = tuple(row.get(pk, "") for pk in param_keys)
-            key = (row['experiment'], row['attack_mode'], row['rep'], param_vals)
-            results.add(key)
+            # ONLY skip if we actually got a valid ASR result
+            if row.get('asr') != "N/A":
+                key = (row['experiment'], row['attack_mode'], row['rep'], param_vals)
+                results.add(key)
     return results
 
 def main():
