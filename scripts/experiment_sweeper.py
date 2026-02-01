@@ -1,4 +1,11 @@
 import argparse
+import yaml
+import os
+import subprocess
+import itertools
+import csv
+import time
+from datetime import datetime
 
 # --- CONFIGURATION (DEFAULTS) ---
 DEFAULT_BASE_CONFIG = "config/grand_experiment.yaml"
@@ -28,7 +35,7 @@ EXPERIMENTS = {
     "offense_speculative": {
         "params": ["SPECULATIVE_P_MAX"],
         "values": [
-            [0.1], [0.5], [1.0] # Low, Med, High
+            [5], [20], [50] # Low, Med, High (Brute force candidate count)
         ]
     },
     "offense_sluggish": {
@@ -101,8 +108,6 @@ def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_p
     print(f"--> Running {exp_name} | {attack_mode} | Rep {rep_id} | {config_override}")
     
     # 2. Run Test using existing runner
-    # We use --build only on the first run of the day, usually we skip it for speed if image exists
-    # Here we assume image assumes fresh build not needed for EVERY param change (env vars handle it)
     cmd = ["python3", "scripts/test_runner.py", temp_config_path]
     
     start_time = time.time()
@@ -151,7 +156,6 @@ def load_existing_results():
         reader = csv.DictReader(f)
         for row in reader:
             # Create a unique key for each run: (experiment, attack_mode, rep, params)
-            # We use a stable string representation for the params
             param_keys = ["NUM_NODES", "ATTACKER_RATIO", "SPECULATIVE_P_MAX", 
                           "SLUGGISH_TIMEOUT_MULTIPLIER", "DAG_STATE_CACHED_ROUNDS", 
                           "SYNC_TIMEOUT_MS", "GC_DEPTH", "LATENCY_JITTER"]
@@ -169,8 +173,20 @@ def main():
     args = parser.parse_args()
 
     # 0. Load existing progress
+    existing_results = load_existing_results()
+    print(f"Loaded {len(existing_results)} existing results. Resuming...")
 
-        # SELECT MODE VIA ENV VAR OR ARG
+    # Initialize CSV
+    file_exists = os.path.exists(RESULTS_FILE)
+    with open(RESULTS_FILE, 'a', newline='') as csvfile:
+        fieldnames = ["timestamp", "experiment", "attack_mode", "rep", "asr", "duration", "exit_code", 
+                      "NUM_NODES", "ATTACKER_RATIO", "SPECULATIVE_P_MAX", "SLUGGISH_TIMEOUT_MULTIPLIER",
+                      "DAG_STATE_CACHED_ROUNDS", "SYNC_TIMEOUT_MS", "GC_DEPTH", "LATENCY_JITTER"]
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames, extrasaction='ignore')
+        if not file_exists:
+            writer.writeheader()
+
+        # SELECT MODE VIA ENV VAR
         target_attack = os.environ.get("ATTACK_MODE", "fissure")
         print(f"=== STARTING SWEEP FOR ATTACK: {target_attack} ===")
         
