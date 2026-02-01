@@ -48,7 +48,7 @@ EXPERIMENTS = {
     "defense_memory": {
         "params": ["DAG_STATE_CACHED_ROUNDS"],
         "values": [
-            [2], [5], [20], [50]
+            [1], [2], [5], [20] # Lower values (1, 2) are more critical
         ]
     },
     
@@ -113,13 +113,14 @@ def run_experiment(config_override, attack_mode, exp_name, rep_id):
     
     start_time = time.time()
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600) # 10 min timeout
-        output = result.stdout
+        # 100 Nodes can take up to 40-50 minutes to complete a high-repetition or high-latency run
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600) # 60 min timeout
+        output = result.stdout + result.stderr
         exit_code = result.returncode
-    except subprocess.TimeoutExpired:
-        print("  !!! TIMEOUT !!!")
-        output = ""
-        exit_code = -1
+    except subprocess.TimeoutExpired as e:
+        print(f"  !!! TIMEOUT after {e.timeout}s !!!")
+        output = (e.stdout.decode() if e.stdout else "") + (e.stderr.decode() if e.stderr else "")
+        exit_code = -124 # Standard timeout exit code
     duration = time.time() - start_time
 
     # 3. Parse ASR
