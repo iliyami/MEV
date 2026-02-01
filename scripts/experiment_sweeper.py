@@ -82,7 +82,11 @@ def load_base_config(config_path):
     with open(config_path, 'r') as f:
         return yaml.safe_load(f)
 
-def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_path):
+def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_path, local_mode=False):
+    # 0. Create logs directory
+    os.makedirs("logs", exist_ok=True)
+    log_file = f"logs/{attack_mode}_{exp_name}_rep{rep_id}_{int(time.time())}.log"
+
     # 1. Prepare Configuration
     config = load_base_config(base_config_path)
     
@@ -109,6 +113,8 @@ def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_p
     
     # 2. Run Test using existing runner
     cmd = ["python3", "scripts/test_runner.py", temp_config_path]
+    if local_mode:
+        cmd.append("--local")
     
     start_time = time.time()
     try:
@@ -130,7 +136,17 @@ def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_p
                 asr = line.split("FINAL_ASR_RESULT:")[1].strip().replace("%", "")
                 break
     
-    print(f"  <-- Result: ASR={asr}% (Exit: {exit_code})")
+    # Save log for debugging
+    with open(log_file, "w") as f:
+        f.write(output)
+
+    if asr == "N/A":
+        print(f"  <-- !!! FAILED: ASR={asr}% (Exit: {exit_code}) | Log: {log_file}")
+        # Print a snippet of the error (last 10 lines)
+        error_snippet = "\n".join(output.splitlines()[-15:])
+        print(f"      [Last 15 lines of log]:\n{error_snippet}")
+    else:
+        print(f"  <-- Result: ASR={asr}% (Exit: {exit_code})")
 
     # Cleanup
     if os.path.exists(temp_config_path):
@@ -170,6 +186,7 @@ def main():
     parser = argparse.ArgumentParser(description="Multi-Attack Parameter Sweeper")
     parser.add_argument("--config", default=DEFAULT_BASE_CONFIG, help="Base YAML config (default: grand_experiment.yaml)")
     parser.add_argument("--experiments", help="Comma-separated list of experiments to run (e.g. scaling,offense_speculative)")
+    parser.add_argument("--local", action="store_true", help="Run tests locally via cargo instead of Docker")
     args = parser.parse_args()
 
     # 0. Load existing progress
@@ -228,7 +245,7 @@ def main():
                         print(f"  [-] Skipping {exp_name} | {target_attack} | Rep {r} (Already recorded)")
                         continue
 
-                    data = run_experiment(override, target_attack, exp_name, r, args.config)
+                    data = run_experiment(override, target_attack, exp_name, r, args.config, local_mode=args.local)
                     writer.writerow(data)
                     csvfile.flush() # CRITICAL: Write to disk immediately
                     os.fsync(csvfile.fileno()) # Force OS to flush buffers
