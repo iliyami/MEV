@@ -20,6 +20,11 @@ environment:
   ATTACKER_RATIO: "0.308"
   VICTIM_RATIO: "0.231"
   
+  # Speculative-specific
+  SPECULATIVE_P_MAX: "1.0"
+  # Sluggish-specific
+  SLUGGISH_TIMEOUT_MULTIPLIER: "2.0"
+  
   # Defense Parameters (Testing non-defaults to verify they are being used)
   DAG_STATE_CACHED_ROUNDS: "8"
   SYNC_TIMEOUT_MS: "3000"
