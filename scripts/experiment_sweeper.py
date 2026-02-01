@@ -182,6 +182,36 @@ def load_existing_results():
                 results.add(key)
     return results
 
+def deduplicate_results():
+    """Reads the results file and keeps only the latest entry for each unique experiment key."""
+    if not os.path.exists(RESULTS_FILE):
+        return
+    
+    unique_results = {}
+    fieldnames = []
+    
+    with open(RESULTS_FILE, 'r') as f:
+        reader = csv.DictReader(f)
+        fieldnames = reader.fieldnames
+        for row in reader:
+            param_keys = ["NUM_NODES", "ATTACKER_RATIO", "SPECULATIVE_P_MAX", 
+                          "SLUGGISH_TIMEOUT_MULTIPLIER", "DAG_STATE_CACHED_ROUNDS", 
+                          "SYNC_TIMEOUT_MS", "GC_DEPTH", "LATENCY_JITTER"]
+            param_vals = tuple(row.get(pk, "") for pk in param_keys)
+            key = (row['experiment'], row['attack_mode'], row['rep'], param_vals)
+            
+            # Keep the latest entry, but prioritize successful ones over N/A
+            if key not in unique_results or (row.get('asr') != "N/A"):
+                unique_results[key] = row
+
+    with open(RESULTS_FILE, 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in unique_results.values():
+            writer.writerow(row)
+    
+    print(f"Deduplicated {RESULTS_FILE}: Kept {len(unique_results)} unique entries.")
+
 def main():
     parser = argparse.ArgumentParser(description="Multi-Attack Parameter Sweeper")
     parser.add_argument("--config", default=DEFAULT_BASE_CONFIG, help="Base YAML config (default: grand_experiment.yaml)")
@@ -189,7 +219,8 @@ def main():
     parser.add_argument("--local", action="store_true", help="Run tests locally via cargo instead of Docker")
     args = parser.parse_args()
 
-    # 0. Load existing progress
+    # 0. Clean up and load existing progress
+    deduplicate_results()
     existing_results = load_existing_results()
     print(f"Loaded {len(existing_results)} existing results. Resuming...")
 
