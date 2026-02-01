@@ -1,13 +1,7 @@
-import yaml
-import os
-import subprocess
-import itertools
-import csv
-import time
-from datetime import datetime
+import argparse
 
-# --- CONFIGURATION ---
-BASE_CONFIG = "config/grand_experiment.yaml"
+# --- CONFIGURATION (DEFAULTS) ---
+DEFAULT_BASE_CONFIG = "config/grand_experiment.yaml"
 RESULTS_FILE = "experiment_results.csv"
 REPETITIONS = 1 # Set to 5 for full paper run
 
@@ -77,13 +71,13 @@ EXPERIMENTS = {
     }
 }
 
-def load_base_config():
-    with open(BASE_CONFIG, 'r') as f:
+def load_base_config(config_path):
+    with open(config_path, 'r') as f:
         return yaml.safe_load(f)
 
-def run_experiment(config_override, attack_mode, exp_name, rep_id):
+def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_path):
     # 1. Prepare Configuration
-    config = load_base_config()
+    config = load_base_config(base_config_path)
     
     # Override values
     for k, v in config_override.items():
@@ -169,32 +163,28 @@ def load_existing_results():
     return results
 
 def main():
-    # 0. Load existing progress
-    existing_results = load_existing_results()
-    print(f"Loaded {len(existing_results)} existing results. Resuming...")
+    parser = argparse.ArgumentParser(description="Multi-Attack Parameter Sweeper")
+    parser.add_argument("--config", default=DEFAULT_BASE_CONFIG, help="Base YAML config (default: grand_experiment.yaml)")
+    parser.add_argument("--experiments", help="Comma-separated list of experiments to run (e.g. scaling,offense_speculative)")
+    args = parser.parse_args()
 
-    # Initialize CSV
-    file_exists = os.path.exists(RESULTS_FILE)
-    with open(RESULTS_FILE, 'a', newline='') as csvfile:
-        fieldnames = ["timestamp", "experiment", "attack_mode", "rep", "asr", "duration", "exit_code", 
-                      "NUM_NODES", "ATTACKER_RATIO", "SPECULATIVE_P_MAX", "SLUGGISH_TIMEOUT_MULTIPLIER",
-                      "DAG_STATE_CACHED_ROUNDS", "SYNC_TIMEOUT_MS", "GC_DEPTH", "LATENCY_JITTER"]
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames, extrasaction='ignore')
-        if not file_exists:
-            writer.writeheader()
+    # 0. Load existing progress
 
         # SELECT MODE VIA ENV VAR OR ARG
         target_attack = os.environ.get("ATTACK_MODE", "fissure")
         print(f"=== STARTING SWEEP FOR ATTACK: {target_attack} ===")
         
         # Determine relevant experiments
-        relevant_experiments = ["scaling", "defense_memory", "defense_network", "defense_gc", "env_latency"]
-        if target_attack == "fissure":
-            relevant_experiments.append("offense_fissure")
-        elif target_attack == "speculative":
-            relevant_experiments.append("offense_speculative")
-        elif target_attack == "sluggish":
-            relevant_experiments.append("offense_sluggish")
+        if args.experiments:
+            relevant_experiments = [e.strip() for e in args.experiments.split(",")]
+        else:
+            relevant_experiments = ["scaling", "defense_memory", "defense_network", "defense_gc", "env_latency"]
+            if target_attack == "fissure":
+                relevant_experiments.append("offense_fissure")
+            elif target_attack == "speculative":
+                relevant_experiments.append("offense_speculative")
+            elif target_attack == "sluggish":
+                relevant_experiments.append("offense_sluggish")
 
         for exp_name in relevant_experiments:
             if exp_name not in EXPERIMENTS: continue
@@ -222,7 +212,7 @@ def main():
                         print(f"  [-] Skipping {exp_name} | {target_attack} | Rep {r} (Already recorded)")
                         continue
 
-                    data = run_experiment(override, target_attack, exp_name, r)
+                    data = run_experiment(override, target_attack, exp_name, r, args.config)
                     writer.writerow(data)
                     csvfile.flush() # CRITICAL: Write to disk immediately
                     os.fsync(csvfile.fileno()) # Force OS to flush buffers
