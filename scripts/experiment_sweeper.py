@@ -10,7 +10,7 @@ from datetime import datetime
 # --- CONFIGURATION (DEFAULTS) ---
 DEFAULT_BASE_CONFIG = "config/grand_experiment.yaml"
 RESULTS_FILE = "experiment_results.csv"
-REPETITIONS = 1 # Set to 5 for full paper run
+REPETITIONS = 5 # Set to 5 for full paper run
 
 # Define the Experiment Matrix
 # Each key acts as a "dimension" we can sweep over independently.
