@@ -10,7 +10,6 @@ from datetime import datetime
 # --- CONFIGURATION (DEFAULTS) ---
 DEFAULT_BASE_CONFIG = "config/grand_experiment.yaml"
 RESULTS_FILE = "experiment_results.csv"
-REPETITIONS = 5 # Set to 5 for full paper run
 
 # Define the Experiment Matrix
 # Each key acts as a "dimension" we can sweep over independently.
@@ -224,6 +223,10 @@ def main():
     existing_results = load_existing_results()
     print(f"Loaded {len(existing_results)} existing results. Resuming...")
 
+    # Determine Repetitions from config
+    config = load_base_config(args.config)
+    repetitions = int(config.get('test', {}).get('REPETITIONS', 1))
+
     # Initialize CSV
     file_exists = os.path.exists(RESULTS_FILE)
     with open(RESULTS_FILE, 'a', newline='') as csvfile:
@@ -263,7 +266,7 @@ def main():
                     override[param] = values[i]
 
                 # Run Repetitions
-                for r in range(1, REPETITIONS + 1):
+                for r in range(1, repetitions + 1):
                     # Check if already done
                     param_keys = ["NUM_NODES", "ATTACKER_RATIO", "SPECULATIVE_P_MAX", 
                                   "SLUGGISH_TIMEOUT_MULTIPLIER", "DAG_STATE_CACHED_ROUNDS", 

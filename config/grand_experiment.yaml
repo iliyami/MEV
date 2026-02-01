@@ -13,6 +13,7 @@ docker:
 
 test:
   test_name: "test_fissure_attack_asr_dynamic" # Default, overridden by runner
+  REPETITIONS: 5
 
 environment:
   # GLOBAL SCALING

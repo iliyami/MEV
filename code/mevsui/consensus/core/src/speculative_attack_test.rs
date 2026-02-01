@@ -27,10 +27,7 @@ use crate::{
 use prometheus::Registry;
 use tracing::{info, warn};
 
-const NUM_VALIDATORS: usize = 13;
-const NUM_ATTACKER: usize = 4; // ~30.8% (4/13)
-const NUM_VICTIM: usize = 3;   // ~23.1% (3/13)
-const NUM_HONEST: usize = 6;   // ~46.1% (6/13)
+// Parameters are now read from environment variables to support dynamic scaling
 
 // Helper to create an authority node
 async fn make_authority(
@@ -92,40 +89,55 @@ async fn make_authority(
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn test_speculative_attack_asr_13_nodes() {
+async fn test_speculative_attack_asr_dynamic() {
     telemetry_subscribers::init_for_testing();
-    
-    // Set attack parameters
-    env::set_var("ATTACK_MODE", "speculative");
-    env::set_var("ATTACKER_RATIO", "0.308"); // 4/13
-    env::set_var("VICTIM_RATIO", "0.231");   // 3/13
-    env::set_var("SPECULATIVE_P_MAX", "50");
-    
-    info!("🚀 Starting Speculative Attack Test with 13 Nodes");
-    info!("  Attackers: {} nodes (indices 0-{})", NUM_ATTACKER, NUM_ATTACKER - 1);
-    info!("  Victims: {} nodes (indices {}-{})", NUM_VICTIM, NUM_VALIDATORS - NUM_VICTIM, NUM_VALIDATORS - 1);
-    info!("  Honest: {} nodes (indices {}-{})", NUM_HONEST, NUM_ATTACKER, NUM_VALIDATORS - NUM_VICTIM - 1);
 
-    // Create committee and keypairs for all 13 nodes
-    let (committee, keypairs) = local_committee_and_keys(0, vec![1; NUM_VALIDATORS]);
-    let mut protocol_config = ProtocolConfig::get_for_max_version_UNSAFE();
+    let num_validators: usize = env::var("NUM_NODES")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(13);
+    let attacker_ratio: f64 = env::var("ATTACKER_RATIO")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0.308);
+    let victim_ratio: f64 = env::var("VICTIM_RATIO")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0.231);
+
+    let num_attacker = (num_validators as f64 * attacker_ratio).round() as usize;
+    let num_victim = (num_validators as f64 * victim_ratio).round() as usize;
+    let num_honest = num_validators - num_attacker - num_victim;
+
+    env::set_var("ATTACK_MODE", "speculative");
+    env::set_var("ATTACKER_RATIO", attacker_ratio.to_string());
+    env::set_var("VICTIM_RATIO", victim_ratio.to_string());
     
+    info!("🚀 Starting Speculative Attack Test with {} Nodes", num_validators);
+    info!("  Attackers: {} nodes (indices 0-{})", num_attacker, num_attacker.saturating_sub(1));
+    info!("  Victims: {} nodes (indices {}-{})", num_victim, num_validators - num_victim, num_validators - 1);
+    info!("  Honest: {} nodes (indices {}-{})", num_honest, num_attacker, num_validators - num_victim - 1);
+
+    // Create committee and keypairs
+    let (committee, keypairs) = local_committee_and_keys(0, vec![1; num_validators]);
+    let mut protocol_config = ProtocolConfig::get_for_max_version_UNSAFE();
+
     let gc_depth: u64 = env::var("GC_DEPTH")
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(10);
     protocol_config.set_consensus_gc_depth_for_testing(gc_depth as u32);
 
-    let temp_dirs = (0..NUM_VALIDATORS)
+    let temp_dirs = (0..num_validators)
         .map(|_| TempDir::new().unwrap())
         .collect::<Vec<_>>();
 
     let mut commit_receivers = Vec::with_capacity(committee.size());
     let mut authorities = Vec::with_capacity(committee.size());
-    let boot_counters = vec![0; NUM_VALIDATORS];
+    let boot_counters = vec![0; num_validators];
 
     // Create all authority nodes
-    info!("Creating {} authority nodes...", NUM_VALIDATORS);
+    info!("Creating {} authority nodes...", num_validators);
     for (index, _authority_info) in committee.authorities() {
         let (authority, commit_receiver, _block_receiver) = make_authority(
             index,
@@ -141,14 +153,14 @@ async fn test_speculative_attack_asr_13_nodes() {
         authorities.push(authority);
     }
 
-    info!("✅ All {} nodes initialized and started", NUM_VALIDATORS);
+    info!("✅ All {} nodes initialized and started", num_validators);
 
     // Submit transactions - Dynamic scaling
     info!("📤 Submitting transactions...");
     let num_transactions: usize = env::var("NUM_TRANSACTIONS")
         .ok()
         .and_then(|s| s.parse().ok())
-        .unwrap_or(NUM_VALIDATORS * 5);
+        .unwrap_or(num_validators * 5);
     
     let mut submitted_transactions = BTreeSet::<Vec<u8>>::new();
     for i in 0..num_transactions {
@@ -174,7 +186,7 @@ async fn test_speculative_attack_asr_13_nodes() {
     let min_commits: usize = env::var("MIN_COMMITS")
         .ok()
         .and_then(|s| s.parse().ok())
-        .unwrap_or(NUM_VALIDATORS + 10);
+        .unwrap_or(num_validators + 10);
 
     // Collect from first receiver (all nodes see same commits)
     let mut primary_receiver = commit_receivers.swap_remove(0);
@@ -210,7 +222,7 @@ async fn test_speculative_attack_asr_13_nodes() {
     
     println!("🎯 SPECULATIVE ATTACK RESULTS:");
     println!("  Mode: speculative");
-    println!("  Network: {} validators", NUM_VALIDATORS);
+    println!("  Network: {} validators", num_validators);
     println!("  Attackers: {} (~30.8%)", NUM_ATTACKER);
     println!("  Victims: {} (~23.1%)", NUM_VICTIM);
     println!("  Attack Success Rate: {:.1}%", asr);
@@ -248,7 +260,7 @@ fn calculate_asr(commits: &[CommittedSubDag]) -> f64 {
     
     // Identify attacker and victim blocks
     // Attackers are first NUM_ATTACKER nodes (indices 0 to NUM_ATTACKER-1)
-    // Victims are last NUM_VICTIM nodes (indices NUM_VALIDATORS-NUM_VICTIM to NUM_VALIDATORS-1)
+    // Victims are last NUM_VICTIM nodes (indices num_validators-NUM_VICTIM to num_validators-1)
     let mut attacker_positions = Vec::new();
     let mut victim_positions = Vec::new();
     
@@ -256,7 +268,7 @@ fn calculate_asr(commits: &[CommittedSubDag]) -> f64 {
         let author_index = author.value() as usize;
         if author_index < NUM_ATTACKER {
             attacker_positions.push((pos, *round));
-        } else if author_index >= NUM_VALIDATORS - NUM_VICTIM {
+        } else if author_index >= num_validators - NUM_VICTIM {
             victim_positions.push((pos, *round));
         }
     }

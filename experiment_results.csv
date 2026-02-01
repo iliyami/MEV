@@ -1,0 +1,13 @@
+timestamp,experiment,attack_mode,rep,asr,duration,exit_code,NUM_NODES,ATTACKER_RATIO,SPECULATIVE_P_MAX,SLUGGISH_TIMEOUT_MULTIPLIER,DAG_STATE_CACHED_ROUNDS,SYNC_TIMEOUT_MS,GC_DEPTH,LATENCY_JITTER
+2026-02-01T16:40:31.272438,offense_speculative,speculative,1,N/A,8.392327308654785,1,,,5,,,,,
+2026-02-01T16:40:31.410888,offense_speculative,speculative,1,N/A,0.13589715957641602,1,,,20,,,,,
+2026-02-01T16:40:31.545863,offense_speculative,speculative,1,N/A,0.13312482833862305,1,,,50,,,,,
+2026-02-01T16:42:45.655395,offense_speculative,speculative,1,N/A,0.21934008598327637,1,,,5,,,,,
+2026-02-01T16:42:45.796569,offense_speculative,speculative,1,N/A,0.13922786712646484,1,,,20,,,,,
+2026-02-01T16:42:45.942332,offense_speculative,speculative,1,N/A,0.1436309814453125,1,,,50,,,,,
+2026-02-01T16:44:09.413302,offense_speculative,speculative,1,N/A,0.2105710506439209,1,,,5,,,,,
+2026-02-01T16:44:09.554233,offense_speculative,speculative,1,N/A,0.1387641429901123,1,,,20,,,,,
+2026-02-01T16:44:09.695002,offense_speculative,speculative,1,N/A,0.13877105712890625,1,,,50,,,,,
+2026-02-01T16:45:48.385033,offense_speculative,speculative,1,95.3,90.40681529045105,0,,,5,,,,,
+2026-02-01T16:45:53.846481,offense_speculative,speculative,1,88.5,5.45602822303772,0,,,20,,,,,
+2026-02-01T16:45:58.603873,offense_speculative,speculative,1,88.0,4.752027988433838,0,,,50,,,,,
