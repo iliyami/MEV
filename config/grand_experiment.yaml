@@ -24,7 +24,7 @@ environment:
   ATTACKER_RATIO: "0.3125"
   VICTIM_RATIO: "0.25"
   # Speculative-specific
-  SPECULATIVE_P_MAX: "1.0"
+  SPECULATIVE_P_MAX: "1"
   # Sluggish-specific
   SLUGGISH_TIMEOUT_MULTIPLIER: "2.0"
   
