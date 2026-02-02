@@ -117,8 +117,11 @@ def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_p
     
     start_time = time.time()
     try:
-        # 100 Nodes can take up to 40-50 minutes to complete a high-repetition or high-latency run
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600) # 60 min timeout
+        # 100 Nodes Sluggish can take > 60 minutes
+        num_nodes = int(config['environment'].get('NUM_NODES', 0))
+        timeout = 7200 if (attack_mode == "sluggish" and num_nodes >= 50) else 3600
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         output = result.stdout + result.stderr
         exit_code = result.returncode
     except subprocess.TimeoutExpired as e:
