@@ -3,11 +3,11 @@ experiment:
   description: "Grand Unified Experiment for MEV Attack Sensitivity Analysis"
 
 protocol:
-  name: "mevsui" # Can be overridden to "mevsui"
-  path: "mevsui" # or "mevsui"
+  name: "bullshark" # Can be overridden to "mevsui"
+  path: "bullshark" # or "mevsui"
 
 docker:
-  tag: "mev-mevsui:latest"
+  tag: "mev-bullshark:latest"
   cpus: "32.0"   # High core count for 100-node tests
   memory: "64g"  # High memory for large DAGs
 
@@ -39,5 +39,5 @@ environment:
   GC_DEPTH: "10" # Default
 
 output:
-  expected_asr: 80.0
+  expected_asr: 90.0
   tolerance_percent: 100.0 # Wide tolerance for sweeping
