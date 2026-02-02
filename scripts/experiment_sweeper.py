@@ -277,6 +277,11 @@ def main():
                 for i, param in enumerate(params):
                     override[param] = values[i]
 
+                # Skip 100 nodes for sluggish attack to save time
+                if target_attack == "sluggish" and override.get("NUM_NODES", 0) > 50:
+                    print(f"  [-] Skipping {exp_name} | {target_attack} | {override['NUM_NODES']} nodes (Capped at 50)")
+                    continue
+
                 # Run Repetitions
                 for r in range(1, repetitions + 1):
                     # Check if already done
