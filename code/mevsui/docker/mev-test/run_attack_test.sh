@@ -46,5 +46,6 @@ if [ ! -z "$FINAL_ASR" ]; then
     echo "Final ASR: $FINAL_ASR%"
 else
     echo "FINAL_ASR=UNKNOWN" > /app/results/asr_result.txt
-    echo "Could not parse ASR from output"
+    echo "ERROR: Could not parse ASR from output"
+    exit 1
 fi

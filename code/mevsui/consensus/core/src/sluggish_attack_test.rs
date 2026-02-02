@@ -215,15 +215,15 @@ async fn test_sluggish_attack_asr_dynamic() {
     
     // Calculate ASR immediately after collection
     info!("📊 Calculating Attack Success Rate (ASR)...");
-    let asr = calculate_asr(&all_commits);
+    let asr = calculate_asr(&all_commits, num_validators, num_attacker, num_victim);
     
     info!("⏹️ ASR calculation complete");
     
     println!("🎯 SLUGGISH ATTACK RESULTS:");
     println!("  Mode: sluggish");
     println!("  Network: {} validators", num_validators);
-    println!("  Attackers: {} (~30.8%)", NUM_ATTACKER);
-    println!("  Victims: {} (~23.1%)", NUM_VICTIM);
+    println!("  Attackers: {} (~30.8%)", num_attacker);
+    println!("  Victims: {} (~23.1%)", num_victim);
     println!("  Attack Success Rate: {:.1}%", asr);
     println!("  FINAL_ASR_RESULT: {:.1}%", asr);
     println!("  Paper Target: ~94% (50 nodes, scaled to 13 nodes)");
@@ -241,7 +241,7 @@ async fn test_sluggish_attack_asr_dynamic() {
     info!("✅ Test completed successfully!");
 }
 
-fn calculate_asr(commits: &[CommittedSubDag]) -> f64 {
+fn calculate_asr(commits: &[CommittedSubDag], num_validators: usize, num_attacker: usize, num_victim: usize) -> f64 {
     if commits.is_empty() {
         warn!("No commits to analyze");
         return 0.0;
@@ -258,16 +258,16 @@ fn calculate_asr(commits: &[CommittedSubDag]) -> f64 {
     info!("Global order contains {} blocks", global_order.len());
     
     // Identify attacker and victim blocks
-    // Attackers are first NUM_ATTACKER nodes (indices 0 to NUM_ATTACKER-1)
-    // Victims are last NUM_VICTIM nodes (indices num_validators-NUM_VICTIM to num_validators-1)
+    // Attackers are first num_attacker nodes (indices 0 to num_attacker-1)
+    // Victims are last num_victim nodes (indices num_validators-num_victim to num_validators-1)
     let mut attacker_positions = Vec::new();
     let mut victim_positions = Vec::new();
     
     for (pos, (author, round, _block_ref)) in global_order.iter().enumerate() {
         let author_index = author.value() as usize;
-        if author_index < NUM_ATTACKER {
+        if author_index < num_attacker {
             attacker_positions.push((pos, *round));
-        } else if author_index >= num_validators - NUM_VICTIM {
+        } else if author_index >= num_validators - num_victim {
             victim_positions.push((pos, *round));
         }
     }
