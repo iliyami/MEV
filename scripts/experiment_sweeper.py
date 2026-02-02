@@ -9,7 +9,7 @@ from datetime import datetime
 
 # --- CONFIGURATION (DEFAULTS) ---
 DEFAULT_BASE_CONFIG = "config/grand_experiment.yaml"
-RESULTS_FILE = "experiment_results.csv"
+DEFAULT_RESULTS_FILE = "experiment_results.csv"
 
 # Define the Experiment Matrix
 # Each key acts as a "dimension" we can sweep over independently.
@@ -166,12 +166,12 @@ def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_p
         **config_override
     }
 
-def load_existing_results():
-    if not os.path.exists(RESULTS_FILE):
+def load_existing_results(results_file):
+    if not os.path.exists(results_file):
         return set()
     
     results = set()
-    with open(RESULTS_FILE, 'r') as f:
+    with open(results_file, 'r') as f:
         reader = csv.DictReader(f)
         for row in reader:
             # Create a unique key for each run: (protocol, experiment, attack_mode, rep, params)
@@ -185,15 +185,15 @@ def load_existing_results():
                 results.add(key)
     return results
 
-def deduplicate_results():
+def deduplicate_results(results_file):
     """Reads the results file and keeps only the latest entry for each unique experiment key."""
-    if not os.path.exists(RESULTS_FILE):
+    if not os.path.exists(results_file):
         return
     
     unique_results = {}
     fieldnames = []
     
-    with open(RESULTS_FILE, 'r') as f:
+    with open(results_file, 'r') as f:
         reader = csv.DictReader(f)
         fieldnames = reader.fieldnames
         if not fieldnames or 'protocol' not in fieldnames:
@@ -210,24 +210,27 @@ def deduplicate_results():
             if key not in unique_results or (row.get('asr') != "N/A"):
                 unique_results[key] = row
 
-    with open(RESULTS_FILE, 'w', newline='') as f:
+    with open(results_file, 'w', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for row in unique_results.values():
             writer.writerow(row)
     
-    print(f"Deduplicated {RESULTS_FILE}: Kept {len(unique_results)} unique entries.")
+    print(f"Deduplicated {results_file}: Kept {len(unique_results)} unique entries.")
 
 def main():
     parser = argparse.ArgumentParser(description="Multi-Attack Parameter Sweeper")
     parser.add_argument("--config", default=DEFAULT_BASE_CONFIG, help="Base YAML config (default: grand_experiment.yaml)")
     parser.add_argument("--experiments", help="Comma-separated list of experiments to run (e.g. scaling,offense_speculative)")
     parser.add_argument("--local", action="store_true", help="Run tests locally via cargo instead of Docker")
+    parser.add_argument("--out", default=DEFAULT_RESULTS_FILE, help=f"Output CSV file for results (default: {DEFAULT_RESULTS_FILE})")
     args = parser.parse_args()
 
+    results_file = args.out
+
     # 0. Clean up and load existing progress
-    deduplicate_results()
-    existing_results = load_existing_results()
+    deduplicate_results(results_file)
+    existing_results = load_existing_results(results_file)
     print(f"Loaded {len(existing_results)} existing results. Resuming...")
 
     # Determine Repetitions from config
@@ -235,10 +238,10 @@ def main():
     repetitions = int(config.get('test', {}).get('REPETITIONS', 1))
 
     # Initialize CSV
-    file_exists = os.path.exists(RESULTS_FILE)
+    file_exists = os.path.exists(results_file)
     target_protocol = config['protocol']['name']
     
-    with open(RESULTS_FILE, 'a', newline='') as csvfile:
+    with open(results_file, 'a', newline='') as csvfile:
         fieldnames = ["timestamp", "protocol", "experiment", "attack_mode", "rep", "asr", "duration", "exit_code", 
                       "NUM_NODES", "ATTACKER_RATIO", "SPECULATIVE_P_MAX", "SLUGGISH_TIMEOUT_MULTIPLIER",
                       "DAG_STATE_CACHED_ROUNDS", "SYNC_TIMEOUT_MS", "GC_DEPTH", "LATENCY_JITTER"]
