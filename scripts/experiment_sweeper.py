@@ -153,6 +153,7 @@ def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_p
 
     return {
         "timestamp": datetime.now().isoformat(),
+        "protocol": config['protocol']['name'],
         "experiment": exp_name,
         "attack_mode": attack_mode,
         "rep": rep_id,
@@ -170,14 +171,14 @@ def load_existing_results():
     with open(RESULTS_FILE, 'r') as f:
         reader = csv.DictReader(f)
         for row in reader:
-            # Create a unique key for each run: (experiment, attack_mode, rep, params)
+            # Create a unique key for each run: (protocol, experiment, attack_mode, rep, params)
             param_keys = ["NUM_NODES", "ATTACKER_RATIO", "SPECULATIVE_P_MAX", 
                           "SLUGGISH_TIMEOUT_MULTIPLIER", "DAG_STATE_CACHED_ROUNDS", 
                           "SYNC_TIMEOUT_MS", "GC_DEPTH", "LATENCY_JITTER"]
             param_vals = tuple(row.get(pk, "") for pk in param_keys)
             # ONLY skip if we actually got a valid ASR result
             if row.get('asr') != "N/A":
-                key = (row['experiment'], row['attack_mode'], row['rep'], param_vals)
+                key = (row['protocol'], row['experiment'], row['attack_mode'], row['rep'], param_vals)
                 results.add(key)
     return results
 
@@ -192,12 +193,15 @@ def deduplicate_results():
     with open(RESULTS_FILE, 'r') as f:
         reader = csv.DictReader(f)
         fieldnames = reader.fieldnames
+        if not fieldnames or 'protocol' not in fieldnames:
+             return # Let main handle migration or new header
+             
         for row in reader:
             param_keys = ["NUM_NODES", "ATTACKER_RATIO", "SPECULATIVE_P_MAX", 
                           "SLUGGISH_TIMEOUT_MULTIPLIER", "DAG_STATE_CACHED_ROUNDS", 
                           "SYNC_TIMEOUT_MS", "GC_DEPTH", "LATENCY_JITTER"]
             param_vals = tuple(row.get(pk, "") for pk in param_keys)
-            key = (row['experiment'], row['attack_mode'], row['rep'], param_vals)
+            key = (row['protocol'], row['experiment'], row['attack_mode'], row['rep'], param_vals)
             
             # Keep the latest entry, but prioritize successful ones over N/A
             if key not in unique_results or (row.get('asr') != "N/A"):
@@ -229,8 +233,10 @@ def main():
 
     # Initialize CSV
     file_exists = os.path.exists(RESULTS_FILE)
+    target_protocol = config['protocol']['name']
+    
     with open(RESULTS_FILE, 'a', newline='') as csvfile:
-        fieldnames = ["timestamp", "experiment", "attack_mode", "rep", "asr", "duration", "exit_code", 
+        fieldnames = ["timestamp", "protocol", "experiment", "attack_mode", "rep", "asr", "duration", "exit_code", 
                       "NUM_NODES", "ATTACKER_RATIO", "SPECULATIVE_P_MAX", "SLUGGISH_TIMEOUT_MULTIPLIER",
                       "DAG_STATE_CACHED_ROUNDS", "SYNC_TIMEOUT_MS", "GC_DEPTH", "LATENCY_JITTER"]
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames, extrasaction='ignore')
@@ -273,10 +279,10 @@ def main():
                                   "SYNC_TIMEOUT_MS", "GC_DEPTH", "LATENCY_JITTER"]
                     # Current values for lookup (defaults empty)
                     current_vals = tuple(str(override.get(pk, "")) for pk in param_keys)
-                    key = (exp_name, target_attack, str(r), current_vals)
+                    key = (target_protocol, exp_name, target_attack, str(r), current_vals)
                     
                     if key in existing_results:
-                        print(f"  [-] Skipping {exp_name} | {target_attack} | Rep {r} (Already recorded)")
+                        print(f"  [-] Skipping {exp_name} | {target_attack} | Rep {r} (Already recorded for {target_protocol})")
                         continue
 
                     data = run_experiment(override, target_attack, exp_name, r, args.config, local_mode=args.local)
