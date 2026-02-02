@@ -6,4 +6,5 @@ target/
 *.md
 build/
 storage/
-docker/
+docker/*
+!docker/mev-test/

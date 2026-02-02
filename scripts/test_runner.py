@@ -100,6 +100,8 @@ def run_attack_test(config: dict) -> dict:
             content = f.read()
             if "FINAL_ASR=" in content:
                 asr_value = content.split("=")[1].strip()
+                if asr_value == "UNKNOWN":
+                    return {"asr": "UNKNOWN", "success": False}
                 return {"asr": asr_value, "success": True}
     
     return {"asr": "UNKNOWN", "success": False}
