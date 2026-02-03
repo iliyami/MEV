@@ -11,6 +11,14 @@ from datetime import datetime
 DEFAULT_BASE_CONFIG = "config/grand_experiment.yaml"
 DEFAULT_RESULTS_FILE = "experiment_results.csv"
 
+# --- GLOBAL FIELDNAMES ---
+FIELDNAMES = [
+    "timestamp", "protocol", "experiment", "attack_mode", "rep", "asr", "duration", "exit_code", 
+    "NUM_NODES", "ATTACKER_RATIO", "SPECULATIVE_P_MAX", "SLUGGISH_TIMEOUT_MULTIPLIER",
+    "DAG_STATE_CACHED_ROUNDS", "SYNC_TIMEOUT_MS", "GC_DEPTH", "LATENCY_JITTER",
+    "HEADER_SIZE", "MAX_HEADER_DELAY", "BATCH_SIZE", "MAX_BATCH_DELAY", "NUM_WORKERS"
+]
+
 # Define the Experiment Matrix
 # Each key acts as a "dimension" we can sweep over independently.
 # When sweeping one dimension, others stay at their default (index 0).
@@ -73,6 +81,30 @@ EXPERIMENTS = {
         "params": ["LATENCY_JITTER"],
         "values": [
             ["50ms 10ms"], ["150ms 30ms"], ["300ms 50ms"] # Low(WAN), Med(Cross-C), High(Global)
+        ]
+    },
+
+    # 7. Protocol Specific - Narwhal Header Optimization
+    "defense_header": {
+        "params": ["HEADER_SIZE", "MAX_HEADER_DELAY"],
+        "values": [
+            [500, 100], [1000, 200], [2000, 500]
+        ]
+    },
+
+    # 8. Protocol Specific - Narwhal Batching Optimization
+    "defense_batching": {
+        "params": ["BATCH_SIZE", "MAX_BATCH_DELAY"],
+        "values": [
+            [250000, 100], [500000, 200], [1000000, 500]
+        ]
+    },
+
+    # 9. Protocol Specific - Narwhal Worker Scaling
+    "scaling_workers": {
+        "params": ["NUM_WORKERS"],
+        "values": [
+            [1], [2], [4], [8]
         ]
     }
 }
@@ -177,7 +209,11 @@ def load_existing_results(results_file):
             # Create a unique key for each run: (protocol, experiment, attack_mode, rep, params)
             param_keys = ["NUM_NODES", "ATTACKER_RATIO", "SPECULATIVE_P_MAX", 
                           "SLUGGISH_TIMEOUT_MULTIPLIER", "DAG_STATE_CACHED_ROUNDS", 
-                          "SYNC_TIMEOUT_MS", "GC_DEPTH", "LATENCY_JITTER"]
+                          "SYNC_TIMEOUT_MS", "GC_DEPTH", "LATENCY_JITTER",
+                          "HEADER_SIZE", "MAX_HEADER_DELAY", "BATCH_SIZE", 
+                          "MAX_BATCH_DELAY", "NUM_WORKERS"]
+            
+            # Use fallback for params if column not present (migration)
             param_vals = tuple(row.get(pk, "") for pk in param_keys)
             # ONLY skip if we actually got a valid ASR result
             if row.get('asr') != "N/A":
@@ -202,7 +238,9 @@ def deduplicate_results(results_file):
         for row in reader:
             param_keys = ["NUM_NODES", "ATTACKER_RATIO", "SPECULATIVE_P_MAX", 
                           "SLUGGISH_TIMEOUT_MULTIPLIER", "DAG_STATE_CACHED_ROUNDS", 
-                          "SYNC_TIMEOUT_MS", "GC_DEPTH", "LATENCY_JITTER"]
+                          "SYNC_TIMEOUT_MS", "GC_DEPTH", "LATENCY_JITTER",
+                          "HEADER_SIZE", "MAX_HEADER_DELAY", "BATCH_SIZE", 
+                          "MAX_BATCH_DELAY", "NUM_WORKERS"]
             param_vals = tuple(row.get(pk, "") for pk in param_keys)
             key = (row['protocol'], row['experiment'], row['attack_mode'], row['rep'], param_vals)
             
@@ -211,10 +249,12 @@ def deduplicate_results(results_file):
                 unique_results[key] = row
 
     with open(results_file, 'w', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer = csv.DictWriter(f, fieldnames=FIELDNAMES, extrasaction='ignore')
         writer.writeheader()
         for row in unique_results.values():
-            writer.writerow(row)
+            # Clean row of any keys not in FIELDNAMES (fixes "None" key issues)
+            clean_row = {k: v for k, v in row.items() if k in FIELDNAMES}
+            writer.writerow(clean_row)
     
     print(f"Deduplicated {results_file}: Kept {len(unique_results)} unique entries.")
 
@@ -240,12 +280,8 @@ def main():
     # Initialize CSV
     file_exists = os.path.exists(results_file)
     target_protocol = config['protocol']['name']
-    
     with open(results_file, 'a', newline='') as csvfile:
-        fieldnames = ["timestamp", "protocol", "experiment", "attack_mode", "rep", "asr", "duration", "exit_code", 
-                      "NUM_NODES", "ATTACKER_RATIO", "SPECULATIVE_P_MAX", "SLUGGISH_TIMEOUT_MULTIPLIER",
-                      "DAG_STATE_CACHED_ROUNDS", "SYNC_TIMEOUT_MS", "GC_DEPTH", "LATENCY_JITTER"]
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames, extrasaction='ignore')
+        writer = csv.DictWriter(csvfile, fieldnames=FIELDNAMES, extrasaction='ignore')
         if not file_exists:
             writer.writeheader()
 
@@ -257,7 +293,10 @@ def main():
         if args.experiments:
             relevant_experiments = [e.strip() for e in args.experiments.split(",")]
         else:
-            relevant_experiments = ["scaling", "defense_memory", "defense_network", "defense_gc", "env_latency"]
+            relevant_experiments = [
+                "scaling", "defense_memory", "defense_network", "defense_gc", "env_latency",
+                "defense_header", "defense_batching", "scaling_workers"
+            ]
             if target_attack == "fissure":
                 relevant_experiments.append("offense_fissure")
             elif target_attack == "speculative":
@@ -287,9 +326,17 @@ def main():
                     # Check if already done
                     param_keys = ["NUM_NODES", "ATTACKER_RATIO", "SPECULATIVE_P_MAX", 
                                   "SLUGGISH_TIMEOUT_MULTIPLIER", "DAG_STATE_CACHED_ROUNDS", 
-                                  "SYNC_TIMEOUT_MS", "GC_DEPTH", "LATENCY_JITTER"]
-                    # Current values for lookup (defaults empty)
-                    current_vals = tuple(str(override.get(pk, "")) for pk in param_keys)
+                                  "SYNC_TIMEOUT_MS", "GC_DEPTH", "LATENCY_JITTER",
+                                  "HEADER_SIZE", "MAX_HEADER_DELAY", "BATCH_SIZE", 
+                                  "MAX_BATCH_DELAY", "NUM_WORKERS"]
+                    
+                    # Construct full parameter state (Override > Base Config > Empty)
+                    current_vals = []
+                    for pk in param_keys:
+                        val = override.get(pk, config.get('environment', {}).get(pk, ""))
+                        current_vals.append(str(val))
+                    current_vals = tuple(current_vals)
+                    
                     key = (target_protocol, exp_name, target_attack, str(r), current_vals)
                     
                     if key in existing_results:

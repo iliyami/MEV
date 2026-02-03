@@ -12,22 +12,23 @@ from benchmark.remote import Bench, BenchError
 @task
 def local(ctx, debug=True):
     ''' Run benchmarks on localhost '''
+    import os
     bench_params = {
-        'faults': 0,
-        'nodes': 15,
-        'workers': 4,
-        'rate': 50_000,
-        'tx_size': 512,
-        'duration': 35,
+        'faults': int(os.environ.get('FAULTS', 0)),
+        'nodes': int(os.environ.get('NUM_NODES', 15)),
+        'workers': int(os.environ.get('NUM_WORKERS', 4)),
+        'rate': int(os.environ.get('RATE', 50_000)),
+        'tx_size': int(os.environ.get('TX_SIZE', 512)),
+        'duration': int(os.environ.get('DURATION', 35)),
     }
     node_params = {
-        'header_size': 1_000,  # bytes
-        'max_header_delay': 200,  # ms
-        'gc_depth': 50,  # rounds
-        'sync_retry_delay': 10_000,  # ms
-        'sync_retry_nodes': 3,  # number of nodes
-        'batch_size': 500_000,  # bytes
-        'max_batch_delay': 200  # ms
+        'header_size': int(os.environ.get('HEADER_SIZE', 1_000)),  # bytes
+        'max_header_delay': int(os.environ.get('MAX_HEADER_DELAY', 200)),  # ms
+        'gc_depth': int(os.environ.get('GC_DEPTH', 50)),  # rounds
+        'sync_retry_delay': int(os.environ.get('SYNC_TIMEOUT_MS', 10_000)),  # ms
+        'sync_retry_nodes': int(os.environ.get('SYNC_RETRY_NODES', 3)),  # number of nodes
+        'batch_size': int(os.environ.get('BATCH_SIZE', 500_000)),  # bytes
+        'max_batch_delay': int(os.environ.get('MAX_BATCH_DELAY', 200))  # ms
     }
     try:
         ret = LocalBench(bench_params, node_params).run(debug)
@@ -93,24 +94,25 @@ def install(ctx):
 @task
 def remote(ctx, debug=False):
     ''' Run benchmarks on AWS '''
+    import os
     bench_params = {
-        'faults': 3,
-        'nodes': [10],
-        'workers': 1,
-        'collocate': True,
-        'rate': [10_000, 110_000],
-        'tx_size': 512,
-        'duration': 300,
-        'runs': 2,
+        'faults': int(os.environ.get('FAULTS', 3)),
+        'nodes': [int(n) for n in os.environ.get('NUM_NODES', '10').split(',')],
+        'workers': int(os.environ.get('NUM_WORKERS', 1)),
+        'collocate': os.environ.get('COLLOCATE', 'true').lower() == 'true',
+        'rate': [int(r) for r in os.environ.get('RATE', '10000,110000').split(',')],
+        'tx_size': int(os.environ.get('TX_SIZE', 512)),
+        'duration': int(os.environ.get('DURATION', 300)),
+        'runs': int(os.environ.get('RUNS', 2)),
     }
     node_params = {
-        'header_size': 1_000,  # bytes
-        'max_header_delay': 200,  # ms
-        'gc_depth': 50,  # rounds
-        'sync_retry_delay': 10_000,  # ms
-        'sync_retry_nodes': 3,  # number of nodes
-        'batch_size': 500_000,  # bytes
-        'max_batch_delay': 200  # ms
+        'header_size': int(os.environ.get('HEADER_SIZE', 1_000)),  # bytes
+        'max_header_delay': int(os.environ.get('MAX_HEADER_DELAY', 200)),  # ms
+        'gc_depth': int(os.environ.get('GC_DEPTH', 50)),  # rounds
+        'sync_retry_delay': int(os.environ.get('SYNC_TIMEOUT_MS', 10_000)),  # ms
+        'sync_retry_nodes': int(os.environ.get('SYNC_RETRY_NODES', 3)),  # number of nodes
+        'batch_size': int(os.environ.get('BATCH_SIZE', 500_000)),  # bytes
+        'max_batch_delay': int(os.environ.get('MAX_BATCH_DELAY', 200))  # ms
     }
     try:
         Bench(ctx).run(bench_params, node_params, debug)

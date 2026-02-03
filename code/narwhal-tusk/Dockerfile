@@ -1,5 +1,5 @@
 # Narwhal+Tusk Multi-Node Docker Setup
-FROM rust:1.70-slim
+FROM rust:1.78-slim
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \

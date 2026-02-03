@@ -1,0 +1,42 @@
+experiment:
+  name: "narwhal_tusk_experiment"
+  description: "Narwhal and Tusk MEV Attack Sensitivity Analysis"
+
+protocol:
+  name: "narwhal"
+  path: "narwhal-tusk"
+
+docker:
+  tag: "mev-narwhal:latest"
+  cpus: "12.0"
+  memory: "16g"
+
+test:
+  test_name: "test_fissure_attack_asr_dynamic" # Mapper in experiment_sweeper.py handles this
+  REPETITIONS: 3 # Reduced repetitions for Narwhal since it's slower
+
+environment:
+  # GLOBAL SCALING
+  NUM_NODES: "15"
+  
+  # ATTACK CONFIGURATION (OFFENSE)
+  ATTACK_MODE: "fissure" # [fissure, speculative, sluggish]
+  ATTACKER_RATIO: "0.33"
+  VICTIM_RATIO: "0.22"
+  
+  # Sluggish-specific
+  SLUGGISH_TIMEOUT_MULTIPLIER: "2.0"
+  
+  # BENCHMARK CONFIG
+  DURATION: "35"
+  RATE: "50000"
+  TX_SIZE: "512"
+
+  # DEFENSE PARAMETERS
+  GC_DEPTH: "50"
+  SYNC_TIMEOUT_MS: "10000" # sync_retry_delay in fabfile
+  DAG_STATE_CACHED_ROUNDS: "5"
+
+output:
+  expected_asr: 85.0
+  tolerance_percent: 100.0

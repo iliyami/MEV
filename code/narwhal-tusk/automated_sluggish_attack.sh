@@ -13,19 +13,20 @@ echo "  4. Compare with paper's target (82.4%)"
 echo ""
 
 # Configuration
-NARWHAL_TUSK_DIR="/Users/iliya/Dev/Blockchain/code/narwhal-tusk"
+NARWHAL_TUSK_DIR=$(pwd)
 BENCHMARK_DIR="$NARWHAL_TUSK_DIR/benchmark"
 LOG_DIR="$BENCHMARK_DIR/logs"
-BUILD_LOG="$NARWHAL_TUSK_DIR/build.log"
-ATTACK_OUTPUT_LOG="$NARWHAL_TUSK_DIR/sluggish_attack_output.log"
+BUILD_LOG="$NARWHAL_TUSK_DIR/build.log" # Kept for rm command, but path is now relative
+ATTACK_OUTPUT_LOG="$NARWHAL_TUSK_DIR/sluggish_attack_output.log" # Kept for rm command, but path is now relative
 
-# Attack Parameters
-COMMITTEE_SIZE=15
-ATTACK_MODE="sluggish"
-ATTACKER_RATIO="0.33"
-VICTIM_RATIO="0.22"
-SLUGGISH_TIMEOUT_MULTIPLIER="2.0"
-TEST_DURATION=35
+# Attack Parameters (Dynamic with defaults, can be overridden by env or arguments)
+# Priority: Positional Argument > Env Var > Default
+export NUM_NODES=${1:-${NUM_NODES:-15}}
+export ATTACKER_RATIO=${2:-${ATTACKER_RATIO:-0.33}}
+export VICTIM_RATIO=${3:-${VICTIM_RATIO:-0.22}}
+export DURATION=${4:-${DURATION:-35}}
+export SLUGGISH_TIMEOUT_MULTIPLIER=${SLUGGISH_TIMEOUT_MULTIPLIER:-2.0}
+export ATTACK_MODE=${ATTACK_MODE:-sluggish}
 
 # Check directory
 if [ ! -d "$NARWHAL_TUSK_DIR" ]; then
@@ -43,16 +44,14 @@ echo ""
 
 # --- Step 2: Configure parameters ---
 echo "⚙️  Step 2: Configuring sluggish attack parameters..."
-export ATTACK_MODE="$ATTACK_MODE"
-export ATTACKER_RATIO="$ATTACKER_RATIO"
-export VICTIM_RATIO="$VICTIM_RATIO"
-export SLUGGISH_TIMEOUT_MULTIPLIER="$SLUGGISH_TIMEOUT_MULTIPLIER"
+# Parameters are now set as environment variables with defaults at the top of the script.
 
 echo "  Attack Mode: $ATTACK_MODE"
-echo "  Attacker Ratio: $ATTACKER_RATIO (33% - 5 nodes)"
-echo "  Victim Ratio: $VICTIM_RATIO (22% - 3 nodes)"
-echo "  Timeout Multiplier: $SLUGGISH_TIMEOUT_MULTIPLIER (2x delay)"
-echo "  Honest Nodes: 7 nodes (45%)"
+echo "  Attacker Ratio: $ATTACKER_RATIO"
+echo "  Victim Ratio: $VICTIM_RATIO"
+echo "  Timeout Multiplier: $SLUGGISH_TIMEOUT_MULTIPLIER"
+echo "  Network Size: $NUM_NODES nodes"
+echo "  Duration: $DURATION seconds"
 echo ""
 
 # --- Step 3: Clean ---
@@ -105,14 +104,12 @@ echo "  Final ASR (All-pairs): $LATEST_ASR%"
 echo "  Timeout Modification Events: $TIMEOUT_EVENTS"
 echo ""
 
-# Compare with paper
-PAPER_TARGET=82.4
-DIFF=$(echo "$LATEST_ASR - $PAPER_TARGET" | bc)
-
 echo "📊 COMPARISON WITH PAPER:"
 echo "========================="
 echo "  Paper's Target: $PAPER_TARGET%"
 echo "  Our ASR: $LATEST_ASR%"
+echo "FINAL_ASR_RESULT: $LATEST_ASR"
+DIFF=$(echo "$LATEST_ASR - $PAPER_TARGET" | bc)
 echo "  Difference: $DIFF%"
 
 if (( $(echo "$LATEST_ASR >= 75.0" | bc -l) )); then

@@ -4,16 +4,21 @@
 set -e
 
 # --- Configuration ---
-NARWHAL_TUSK_DIR="/Users/iliya/Dev/Blockchain/code/narwhal-tusk"
+NARWHAL_TUSK_DIR=$(pwd)
 BENCHMARK_DIR="$NARWHAL_TUSK_DIR/benchmark"
 LOG_DIR="$BENCHMARK_DIR/logs"
 BUILD_LOG="$NARWHAL_TUSK_DIR/build.log"
 ATTACK_OUTPUT_LOG="$NARWHAL_TUSK_DIR/speculative_attack_output.log"
-ATTACK_MODE="speculative"
-ATTACKER_RATIO="0.33" # 33% of nodes are attackers (matches paper's 1/3)
-VICTIM_RATIO="0.22"   # 22% of nodes are victims (3 nodes in 15-node setup)
-COMMITTEE_SIZE=15
-TEST_DURATION=20 # seconds
+
+# Attack Parameters (Dynamic with defaults, can be overridden by env or arguments)
+# Priority: Positional Argument > Env Var > Default
+export NUM_NODES=${1:-${NUM_NODES:-15}}
+export ATTACKER_RATIO=${2:-${ATTACKER_RATIO:-0.33}}
+export VICTIM_RATIO=${3:-${VICTIM_RATIO:-0.22}}
+export DURATION=${4:-${DURATION:-35}}
+export TEST_DURATION=$DURATION
+export ATTACK_MODE=${ATTACK_MODE:-speculative}
+
 PAPER_ASR_TARGET=86.3 # Paper's speculative attack ASR for Tusk
 
 echo "🎯 Automated Speculative Attack for Narwhal-Tusk"
@@ -26,7 +31,6 @@ echo "  4. Compare with paper's target (86.3%)"
 echo ""
 
 # --- Step 1: Build project with attack code ---
-# --- Step 1: Build project with attack code ---
 echo "🔨 Step 1: Building project with speculative attack code..."
 cd "$NARWHAL_TUSK_DIR"
 export RUSTC_WRAPPER=sccache
@@ -37,14 +41,11 @@ echo ""
 
 # --- Step 2: Configure attack parameters ---
 echo "⚙️  Step 2: Configuring speculative attack parameters..."
-export ATTACK_MODE="$ATTACK_MODE"
-export ATTACKER_RATIO="$ATTACKER_RATIO"
-export VICTIM_RATIO="$VICTIM_RATIO"
-
 echo "  Attack Mode: $ATTACK_MODE"
-echo "  Attacker Ratio: $ATTACKER_RATIO (33% - 5 nodes)"
-echo "  Victim Ratio: $VICTIM_RATIO (22% - 3 nodes)"
-echo "  Honest Nodes: 7 nodes (45%)"
+echo "  Attacker Ratio: $ATTACKER_RATIO"
+echo "  Victim Ratio: $VICTIM_RATIO"
+echo "  Network Size: $NUM_NODES nodes"
+echo "  Duration: $DURATION seconds"
 echo ""
 
 # --- Step 3: Clean previous results ---
@@ -137,6 +138,7 @@ echo "📊 COMPARISON WITH PAPER:"
 echo "========================="
 echo "  Paper's Target: $PAPER_ASR_TARGET%"
 echo "  Our ASR: $LATEST_ASR%"
+echo "FINAL_ASR_RESULT: $LATEST_ASR"
 DIFFERENCE=$(echo "$LATEST_ASR - $PAPER_ASR_TARGET" | bc)
 echo "  Difference: $DIFFERENCE%"
 if (( $(echo "$DIFFERENCE >= -5.0 && $DIFFERENCE <= 5.0" | bc -l) )); then

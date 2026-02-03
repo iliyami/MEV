@@ -32,35 +32,42 @@ else
     exit 1
 fi
 
-# Step 2: Set attack environment (13-node standardized config)
-echo ""
-echo "⚙️  Step 2: Configuring attack parameters (13-node standardized)..."
-export ATTACK_MODE=fissure
-export ATTACKER_RATIO=0.308
-export VICTIM_RATIO=0.231
+# Configuration
+NARWHAL_TUSK_DIR=$(pwd)
+BENCHMARK_DIR="$NARWHAL_TUSK_DIR/benchmark"
+LOG_DIR="$BENCHMARK_DIR/logs"
 
+# Attack Parameters (Dynamic with defaults, can be overridden by env or arguments)
+# Priority: Positional Argument > Env Var > Default
+export NUM_NODES=${1:-${NUM_NODES:-13}}
+export ATTACKER_RATIO=${2:-${ATTACKER_RATIO:-0.308}}
+export VICTIM_RATIO=${3:-${VICTIM_RATIO:-0.231}}
+export DURATION=${4:-${DURATION:-35}}
+export ATTACK_MODE=${ATTACK_MODE:-fissure}
+
+echo ""
+echo "⚙️  Configuring attack parameters..."
 echo "  Attack Mode: $ATTACK_MODE"
-echo "  Attacker Ratio: $ATTACKER_RATIO (~30.8% - 4 validators)"
-echo "  Victim Ratio: $VICTIM_RATIO (~23.1% - 3 validators)"
-echo "  Honest Nodes: ~46.1% (6 validators)"
-echo "  Network Size: 13 nodes"
+echo "  Attacker Ratio: $ATTACKER_RATIO"
+echo "  Victim Ratio: $VICTIM_RATIO"
+echo "  Network Size: $NUM_NODES nodes"
+echo "  Duration: $DURATION seconds"
 
-# Step 3: Clean previous logs
+# Step 2: Clean previous logs
 echo ""
-echo "🧹 Step 3: Cleaning previous results..."
-rm -rf benchmark/logs/*
+echo "🧹 Step 2: Cleaning previous results..."
+rm -rf "$LOG_DIR"/*
 echo "  ✅ Previous logs cleaned"
 
-# Step 4: Run the attack
+# Step 3: Run the attack
 echo ""
-echo "🚀 Step 4: Running 13-node network with fissure attack..."
-echo "  Duration: 35 seconds"
-echo "  Network: 13 nodes (4 attackers, 3 victims, 6 honest)"
+echo "🚀 Step 3: Running network with fissure attack..."
+echo "  Network: $NUM_NODES nodes"
 echo "  ASR Calculation: Paper-aligned all-pairs methodology"
 echo "  Expected ASR: ~87% (paper target: 87.31%)"
 echo ""
 
-cd benchmark
+cd "$BENCHMARK_DIR"
 source ../venv/bin/activate
 
 # Run the attack and capture output
@@ -131,6 +138,7 @@ if [ $ATTACK_EXIT_CODE -eq 0 ] && [ -f "benchmark/logs/primary-0.log" ]; then
     echo "========================"
     echo "  Paper's Target: 87.31%"
     echo "  Our ASR: $FINAL_ASR"
+    echo "FINAL_ASR_RESULT: $FINAL_ASR"
     
     # Simple comparison (extract number from percentage)
     ASR_NUM=$(echo $FINAL_ASR | sed 's/%//')
