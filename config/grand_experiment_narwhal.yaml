@@ -8,16 +8,16 @@ protocol:
 
 docker:
   tag: "mev-narwhal:latest"
-  cpus: "12.0"
-  memory: "16g"
+  cpus: "64.0"
+  memory: "100g"
 
 test:
   test_name: "test_fissure_attack_asr_dynamic" # Mapper in experiment_sweeper.py handles this
-  REPETITIONS: 1 # Quick verification
+  REPETITIONS: 5
 
 environment:
   # GLOBAL SCALING
-  NUM_NODES: "15"
+  NUM_NODES: "13"
   
   # ATTACK CONFIGURATION (OFFENSE)
   ATTACK_MODE: "fissure" # [fissure, speculative, sluggish]
