@@ -54,7 +54,8 @@ def build_docker_image(config: dict) -> bool:
     print(f"  Command: {' '.join(cmd)}")
     
     env = os.environ.copy()
-    env["DOCKER_BUILDKIT"] = "1"
+    # Allow environment to override, default to 0 for maximum compatibility on CloudLab
+    env["DOCKER_BUILDKIT"] = os.environ.get("DOCKER_BUILDKIT", "0")
     
     result = subprocess.run(cmd, env=env, capture_output=False)
     return result.returncode == 0
