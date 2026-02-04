@@ -1,4 +1,5 @@
 # Copyright(C) Facebook, Inc. and its affiliates.
+import os
 import subprocess
 from math import ceil
 from os.path import basename, splitext
@@ -52,12 +53,12 @@ class LocalBench:
             sleep(0.5)  # Removing the store may take time.
 
             # Recompile the latest code.
-            cmd = CommandMaker.compile().split()
-            subprocess.run(cmd, check=True, cwd=PathMaker.node_crate_path())
+            # cmd = CommandMaker.compile().split()
+            # subprocess.run(cmd, check=True, cwd=PathMaker.node_crate_path())
 
             # Create alias for the client and nodes binary.
-            cmd = CommandMaker.alias_binaries(PathMaker.binary_path())
-            subprocess.run([cmd], shell=True)
+            alias_cmd = f"rm -f node benchmark_client && ln -sf {PathMaker.binary_path()}/node . && ln -sf {PathMaker.binary_path()}/benchmark_client ."
+            subprocess.run([alias_cmd], shell=True, check=True)
 
             # Generate configuration files.
             keys = []

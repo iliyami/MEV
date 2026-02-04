@@ -13,6 +13,28 @@ echo "Duration: ${DURATION:-35}"
 echo ""
 
 # -----------------------------------------------------
+# Runtime Dependency Fix (for Python 3.11+ compatibility)
+# -----------------------------------------------------
+echo "🔧 Checking/Fixing runtime dependencies..."
+# Install iproute2 for 'tc' if missing
+if ! command -v tc &> /dev/null; then
+    echo "  Installing iproute2..."
+    apt-get update && apt-get install -y iproute2
+fi
+
+# Use --break-system-packages if needed (Debian/Ubuntu 23.04+)
+pip3 install --upgrade "fabric>=3.0.0" "invoke>=2.0.0" --break-system-packages || \
+pip3 install --upgrade "fabric>=3.0.0" "invoke>=2.0.0"
+
+# -----------------------------------------------------
+# Tmux Setup (ensure background processes can run)
+# -----------------------------------------------------
+echo "🪟 Initializing tmux..."
+mkdir -p /tmp/tmux-0
+chmod 700 /tmp/tmux-0
+tmux start-server || echo "⚠️ tmux start-server skipped"
+
+# -----------------------------------------------------
 # Network Simulation (Geo-Distribution / Jitter)
 # -----------------------------------------------------
 if [ ! -z "$LATENCY_JITTER" ]; then

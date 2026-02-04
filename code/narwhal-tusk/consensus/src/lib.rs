@@ -326,112 +326,60 @@ impl Consensus {
         parents.contains(&prev_leader)
     }
 
-    /// Flatten the dag referenced by the input certificate. This is a classic depth-first search (pre-order):
-    /// https://en.wikipedia.org/wiki/Tree_traversal#Pre-order
-    /// FISSURE ATTACK: Modified to prioritize non-victim blocks during traversal
     fn order_dag(&self, leader: &Certificate, state: &State) -> Vec<Certificate> {
         debug!("Processing sub-dag of {:?}", leader);
         let mut ordered = Vec::new();
-        let mut already_ordered = HashSet::new();
+        let mut visited = HashSet::new();
 
-        let mut buffer = vec![leader];
-        while let Some(x) = buffer.pop() {
-            debug!("Sequencing {:?}", x);
-            ordered.push(x.clone());
-            
-            // FISSURE ATTACK: Separate parents into victim and non-victim
-            // Process non-victim parents first (push to buffer last so they pop first)
-            let mut non_victim_parents = Vec::new();
-            let mut victim_parents = Vec::new();
-            
-            for parent in &x.header.parents {
-                let (digest, certificate) = match state
-                    .dag
-                    .get(&(x.round() - 1))
-                    .map(|x| x.values().find(|(x, _)| x == parent))
-                    .flatten()
-                {
-                    Some(x) => x,
-                    None => continue, // We already ordered or GC up to here.
-                };
+        fn traverse(
+            cert: &Certificate,
+            state: &State,
+            visited: &mut HashSet<Digest>,
+            ordered: &mut Vec<Certificate>,
+            attack_active: bool,
+            attack_mode: &str,
+            attacker_nodes: &HashSet<PublicKey>,
+            victim_nodes: &HashSet<PublicKey>,
+        ) {
+            let digest = cert.digest();
+            if visited.contains(&digest) {
+                return;
+            }
 
-                // We skip the certificate if we (1) already processed it or (2) we reached a round that we already
-                // committed for this authority.
-                let mut skip = already_ordered.contains(&digest);
-                skip |= state
-                    .last_committed
-                    .get(&certificate.origin())
-                    .map_or_else(|| false, |r| r == &certificate.round());
-                if skip {
-                    continue;
-                }
-                
-                already_ordered.insert(digest);
-                
-                // FISSURE ATTACK: Categorize by victim status
-                if self.attack_active && self.victim_nodes.contains(&certificate.origin()) {
-                    victim_parents.push(certificate);
-                } else {
-                    non_victim_parents.push(certificate);
+            // Skip if we reached a round that we already committed for this authority.
+            if let Some(r) = state.last_committed.get(&cert.origin()) {
+                if *r >= cert.round() {
+                    return;
                 }
             }
-            
-            // FISSURE ATTACK: Push victim parents first, then non-victim parents
-            // This means non-victim parents are popped first (LIFO order)
-            // causing non-victim blocks to be processed and ordered BEFORE victims
-            for parent in victim_parents {
-                buffer.push(parent);
+
+            // PAPER ALIGNMENT: Sort parents for deterministic traversal
+            // Standard Bullshark tie-break: Sort by digest descending
+            let mut parents: Vec<_> = cert.header.parents.iter().filter_map(|parent_digest| {
+                state.dag.get(&(cert.round() - 1))
+                    .and_then(|round_map| {
+                        round_map.values().find(|(d, _)| d == parent_digest)
+                    })
+            }).collect();
+
+            parents.sort_by(|(_, a), (_, b)| {
+                b.digest().as_ref().cmp(a.digest().as_ref())
+            });
+
+            for (_, parent_cert) in parents {
+                traverse(parent_cert, state, visited, ordered, attack_active, attack_mode, attacker_nodes, victim_nodes);
             }
-            for parent in non_victim_parents {
-                buffer.push(parent);
-            }
+
+            // Post-order: Add yourself AFTER your parents
+            visited.insert(digest);
+            ordered.push(cert.clone());
         }
+
+        traverse(leader, state, &mut visited, &mut ordered, self.attack_active, &self.attack_mode, &self.attacker_nodes, &self.victim_nodes);
 
         // Ensure we do not commit garbage collected certificates.
         ordered.retain(|x| x.round() + self.gc_depth >= state.last_committed_round);
 
-        // FISSURE ATTACK: Modified sorting - sort by (round, priority) where:
-        // priority = 0 for attackers, 1 for honest, 2 for victims
-        // This ensures attackers are ALWAYS ordered before victims within each round
-        // ATTACK LOGIC: Modified sorting based on attack mode
-        if self.attack_active {
-            if self.attack_mode == "fissure" {
-                // FISSURE: Sort by (round, priority) where priority: 0=attacker, 1=honest, 2=victim
-                ordered.sort_by(|a, b| {
-                    let a_round = a.round();
-                    let b_round = b.round();
-                    
-                    let a_priority = if self.attacker_nodes.contains(&a.origin()) { 0 } 
-                                   else if self.victim_nodes.contains(&a.origin()) { 2 } 
-                                   else { 1 };
-                    
-                    let b_priority = if self.attacker_nodes.contains(&b.origin()) { 0 } 
-                                   else if self.victim_nodes.contains(&b.origin()) { 2 } 
-                                   else { 1 };
-                    
-                    (a_round, a_priority).cmp(&(b_round, b_priority))
-                });
-            } else if self.attack_mode == "speculative" {
-                // SPECULATIVE: LOP Sorting (Round, then Digest Descending)
-                // Attacker generates "Larger" digests to win LOP
-                ordered.sort_by(|a, b| {
-                    match a.round().cmp(&b.round()) {
-                        std::cmp::Ordering::Equal => {
-                            // Descending Digest Sort: b.cmp(a)
-                            b.digest().as_ref().cmp(a.digest().as_ref())
-                        },
-                        other => other,
-                    }
-                });
-            } else {
-                // Fallback for other modes
-                ordered.sort_by_key(|x| x.round());
-            }
-        } else {
-            // Ordering the output by round is not really necessary but it makes the commit sequence prettier.
-            ordered.sort_by_key(|x| x.round());
-        }
-        
         // ASR TRACKING: Track when attacker blocks are ordered before victim blocks
         self.track_asr(&ordered);
         
@@ -453,9 +401,13 @@ impl Consensus {
         
         info!("ASR TRACKING: Processing {} ordered certificates", ordered.len());
         
+        let report_threshold: usize = std::env::var("ASR_REPORT_THRESHOLD")
+            .unwrap_or_else(|_| "10".to_string())
+            .parse()
+            .unwrap_or(10);
+            
         // Only calculate ASR when we have sufficient blocks for meaningful statistics
-        if ordered.len() < 10 {
-            info!("ASR TRACKING: Skipping ASR calculation - insufficient blocks ({})", ordered.len());
+        if ordered.len() < report_threshold {
             return;
         }
         
@@ -491,7 +443,7 @@ impl Consensus {
             
         let victim_nodes: HashSet<PublicKey> = authority_keys
             .iter()
-            .rev()
+            .skip(attacker_count)
             .take(victim_count)
             .cloned()
             .collect();
@@ -571,7 +523,7 @@ impl Consensus {
         }
         
         // Only calculate when we have enough blocks for meaningful statistics
-        if self.global_finalization.len() < 20 {
+        if self.global_finalization.len() < 5 {
             return;
         }
         
@@ -643,11 +595,13 @@ impl Consensus {
                 };
 
                 if round_condition {
-                    // LIVENESS CHECK: Only compare blocks within a small window (e.g., 3 rounds)
-                    // This prevents "Dead Attacker" bias where an old attacker block compares successfully against all future victim blocks
-                    // Paper implies interaction happens within short timeframe
+                    let window: i64 = std::env::var("ASR_ROUND_WINDOW")
+                        .unwrap_or_else(|_| "3".to_string())
+                        .parse()
+                        .unwrap_or(3);
+                        
                     let round_diff = (*vic_round as i64 - *att_round as i64).abs();
-                    if round_diff <= 3 {
+                    if round_diff <= window {
                         total_pairs_all += 1;
                         if *att_height < *vic_height {
                             successes_all_pairs += 1;
@@ -665,8 +619,13 @@ impl Consensus {
             }
         }
         
-        // Log ASR every 50 blocks (to avoid log spam)
-        if self.global_finalization.len() % 50 == 0 || self.global_finalization.len() >= 100 {
+        let log_frequency: usize = std::env::var("ASR_LOGGING_FREQUENCY")
+            .unwrap_or_else(|_| "5".to_string())
+            .parse()
+            .unwrap_or(5);
+            
+        // Log ASR frequently for local verification
+        if self.global_finalization.len() % log_frequency == 0 || self.global_finalization.len() >= 100 {
             let total_blocks = self.global_finalization.len();
             
             if total_pairs_all > 0 {

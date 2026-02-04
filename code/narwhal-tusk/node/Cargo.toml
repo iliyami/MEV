@@ -29,4 +29,4 @@ benchmark = ["worker/benchmark", "primary/benchmark", "consensus/benchmark"]
 [[bin]]         
 name = "benchmark_client"   
 path = "src/benchmark_client.rs" 
-required-features = ["benchmark"] 
+ 

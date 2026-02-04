@@ -98,17 +98,17 @@ impl Core {
         // Initialize attack configuration
         let attack_mode = std::env::var("ATTACK_MODE").unwrap_or_default();
         let attacker_ratio: f64 = std::env::var("ATTACKER_RATIO")
-            .unwrap_or_else(|_| "0.3".to_string())
+            .unwrap_or_else(|_| "0.33".to_string())
             .parse()
-            .unwrap_or(0.3);
+            .unwrap_or(0.33);
         let victim_ratio: f64 = std::env::var("VICTIM_RATIO")
-            .unwrap_or_else(|_| "0.2".to_string())
+            .unwrap_or_else(|_| "0.22".to_string())
             .parse()
-            .unwrap_or(0.2);
+            .unwrap_or(0.22);
         let sluggish_timeout_multiplier: f64 = std::env::var("SLUGGISH_TIMEOUT_MULTIPLIER")
-            .unwrap_or_else(|_| "0.5".to_string())
+            .unwrap_or_else(|_| "2.0".to_string())
             .parse()
-            .unwrap_or(0.5);
+            .unwrap_or(2.0);
 
         let total_nodes = committee.size();
         let attacker_count = ((total_nodes as f64) * attacker_ratio).floor() as usize;

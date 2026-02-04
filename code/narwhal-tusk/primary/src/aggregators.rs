@@ -6,7 +6,7 @@ use crypto::Hash as _;
 use crypto::{Digest, PublicKey, Signature};
 use std::collections::HashSet;
 use std::env;
-use log::info;
+use log::{debug, info};
 
 /// Aggregates votes for a particular header into a certificate.
 pub struct VotesAggregator {
@@ -111,8 +111,8 @@ impl CertificatesAggregator {
             return Ok(None);
         }
 
-        // Add all certificates - attack filtering happens at proposer level
-        // where it can properly exclude from parent set without affecting quorum
+        // ATTACK-AWARE: All certificates are added - Proposer will filter them
+        // to maintain consensus safety (2f+1) while maximizing ASR
         self.certificates.push((certificate.digest(), origin));
         self.weight += committee.stake(&origin);
 
@@ -155,7 +155,11 @@ impl CertificatesAggregator {
         }
         
         // Apply paper's probability
-        let attacker_count = (n as f64 * 0.308) as usize; // ~30.8% attackers
+        let attacker_ratio: f64 = env::var("ATTACKER_RATIO")
+            .unwrap_or_else(|_| "0.33".to_string())
+            .parse()
+            .unwrap_or(0.33);
+        let attacker_count = (n as f64 * attacker_ratio) as usize; 
         let victim_count = self.victim_nodes.len();
         
         // Paper's equation: Pfis₀ = 1/2 + fa / (2(n − fl))
@@ -168,6 +172,6 @@ impl CertificatesAggregator {
         // Use deterministic pseudo-random based on excluded count
         let random_factor = ((self.excluded_count * 37 + self.total_victim_seen * 13) % 100) as f64 / 100.0;
         
-        random_factor < base_prob.min(0.90) // Increased to 90% for more aggressive exclusion
+        random_factor < base_prob
     }
 }

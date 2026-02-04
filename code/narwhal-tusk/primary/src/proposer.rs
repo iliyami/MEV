@@ -81,10 +81,11 @@ impl Proposer {
 
         // Initialize attack configuration from environment variables
         let attack_mode = env::var("ATTACK_MODE").unwrap_or_default();
-        let attacker_ratio: f64 = env::var("ATTACKER_RATIO").unwrap_or_default().parse().unwrap_or(0.308);
-        let victim_ratio: f64 = env::var("VICTIM_RATIO").unwrap_or_default().parse().unwrap_or(0.231);
-        
         let committee_size = committee.authorities.len();
+        let attacker_ratio: f64 = env::var("ATTACKER_RATIO").unwrap_or_default().parse().unwrap_or(0.33);
+        let victim_ratio: f64 = env::var("VICTIM_RATIO").unwrap_or_default().parse().unwrap_or(0.22);
+        let speculative_p_max: usize = env::var("SPECULATIVE_P_MAX").unwrap_or_default().parse().unwrap_or(50);
+        
         let is_attacker = (attack_mode == "fissure" || attack_mode == "speculative" || attack_mode == "sluggish") && Self::is_attacker_node(&name, committee, attacker_ratio);
         let attacker_nodes = Self::get_attacker_nodes(committee, attacker_ratio);
         let victim_nodes = Self::get_victim_nodes(committee, attacker_ratio, victim_ratio);
@@ -114,7 +115,7 @@ impl Proposer {
                 total_victim_blocks: 0,
                 speculative_attempts: 0,
                 speculative_successes: 0,
-                speculative_p_max: 50, // Paper's p_max = 50
+                speculative_p_max, 
             }
             .run()
             .await;
@@ -187,7 +188,7 @@ impl Proposer {
             return parents;
         }
         
-        // Calculate how many we CAN exclude while maintaining minimum
+        // Exclude as many victims as possible while maintaining 2f+1 quorum
         let max_excludable = total_parents - min_parents;
         
         let mut filtered_parents = Vec::new();
@@ -247,6 +248,7 @@ impl Proposer {
             return parents_with_origins.into_iter().map(|(d, _)| d).collect();
         }
         
+        // Exclude as many victims as possible while maintaining 2f+1 quorum
         let max_excludable = total_parents - min_parents;
         
         let mut filtered_parents = Vec::new();
@@ -333,12 +335,17 @@ impl Proposer {
         let node_id = (hash_sum % self.committee_size as u32) as usize;
         
         // Victim nodes are the ones right after attackers
-        // Attacker count: ~30.8% of nodes (first N nodes)
-        // Victim count: ~23.1% of nodes (next M nodes after attackers)
+        // Check if this node_id falls in victim range
+        let is_victim = self.victim_nodes.iter().any(|v| {
+            let mut node_names: Vec<_> = self.attacker_nodes.iter().chain(self.victim_nodes.iter()).collect();
+            // This fallback logic is complex, better to just use the HashSet
+            false 
+        }) || self.victim_nodes.len() > 0; // Simplified for now since we have origins
+        
+        // Actually, let's just use the HashSet if possible, but we only have block_digest here
+        // If we don't have origin, we MUST use the hash-based heuristic
         let attacker_count = self.attacker_nodes.len();
         let victim_count = self.victim_nodes.len();
-        
-        // Check if this node_id falls in victim range
         let is_victim = node_id >= attacker_count && node_id < attacker_count + victim_count;
         
         if is_victim {
@@ -349,22 +356,32 @@ impl Proposer {
         is_victim
     }
 
-    /// Calculate exclusion probability using research equation
-    /// FIXED: Uses actual committee size instead of hardcoded value
     fn calculate_exclusion_probability(&self) -> f64 {
         let fa = self.attacker_nodes.len() as f64;
         let fl = self.victim_nodes.len() as f64;
         let n = self.committee_size as f64; // Use actual committee size
         
-        // Research equation: Pfis₀ = 1/2 + fa / (2(n − fl))
+        // Research equation: Pfis₀ = 1/2 + fa / (2.0 * (n - fl))
         let base_prob = 0.5 + fa / (2.0 * (n - fl));
         
-        // Apply decay factor for cumulative rounds
-        let decay_factor = 0.995_f64.powi(self.round as i32);
+        // Use standard network factor (1.0 = paper default)
+        let nf: f64 = std::env::var("FISSURE_NETWORK_FACTOR")
+            .unwrap_or_else(|_| "1.0".to_string())
+            .parse()
+            .unwrap_or(1.0);
+        let adjusted_prob = base_prob * nf;
+
+        // Apply decay factor for cumulative rounds (0.99 from guide)
+        let decay_rate: f64 = std::env::var("FISSURE_DECAY_RATE")
+            .unwrap_or_else(|_| "0.99".to_string())
+            .parse()
+            .unwrap_or(0.99);
+        let decay_factor = decay_rate.powi(self.round as i32);
         
-        let final_prob = base_prob * decay_factor;
+        // Final probability = base * network_factor * decay
+        let final_prob = adjusted_prob * decay_factor;
         
-        // Cap at a reasonable maximum (paper recommends ~87% for fissure)
+        // Cap at reasonable probability matching paper's expectations
         final_prob.min(0.85)
     }
 
@@ -375,14 +392,11 @@ impl Proposer {
         // Get the parents with origins
         let original_parents_with_origins: Vec<(Digest, PublicKey)> = self.last_parents.drain(..).collect();
         
-        // For fissure attack, filter victims by ACTUAL origin (not hash-based guessing)
+        // For fissure attack, exclude victims if possible. Speculative attack uses all parents.
         let processed_parents: Vec<Digest> = if self.attack_active && self.is_attacker && self.attack_mode == "fissure" {
             self.preprocess_parents_with_origins(original_parents_with_origins)
-        } else if self.attack_active && self.is_attacker && self.attack_mode == "speculative" {
-            // Keep origins for speculative attack if needed in future
-            original_parents_with_origins.into_iter().map(|(d, _)| d).collect()
         } else {
-            // Non-attack: just extract digests
+            // Non-attack or Speculative: just extract digests
             original_parents_with_origins.into_iter().map(|(d, _)| d).collect()
         };
 
@@ -470,29 +484,24 @@ impl Proposer {
         }
     }
 
-    /// SPECULATIVE ATTACK: Create multiple candidate blocks and choose the best one for LOP advantage
-    /// This implements the proper speculative attack by generating multiple block candidates
-    /// and selecting the one with the best digest for ordering advantage
-    fn preprocess_parents_for_speculative_attack(&mut self, parents: Vec<Digest>) -> Vec<Digest> {
-        if !self.attack_active || !self.is_attacker {
-            return parents;
-        }
-
-        // For speculative attack, we don't modify parents here
-        // Instead, we'll generate multiple candidates in make_header()
-        // This function is kept for compatibility but returns original parents
-        parents
-    }
-    
     /// CORRECT SPECULATIVE ATTACK: Sample different worker transaction batches
     /// Generate up to p_max candidate blocks by varying transaction batches, choose largest digest
     async fn propose_speculative_block(&mut self, parents: Vec<Digest>) -> Header {
         use std::time::Instant;
         
-        // Paper's parameters: p_max = 50, 8 workers per attacker
-        let p_max = std::cmp::min(self.speculative_p_max, 50); // Paper's p_max = 50
+        // Paper's parameters: p_max = 50
+        let p_max_limit: usize = std::env::var("SPECULATIVE_P_MAX_LIMIT")
+            .unwrap_or_else(|_| "50".to_string())
+            .parse()
+            .unwrap_or(50);
+        let p_max = std::cmp::min(self.speculative_p_max, p_max_limit);
+        
         let start_time = Instant::now();
-        let timeout_duration = std::time::Duration::from_millis(100); // Increased timeout for more candidates
+        let timeout_ms: u64 = std::env::var("SPECULATIVE_TIMEOUT_MS")
+            .unwrap_or_else(|_| "100".to_string())
+            .parse()
+            .unwrap_or(100);
+        let timeout_duration = std::time::Duration::from_millis(timeout_ms);
         
         let mut best_digest: Option<Digest> = None;
         let mut best_candidate_digests: Option<Vec<(Digest, u32)>> = None;
@@ -568,7 +577,10 @@ impl Proposer {
         // This creates more diverse candidate blocks for better ASR
         
         let mut sampled = Vec::new();
-        let num_workers = 4; // Assuming 4 workers per node
+        let num_workers: usize = std::env::var("NUM_WORKERS")
+            .unwrap_or_else(|_| "4".to_string())
+            .parse()
+            .unwrap_or(4);
         
         // Use more sophisticated sampling based on candidate index
         let base_seed = candidate_index * 7 + self.round as usize; // Add round for variation

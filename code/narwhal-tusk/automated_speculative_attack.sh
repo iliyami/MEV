@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Exit immediately if a command exits with a non-zero status.
-set -e
+# set -e removed
 
 # --- Configuration ---
 NARWHAL_TUSK_DIR=$(pwd)
@@ -30,13 +30,21 @@ echo "  3. Calculate and display the ASR results"
 echo "  4. Compare with paper's target (86.3%)"
 echo ""
 
-# --- Step 1: Build project with attack code ---
-echo "🔨 Step 1: Building project with speculative attack code..."
-cd "$NARWHAL_TUSK_DIR"
-export RUSTC_WRAPPER=sccache
-cargo build --release
-
-echo "  ✅ Build successful"
+# --- Step 1: Build project with attack code (skip if already built) ---
+if [ -f "target/release/primary" ] || [ -f "primary" ] || [ -f "target/release/node" ] || [ -f "node" ]; then
+    echo "🔨 Step 1: Skipping build (binary already exists)"
+    # Ensure binary is in the place fab local expects if it's named 'node'
+    if [ ! -f "target/release/node" ] && [ -f "node" ]; then
+        mkdir -p target/release
+        cp node target/release/node
+    fi
+else
+    echo "🔨 Step 1: Building project with speculative attack code..."
+    cd "$NARWHAL_TUSK_DIR"
+    export RUSTC_WRAPPER=sccache
+    cargo build --release
+    echo "  ✅ Build successful"
+fi
 echo ""
 
 # --- Step 2: Configure attack parameters ---
@@ -50,21 +58,25 @@ echo ""
 
 # --- Step 3: Clean previous results ---
 echo "🧹 Step 3: Cleaning previous results..."
-rm -rf "$LOG_DIR"/* "$BUILD_LOG" "$ATTACK_OUTPUT_LOG" > /dev/null 2>&1 || true
-mkdir -p "$LOG_DIR"
+rm -rf "$LOG_DIR"/* "$BUILD_LOG" "$ATTACK_OUTPUT_LOG" /app/results/logs/* > /dev/null 2>&1 || true
+mkdir -p "$LOG_DIR" /app/results/logs
 echo "  ✅ Previous logs cleaned"
 echo ""
 
 # --- Step 4: Run 4-node network with speculative attack ---
 echo "🚀 Step 4: Running 15-node network with speculative attack..."
 echo "  Duration: 35 seconds"
-echo "  Network: $COMMITTEE_SIZE nodes (5 attackers, 3 victims, 7 honest)"
+echo "  Network: $NUM_NODES nodes (5 attackers, 3 victims, 7 honest)"
 echo "  Expected ASR: ~80-90%"
 echo ""
 echo "  Starting speculative attack..."
 
 cd "$BENCHMARK_DIR"
-source ../venv/bin/activate
+if [ -d "../venv" ]; then
+    source ../venv/bin/activate
+else
+    echo "⚠️  No venv found, using system python/fab"
+fi
 
 # Run the local benchmark in the background and capture output
 # Using timeout to ensure it stops after TEST_DURATION + some buffer
@@ -84,11 +96,30 @@ echo ""
 # --- Step 5: Analyze attack results ---
 echo "📊 Step 5: Analyzing speculative attack results..."
 
-# Get the latest ASR from the logs
-# Log format: GLOBAL ASR: All-pairs: X/Y = Z% | Same-round: A/B = C% | ...
-LATEST_ASR=$(grep "GLOBAL ASR" "$LOG_DIR"/primary-*.log | tail -1 | sed -n 's/.*Same-round: [0-9]*\/[0-9]* = \([0-9.]*\)%.*/\1/p')
-if [ -z "$LATEST_ASR" ]; then
+if [ ! "$(ls -A "$LOG_DIR" 2>/dev/null)" ]; then
+    echo "⚠️ Warning: No logs found in $LOG_DIR!"
+    echo "Checking if tmux sessions failed to start..."
+    tmux ls || echo "No tmux sessions found."
+    echo "Last 20 lines of attack output log ($ATTACK_OUTPUT_LOG):"
+    tail -n 20 "$ATTACK_OUTPUT_LOG" || echo "Attack output log is empty or missing."
+fi
+
+# Identify the latest primary log
+LATEST_PRIMARY_LOG=$(ls -t "$LOG_DIR"/primary-*.log 2>/dev/null | head -1)
+
+if [ -z "$(ls -A "$LOG_DIR" 2>/dev/null)" ]; then
     LATEST_ASR="0.0"
+    TOTAL_SAMPLES="0"
+else
+    # Find the maximum ASR across all logs that have results and extract sample counts
+    ASR_LINE=$(grep "GLOBAL ASR" "$LOG_DIR"/primary-*.log 2>/dev/null | tail -1)
+    LATEST_ASR=$(echo "$ASR_LINE" | sed -n 's/.*Same-round: [0-9]*\/[0-9]* = \([0-9.]*\)%.*/\1/p')
+    TOTAL_SAMPLES=$(echo "$ASR_LINE" | sed -n 's/.*Same-round: [0-9]*\/\([0-9]*\).*/\1/p')
+    
+    if [ -z "$LATEST_ASR" ]; then
+        LATEST_ASR="0.0"
+        TOTAL_SAMPLES="0"
+    fi
 fi
 
 # Get total ASR success events
@@ -127,7 +158,7 @@ echo "🎯 SPECULATIVE ATTACK ANALYSIS:"
 echo "==============================="
 echo "  Attacker Node: $ATTACKER_NODE ($SPECULATIVE_EVENTS events)"
 echo "  Victim Nodes:"
-for i in $(seq 0 $((COMMITTEE_SIZE - 1))); do
+for i in $(seq 0 $((NUM_NODES - 1))); do
     if [ "$i" -ne "$(echo $ATTACKER_NODE | cut -d'-' -f2)" ]; then
         echo "    - Primary-$i (0 events - victim)"
     fi
@@ -138,7 +169,7 @@ echo "📊 COMPARISON WITH PAPER:"
 echo "========================="
 echo "  Paper's Target: $PAPER_ASR_TARGET%"
 echo "  Our ASR: $LATEST_ASR%"
-echo "FINAL_ASR_RESULT: $LATEST_ASR"
+echo "FINAL_ASR_RESULT: $LATEST_ASR%"
 DIFFERENCE=$(echo "$LATEST_ASR - $PAPER_ASR_TARGET" | bc)
 echo "  Difference: $DIFFERENCE%"
 if (( $(echo "$DIFFERENCE >= -5.0 && $DIFFERENCE <= 5.0" | bc -l) )); then
@@ -153,11 +184,18 @@ echo "====================================="
 grep "Speculative attack:" "$LOG_DIR"/primary-*.log | tail -3
 echo ""
 
+# --- Step 6: Persist logs to results directory ---
+echo "💾 Step 6: Persisting logs to results directory..."
+mkdir -p /app/results/logs
+cp "$LOG_DIR"/primary-*.log /app/results/logs/ 2>/dev/null || true
+echo "  ✅ Logs saved to /results/logs/"
+
+echo ""
 echo "🎉 AUTOMATED SPECULATIVE ATTACK COMPLETED!"
 echo "=========================================="
-echo "  Logs: $LOG_DIR/"
-echo "  Build log: $BUILD_LOG"
-echo "  Attack output: $ATTACK_OUTPUT_LOG"
+echo "  Final ASR: $LATEST_ASR%"
+echo "  Total Samples (Same-round): $TOTAL_SAMPLES"
+echo "  Logs: /app/results/logs/"
 echo ""
 echo "🔍 To analyze results manually:"
 echo "  grep 'ASR CALCULATION.*Overall' $LOG_DIR/primary-*.log | tail -5"

@@ -45,12 +45,18 @@ def build_docker_image(config: dict) -> bool:
     
     cmd = [
         "docker", "build",
+        "--progress=plain",
         "-t", tag,
         "-f", str(dockerfile_path),
         str(protocol_path)
     ]
     
-    result = subprocess.run(cmd, capture_output=False)
+    print(f"  Command: {' '.join(cmd)}")
+    
+    env = os.environ.copy()
+    env["DOCKER_BUILDKIT"] = "1"
+    
+    result = subprocess.run(cmd, env=env, capture_output=False)
     return result.returncode == 0
 
 
@@ -70,10 +76,16 @@ def run_attack_test(config: dict) -> dict:
     print(f"  Attack Mode: {env_vars.get('ATTACK_MODE', 'unknown')}")
     
     # Build docker run command
+    protocol_path = CODE_DIR / config['protocol']['path']
     cmd = [
         "docker", "run", "--rm",
         "--cap-add=NET_ADMIN", # Enable Traffic Control (tc)
         "-v", f"{results_mount}:/app/results",
+        # Mount local fixed scripts over the container's scripts to avoid rebuilds
+        "-v", f"{protocol_path}/automated_fissure_attack.sh:/app/automated_fissure_attack.sh",
+        "-v", f"{protocol_path}/automated_speculative_attack.sh:/app/automated_speculative_attack.sh",
+        "-v", f"{protocol_path}/automated_sluggish_attack.sh:/app/automated_sluggish_attack.sh",
+        "-v", f"{protocol_path}/docker/mev-test/run_attack_test.sh:/app/docker/mev-test/run_attack_test.sh",
         "-e", f"TEST_NAME={test_name}",
     ]
     

@@ -13,7 +13,7 @@ docker:
 
 test:
   test_name: "test_fissure_attack_asr_dynamic" # Mapper in experiment_sweeper.py handles this
-  REPETITIONS: 3 # Reduced repetitions for Narwhal since it's slower
+  REPETITIONS: 1 # Quick verification
 
 environment:
   # GLOBAL SCALING
@@ -26,6 +26,9 @@ environment:
   
   # Sluggish-specific
   SLUGGISH_TIMEOUT_MULTIPLIER: "2.0"
+  
+  # NETWORK SIMULATION (For Fissure/Sluggish alignment)
+  LATENCY_JITTER: "100ms 20ms"
   
   # BENCHMARK CONFIG
   DURATION: "35"

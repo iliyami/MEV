@@ -1,4 +1,5 @@
 import argparse
+import sys
 import yaml
 import os
 import subprocess
@@ -114,9 +115,10 @@ def load_base_config(config_path):
         return yaml.safe_load(f)
 
 def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_path, local_mode=False):
-    # 0. Create logs directory
-    os.makedirs("logs", exist_ok=True)
-    log_file = f"logs/{attack_mode}_{exp_name}_rep{rep_id}_{int(time.time())}.log"
+    # 0. Create logs directory in /tmp where we have permissions
+    log_dir = "/tmp/mev_logs"
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = f"{log_dir}/{attack_mode}_{exp_name}_rep{rep_id}_{int(time.time())}.log"
 
     # 1. Prepare Configuration
     config = load_base_config(base_config_path)
@@ -143,7 +145,7 @@ def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_p
     print(f"--> Running {exp_name} | {attack_mode} | Rep {rep_id} | {config_override}")
     
     # 2. Run Test using existing runner
-    cmd = ["python3", "scripts/test_runner.py", temp_config_path]
+    cmd = [sys.executable, "scripts/test_runner.py", temp_config_path]
     if local_mode:
         cmd.append("--local")
     
@@ -213,11 +215,18 @@ def load_existing_results(results_file):
                           "HEADER_SIZE", "MAX_HEADER_DELAY", "BATCH_SIZE", 
                           "MAX_BATCH_DELAY", "NUM_WORKERS"]
             
-            # Use fallback for params if column not present (migration)
-            param_vals = tuple(row.get(pk, "") for pk in param_keys)
-            # ONLY skip if we actually got a valid ASR result
-            if row.get('asr') != "N/A":
-                key = (row['protocol'], row['experiment'], row['attack_mode'], row['rep'], param_vals)
+            # Standardize param values to strings and handle empty/missing columns
+            param_vals = []
+            for pk in param_keys:
+                val = row.get(pk, "")
+                if val is None or val == "None": val = ""
+                param_vals.append(str(val))
+            param_vals = tuple(param_vals)
+
+            # ONLY skip if we actually got a valid ASR result (0.0 is often a simulation failure)
+            asr_val = row.get('asr', "N/A")
+            if asr_val not in [None, "N/A", "", "0.0", "0.00", "0%"]:
+                key = (row['protocol'], row['experiment'], row['attack_mode'], str(row['rep']), param_vals)
                 results.add(key)
     return results
 
@@ -241,12 +250,27 @@ def deduplicate_results(results_file):
                           "SYNC_TIMEOUT_MS", "GC_DEPTH", "LATENCY_JITTER",
                           "HEADER_SIZE", "MAX_HEADER_DELAY", "BATCH_SIZE", 
                           "MAX_BATCH_DELAY", "NUM_WORKERS"]
-            param_vals = tuple(row.get(pk, "") for pk in param_keys)
-            key = (row['protocol'], row['experiment'], row['attack_mode'], row['rep'], param_vals)
             
-            # Keep the latest entry, but prioritize successful ones over N/A
-            if key not in unique_results or (row.get('asr') != "N/A"):
-                unique_results[key] = row
+            # Standardize param values
+            param_vals = []
+            for pk in param_keys:
+                val = row.get(pk, "")
+                if val is None or val == "None": val = ""
+                param_vals.append(str(val))
+            param_vals = tuple(param_vals)
+            
+            key = (row['protocol'], row['experiment'], row['attack_mode'], str(row['rep']), param_vals)
+            
+            # Keep the latest entry, but prioritize successful ones over N/A/0.0
+            asr_val = row.get('asr', "N/A")
+            is_valid = asr_val not in [None, "N/A", "", "0.0", "0.00", "0%"]
+            
+            if is_valid:
+                if key not in unique_results or unique_results[key].get('asr') in [None, "N/A", "", "0.0", "0.00", "0%"]:
+                    unique_results[key] = row
+            # If not valid, only keep if we don't have anything better (allows seeing failure but won't block re-runs)
+            elif key not in unique_results:
+                 unique_results[key] = row
 
     with open(results_file, 'w', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=FIELDNAMES, extrasaction='ignore')
@@ -330,10 +354,13 @@ def main():
                                   "HEADER_SIZE", "MAX_HEADER_DELAY", "BATCH_SIZE", 
                                   "MAX_BATCH_DELAY", "NUM_WORKERS"]
                     
-                    # Construct full parameter state (Override > Base Config > Empty)
+                    # Construct full parameter state (MATCHING CSV FORMAT)
+                    # We only include the override values because non-overridden values are written as empty strings to the CSV
                     current_vals = []
                     for pk in param_keys:
-                        val = override.get(pk, config.get('environment', {}).get(pk, ""))
+                        # Only use the override. If not in override, it will be an empty string in the CSV.
+                        val = override.get(pk, "")
+                        if val is None or val == "None": val = ""
                         current_vals.append(str(val))
                     current_vals = tuple(current_vals)
                     
@@ -344,9 +371,15 @@ def main():
                         continue
 
                     data = run_experiment(override, target_attack, exp_name, r, args.config, local_mode=args.local)
-                    writer.writerow(data)
-                    csvfile.flush() # CRITICAL: Write to disk immediately
-                    os.fsync(csvfile.fileno()) # Force OS to flush buffers
+                    
+                    # ONLY record if we got a non-zero ASR (0.0 usually means simulation liveness failure)
+                    asr_result = str(data.get('asr', '0.0'))
+                    if asr_result not in ["N/A", "0.0", "0.00", "0", "0%"]:
+                        writer.writerow(data)
+                        csvfile.flush() # CRITICAL: Write to disk immediately
+                        os.fsync(csvfile.fileno()) # Force OS to flush buffers
+                    else:
+                        print(f"  [!] Not recording result with ASR={asr_result}% (Likely simulation failure)")
 
 if __name__ == "__main__":
     main()
