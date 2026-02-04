@@ -45,7 +45,6 @@ def build_docker_image(config: dict) -> bool:
     
     cmd = [
         "docker", "build",
-        "--progress=plain",
         "-t", tag,
         "-f", str(dockerfile_path),
         str(protocol_path)
