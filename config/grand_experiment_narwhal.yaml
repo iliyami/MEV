@@ -8,7 +8,7 @@ protocol:
 
 docker:
   tag: "mev-narwhal:latest"
-  cpus: "50.0"
+  cpus: "32.0"
   memory: "100g"
 
 test:
