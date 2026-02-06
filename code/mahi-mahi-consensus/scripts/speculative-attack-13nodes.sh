@@ -42,8 +42,9 @@ if [ ! -f "./target/release/mysticeti" ]; then
 fi
 
 # Kill any existing processes
-pkill -f mysticeti || true
-sleep 2
+# Kill any existing processes aggressively
+pkill -9 -f mysticeti || true
+sleep 3
 
 # Set logging
 export RUST_LOG=info,mysticeti_core::consensus=debug,mysticeti_core::core=info

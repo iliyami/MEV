@@ -11,8 +11,8 @@ output_dir=logs/baseline/
 rm -rf ${output_dir}
 mkdir -p ${output_dir}
 
-pkill -f mysticeti || true
-sleep 2
+pkill -9 -f mysticeti || true
+sleep 3
 
 # Check if binary exists
 if [ ! -f "./target/release/mysticeti" ]; then

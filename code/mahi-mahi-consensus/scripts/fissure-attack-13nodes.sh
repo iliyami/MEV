@@ -21,9 +21,9 @@ output_dir=logs/fissure-attack/
 rm -rf ${output_dir}
 mkdir -p ${output_dir}
 
-# Kill any existing processes
-pkill -f mysticeti || true
-sleep 2
+# Kill any existing processes aggressively
+pkill -9 -f mysticeti || true
+sleep 3
 
 # Check if binary exists, build if not (for local runs)
 if [ ! -f "./target/release/mysticeti" ]; then
