@@ -31,6 +31,11 @@ echo -e "${BLUE}Building Mahi-Mahi (Mysticeti)...${NC}"
 cargo build --release 2>/dev/null || cargo build
 echo ""
 
+# Cleanup previous runs aggressively
+echo -e "${YELLOW}Cleaning up previous processes...${NC}"
+pkill -9 -f mysticeti > /dev/null 2>&1 || true
+sleep 5
+
 # Clean up any previous logs
 rm -rf logs/
 mkdir -p logs/baseline

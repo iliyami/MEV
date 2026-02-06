@@ -22,6 +22,11 @@ fi
 echo "✅ Build successful"
 echo ""
 
+# Cleanup previous runs aggressively
+echo "🧹 Cleaning up previous processes..."
+pkill -9 -f mysticeti > /dev/null 2>&1 || true
+sleep 5
+
 # Create results directory
 RESULTS_DIR="logs/sluggish-comprehensive-results"
 rm -rf $RESULTS_DIR
