@@ -192,6 +192,7 @@ done < $RESULTS_DIR/results.csv
 
 echo "Highest Sustainable ASR: ${best_asr}% - $best_strategy"
 echo ""
+echo "FINAL_ASR_RESULT: ${best_asr}%"
 echo "📊 COMPARISON WITH OTHER PROTOCOLS:"
 echo "- Mysticeti Sluggish: 40% ASR"
 echo "- Mahi-Mahi Fissure: 86% ASR"

@@ -166,6 +166,7 @@ compare_asr "Hybrid" "$HYBRID_ASR"
 
 echo -e "${YELLOW}🏆 Best Strategy: $BEST_STRATEGY with ASR of ${BEST_ASR}%${NC}"
 echo ""
+echo "FINAL_ASR_RESULT: ${BEST_ASR}%"
 
 echo -e "${GREEN}All tests completed successfully!${NC}"
 echo "Logs available in:"
