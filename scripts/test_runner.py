@@ -251,6 +251,9 @@ def main():
         print("\nLocal test completed. Please check the logs above for ASR results.")
         sys.exit(0)
     
+    # Explicitly print ASR so sweeper can pick it up
+    print(f"FINAL_ASR_RESULT: {result['asr']}%")
+
     # Verify parity
     if verify_parity(config, result):
         print("\n✓ PARITY VERIFIED - Ready for AWS migration")
