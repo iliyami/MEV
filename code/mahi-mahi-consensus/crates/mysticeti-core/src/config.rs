@@ -104,9 +104,15 @@ impl Default for NodeParameters {
             .and_then(|s| s.parse().ok())
             .unwrap_or(node_defaults::default_number_of_leaders());
 
+        let leader_timeout = std::env::var("LEADER_TIMEOUT")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .map(Duration::from_millis)
+            .unwrap_or(node_defaults::default_leader_timeout());
+
         Self {
             wave_length,
-            leader_timeout: node_defaults::default_leader_timeout(),
+            leader_timeout,
             max_block_size: node_defaults::default_max_block_size(),
             rounds_in_epoch: node_defaults::default_rounds_in_epoch(),
             shutdown_grace_period: node_defaults::default_shutdown_grace_period(),

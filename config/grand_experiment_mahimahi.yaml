@@ -23,6 +23,7 @@ environment:
   # CONSENSUS PARAMETERS
   WAVE_LENGTH: "5"
   NUMBER_OF_LEADERS: "4"
+  LEADER_TIMEOUT: "3000"
   
   # ATTACK CONFIGURATION (OFFENSE)
   ATTACK_MODE: "fissure" # [fissure, speculative, sluggish, hybrid_sluggish]
