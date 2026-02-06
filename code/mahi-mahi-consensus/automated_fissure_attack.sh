@@ -342,6 +342,7 @@ echo "  🔧 Implementation details: MAHI_MAHI_FINAL_IMPLEMENTATION.md"
 echo ""
 echo "  Test date: $(date '+%Y-%m-%d %H:%M:%S')"
 echo ""
+echo "FINAL_ASR_RESULT: $ATTACK_ASR"
 
 # Clean up temporary files
 rm -f "$ATTACK_OUTPUT" "$BASELINE_OUTPUT"
