@@ -424,6 +424,11 @@ def main():
                     # Wait 10s between repetitions to allow Docker/OS cleanup (Mahi-Mahi only)
                     if "mahi" in target_protocol.lower():
                         print("  [Sweeper] Cooling down 10s for Mahi-Mahi cleanup...")
+                        try:
+                            # NUCLEAR OPTION: Force cleanup of any stuck containers on the host
+                            subprocess.run("docker rm -f $(docker ps -aq)", shell=True, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+                        except Exception:
+                            pass
                         time.sleep(10)
 
 if __name__ == "__main__":
