@@ -421,5 +421,10 @@ def main():
                     else:
                         print(f"  [!] Not recording result with ASR={asr_result}% (Likely simulation failure)")
 
+                    # Wait 10s between repetitions to allow Docker/OS cleanup (Mahi-Mahi only)
+                    if "mahi" in target_protocol.lower():
+                        print("  [Sweeper] Cooling down 10s for Mahi-Mahi cleanup...")
+                        time.sleep(10)
+
 if __name__ == "__main__":
     main()
