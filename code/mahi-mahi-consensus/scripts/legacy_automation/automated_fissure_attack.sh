@@ -17,61 +17,62 @@ echo "  4. Calculate and compare ASR results"
 echo "  5. Show detailed metrics and recommendations"
 echo ""
 
-# Check if we're in the right directory
-if [ ! -f "Cargo.toml" ]; then
-    echo "❌ Error: Not in the correct directory"
-    echo "Please run this from: /Users/iliya/Dev/Blockchain/code/mahi-mahi-consensus"
-    exit 1
-fi
-
-# Check if scripts exist
-if [ ! -f "scripts/fissure-attack-13nodes.sh" ] || [ ! -f "scripts/baseline-13nodes.sh" ]; then
-    echo "❌ Error: Required scripts not found"
-    echo "Please ensure these files exist:"
-    echo "  - scripts/fissure-attack-13nodes.sh"
-    echo "  - scripts/baseline-13nodes.sh"
-    echo "  - scripts/calculate-fissure-asr.py"
-    exit 1
-fi
+# Configuration
+NODES=${NUM_NODES:-13}
+DURATION=${DURATION:-120}
+EXCLUSION_PROBABILITY=${EXCLUSION_PROBABILITY:-0.20}
 
 # Step 1: Clean and build
 echo "🔨 Step 1: Building Mahi-Mahi project with attack code..."
-echo "  Cleaning previous build..."
-cargo clean > /dev/null 2>&1
+# Skip clean if NO_CLEAN is set
+if [ -z "$NO_CLEAN" ]; then
+    echo "  Cleaning previous build..."
+    cargo clean > /dev/null 2>&1
+fi
 
 echo "  Building release binary (this may take 2-3 minutes)..."
-BUILD_LOG=$(mktemp)
-cargo build --release > "$BUILD_LOG" 2>&1
-BUILD_EXIT_CODE=$?
-
-if [ $BUILD_EXIT_CODE -eq 0 ]; then
-    echo "  ✅ Build successful"
-    rm -f "$BUILD_LOG"
+# Check if binary exists already to skip build in Docker if it was built in previous layer
+# Check if binary exists already to skip build in Docker if it was built in previous layer
+if [ ! -z "$NO_BUILD" ]; then
+    echo "  ⏩ NO_BUILD set, skipping build..."
+elif [ -f "./target/release/mysticeti" ]; then
+    echo "  ✅ Binary already exists, skipping build"
 else
-    echo "  ❌ Build failed - showing last 20 lines of build log:"
-    tail -20 "$BUILD_LOG"
-    rm -f "$BUILD_LOG"
-    exit 1
+    BUILD_LOG=$(mktemp)
+    cargo build --release > "$BUILD_LOG" 2>&1
+    BUILD_EXIT_CODE=$?
+
+    if [ $BUILD_EXIT_CODE -eq 0 ]; then
+        echo "  ✅ Build successful"
+        rm -f "$BUILD_LOG"
+    else
+        echo "  ❌ Build failed - showing last 20 lines of build log:"
+        tail -20 "$BUILD_LOG"
+        rm -f "$BUILD_LOG"
+        exit 1
+    fi
 fi
 
 # Step 2: Kill any lingering processes
 echo ""
 echo "🧹 Step 2: Cleaning up any lingering processes..."
-pkill -9 -f mysticeti > /dev/null 2>&1
-# Allow OS to reclaim ports
-sleep 5
+pkill -f mysticeti > /dev/null 2>&1
+sleep 2
 echo "  ✅ Environment ready"
 
 # Step 3: Run baseline test (no attack)
 echo ""
 echo "📊 Step 3: Running BASELINE test (no attack)..."
 echo "==============================================="
-echo "  Network: 13 nodes (all honest)"
-echo "  Duration: 120 seconds"
+echo "  Network: $NODES nodes (all honest)"
+echo "  Duration: $DURATION seconds"
 echo "  Purpose: Measure natural ordering ASR"
 echo ""
 
 BASELINE_OUTPUT=$(mktemp)
+# Pass parameters to script
+export NUM_NODES=$NODES
+export DURATION=$DURATION
 bash scripts/baseline-13nodes.sh > "$BASELINE_OUTPUT" 2>&1
 BASELINE_EXIT_CODE=$?
 
@@ -103,15 +104,19 @@ sleep 5
 echo ""
 echo "🎯 Step 4: Running FISSURE ATTACK test..."
 echo "========================================="
-echo "  Attacker: Node 0"
-echo "  Victim: Node 1"
-echo "  Exclusion Probability: 20%"
-echo "  Network: 13 nodes (1 attacker, 1 victim, 11 honest)"
-echo "  Duration: 120 seconds"
+echo "  Attacker: Node ${ATTACKER_ID:-0}"
+echo "  Victim: Node ${VICTIM_ID:-1}"
+echo "  Exclusion Probability: $(echo "$EXCLUSION_PROBABILITY * 100" | bc | sed 's/\.00//')%"
+echo "  Network: $NODES nodes (1 attacker, 1 victim, $((NODES-2)) honest)"
+echo "  Duration: $DURATION seconds"
 echo "  Expected ASR: ~86%"
 echo ""
 
 ATTACK_OUTPUT=$(mktemp)
+# Pass parameters to script
+export NUM_NODES=$NODES
+export DURATION=$DURATION
+export EXCLUSION_PROBABILITY=$EXCLUSION_PROBABILITY
 bash scripts/fissure-attack-13nodes.sh > "$ATTACK_OUTPUT" 2>&1
 ATTACK_EXIT_CODE=$?
 
@@ -334,6 +339,10 @@ if [ "$ATTACK_ASR" != "Unknown" ] && [ "$BASELINE_ASR" != "Unknown" ]; then
         echo "  ⚠️  RESULT: Needs optimization"
         echo "  💡 Try adjusting exclusion probability"
     fi
+    
+    # Standardized output for test runner
+    echo ""
+    echo "FINAL_ASR_RESULT: $ATTACK_ASR"
 fi
 
 echo ""

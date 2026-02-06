@@ -94,13 +94,23 @@ pub mod node_defaults {
 
 impl Default for NodeParameters {
     fn default() -> Self {
+        let wave_length = std::env::var("WAVE_LENGTH")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(node_defaults::default_wave_length());
+        
+        let number_of_leaders = std::env::var("NUMBER_OF_LEADERS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(node_defaults::default_number_of_leaders());
+
         Self {
-            wave_length: node_defaults::default_wave_length(),
+            wave_length,
             leader_timeout: node_defaults::default_leader_timeout(),
             max_block_size: node_defaults::default_max_block_size(),
             rounds_in_epoch: node_defaults::default_rounds_in_epoch(),
             shutdown_grace_period: node_defaults::default_shutdown_grace_period(),
-            number_of_leaders: node_defaults::default_number_of_leaders(),
+            number_of_leaders,
             enable_pipelining: node_defaults::default_enable_pipelining(),
             consensus_only: node_defaults::default_consensus_only(),
             enable_synchronizer: node_defaults::default_enable_synchronizer(),

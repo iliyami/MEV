@@ -6,6 +6,8 @@
 set -e
 
 # Configuration (set defaults if not already set)
+NUM_NODES=${NUM_NODES:-13}
+DURATION=${DURATION:-120}
 export ATTACK_MODE=${ATTACK_MODE:-speculative}
 export ATTACKER_ID=${ATTACKER_ID:-0}
 export VICTIM_ID=${VICTIM_ID:-1}
@@ -16,13 +18,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 LOG_DIR="$REPO_DIR/logs/speculative-attack"
 
-echo "🔮 Starting Mahi-Mahi Speculative Attack Test (13 Nodes)"
+echo "🔮 Starting Mahi-Mahi Speculative Attack Test ($NUM_NODES Nodes)"
 echo "=============================================="
 echo "Attack Mode: $ATTACK_MODE"
 echo "Attacker ID: $ATTACKER_ID"
 echo "Victim ID: $VICTIM_ID"
 echo "Strategy: $SPECULATIVE_STRATEGY"
 echo "p_max: $SPECULATIVE_P_MAX"
+echo "Duration: $DURATION seconds"
 echo ""
 
 # Clean up previous logs
@@ -34,8 +37,8 @@ cd "$REPO_DIR"
 
 # Check if binary exists
 if [ ! -f "./target/release/mysticeti" ]; then
-    echo "❌ Binary not found. Please run 'cargo build --release' first."
-    exit 1
+    echo "📦 Building Mahi-Mahi..."
+    cargo build --release
 fi
 
 # Kill any existing processes
@@ -45,19 +48,19 @@ sleep 2
 # Set logging
 export RUST_LOG=info,mysticeti_core::consensus=debug,mysticeti_core::core=info
 
-echo "🚀 Starting 13 validator nodes..."
+echo "🚀 Starting $NUM_NODES validator nodes..."
 
-# Start 13 nodes
-for i in {0..12}; do
-    nohup ./target/release/mysticeti dry-run --committee-size 13 --authority $i \
+# Start nodes
+for i in $(seq 0 $((NUM_NODES-1))); do
+    nohup ./target/release/mysticeti dry-run --committee-size $NUM_NODES --authority $i \
         > "$LOG_DIR/v${i}.log" 2>&1 &
-    sleep 0.5
+    sleep 0.1
 done
 
 # Wait for consensus to establish
 echo ""
-echo "⏳ Running attack for 120 seconds..."
-sleep 120
+echo "⏳ Running attack for $DURATION seconds..."
+sleep $DURATION
 
 # Stop all nodes
 echo ""

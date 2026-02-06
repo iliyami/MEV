@@ -17,8 +17,14 @@ FIELDNAMES = [
     "timestamp", "protocol", "experiment", "attack_mode", "rep", "asr", "duration", "exit_code", 
     "NUM_NODES", "ATTACKER_RATIO", "SPECULATIVE_P_MAX", "SLUGGISH_TIMEOUT_MULTIPLIER",
     "DAG_STATE_CACHED_ROUNDS", "SYNC_TIMEOUT_MS", "GC_DEPTH", "LATENCY_JITTER",
-    "HEADER_SIZE", "MAX_HEADER_DELAY", "BATCH_SIZE", "MAX_BATCH_DELAY", "NUM_WORKERS"
+    "HEADER_SIZE", "MAX_HEADER_DELAY", "BATCH_SIZE", "MAX_BATCH_DELAY", "NUM_WORKERS",
+    "WAVE_LENGTH", "NUMBER_OF_LEADERS", "SPECULATIVE_STRATEGY",
+    "EXCLUSION_PROBABILITY", "HYBRID_EXCLUSION", "SLUGGISH_MULTIPLIER", "VICTIM_RATIO"
 ]
+
+# Keys that define the experiment's unique configuration (for deduplication)
+# Excludes metadata like timestamp, asr, etc.
+PARAM_KEYS = [k for k in FIELDNAMES if k not in ["timestamp", "protocol", "experiment", "attack_mode", "rep", "asr", "duration", "exit_code"]]
 
 # Define the Experiment Matrix
 # Each key acts as a "dimension" we can sweep over independently.
@@ -107,6 +113,30 @@ EXPERIMENTS = {
         "values": [
             [1], [2], [4], [8]
         ]
+    },
+
+    # 10. Protocol Specific - Mahi-Mahi (Mysticeti) Wave Length
+    "mahimahi_wave": {
+        "params": ["WAVE_LENGTH"],
+        "values": [
+            [3], [5], [8], [12]
+        ]
+    },
+
+    # 11. Protocol Specific - Mahi-Mahi (Mysticeti) Leaders Count
+    "mahimahi_leaders": {
+        "params": ["NUMBER_OF_LEADERS"],
+        "values": [
+            [2], [4], [6], [8]
+        ]
+    },
+
+    # 12. Protocol Specific - Mahi-Mahi (Mysticeti) Speculative Strategy
+    "mahimahi_strategy": {
+        "params": ["SPECULATIVE_STRATEGY"],
+        "values": [
+            ["simple"], ["sophisticated"], ["traversal"], ["smart"], ["hybrid"]
+        ]
     }
 }
 
@@ -114,7 +144,7 @@ def load_base_config(config_path):
     with open(config_path, 'r') as f:
         return yaml.safe_load(f)
 
-def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_path, local_mode=False):
+def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_path, local_mode=False, no_build=False):
     # 0. Create logs directory in /tmp where we have permissions
     log_dir = "/tmp/mev_logs"
     os.makedirs(log_dir, exist_ok=True)
@@ -128,14 +158,21 @@ def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_p
         config['environment'][k] = str(v)
     
     config['environment']['ATTACK_MODE'] = attack_mode
+    if no_build:
+        config['environment']['NO_BUILD'] = "1"
     
     # Set correct test name based on attack mode
-    test_name_map = {
-        "fissure": "test_fissure_attack_asr_dynamic",
-        "speculative": "test_speculative_attack_asr_dynamic",
-        "sluggish": "test_sluggish_attack_asr_dynamic"
-    }
-    config['test']['test_name'] = test_name_map[attack_mode]
+    if config['protocol']['name'] in ['bullshark', 'narwhal']:
+        test_name_map = {
+            "fissure": "test_fissure_attack_asr_dynamic",
+            "speculative": "test_speculative_attack_asr_dynamic",
+            "sluggish": "test_sluggish_attack_asr_dynamic"
+        }
+        config['test']['test_name'] = test_name_map.get(attack_mode, config['test'].get('test_name'))
+    else:
+        # For other protocols (mahimahi, etc.), use the default name from config or fallback
+        # The internal scripts in their Docker images handle the ATTACK_MODE branches.
+        config['test']['test_name'] = config.get('test', {}).get('test_name', f"test_{config['protocol']['name']}_attack")
 
     # Save temp config with attack_mode to avoid collisions in multi-terminal runs
     temp_config_path = f"config/temp_sweep_{attack_mode}_{exp_name}_{rep_id}.yaml"
@@ -209,15 +246,9 @@ def load_existing_results(results_file):
         reader = csv.DictReader(f)
         for row in reader:
             # Create a unique key for each run: (protocol, experiment, attack_mode, rep, params)
-            param_keys = ["NUM_NODES", "ATTACKER_RATIO", "SPECULATIVE_P_MAX", 
-                          "SLUGGISH_TIMEOUT_MULTIPLIER", "DAG_STATE_CACHED_ROUNDS", 
-                          "SYNC_TIMEOUT_MS", "GC_DEPTH", "LATENCY_JITTER",
-                          "HEADER_SIZE", "MAX_HEADER_DELAY", "BATCH_SIZE", 
-                          "MAX_BATCH_DELAY", "NUM_WORKERS"]
-            
             # Standardize param values to strings and handle empty/missing columns
             param_vals = []
-            for pk in param_keys:
+            for pk in PARAM_KEYS:
                 val = row.get(pk, "")
                 if val is None or val == "None": val = ""
                 param_vals.append(str(val))
@@ -245,15 +276,9 @@ def deduplicate_results(results_file):
              return # Let main handle migration or new header
              
         for row in reader:
-            param_keys = ["NUM_NODES", "ATTACKER_RATIO", "SPECULATIVE_P_MAX", 
-                          "SLUGGISH_TIMEOUT_MULTIPLIER", "DAG_STATE_CACHED_ROUNDS", 
-                          "SYNC_TIMEOUT_MS", "GC_DEPTH", "LATENCY_JITTER",
-                          "HEADER_SIZE", "MAX_HEADER_DELAY", "BATCH_SIZE", 
-                          "MAX_BATCH_DELAY", "NUM_WORKERS"]
-            
             # Standardize param values
             param_vals = []
-            for pk in param_keys:
+            for pk in PARAM_KEYS:
                 val = row.get(pk, "")
                 if val is None or val == "None": val = ""
                 param_vals.append(str(val))
@@ -288,6 +313,7 @@ def main():
     parser.add_argument("--experiments", help="Comma-separated list of experiments to run (e.g. scaling,offense_speculative)")
     parser.add_argument("--local", action="store_true", help="Run tests locally via cargo instead of Docker")
     parser.add_argument("--out", default=DEFAULT_RESULTS_FILE, help=f"Output CSV file for results (default: {DEFAULT_RESULTS_FILE})")
+    parser.add_argument("--no-build", action="store_true", help="Skip building binary inside Docker (use existing)")
     args = parser.parse_args()
 
     results_file = args.out
@@ -317,10 +343,29 @@ def main():
         if args.experiments:
             relevant_experiments = [e.strip() for e in args.experiments.split(",")]
         else:
+            # 1. Common Experiments (All Protocols)
             relevant_experiments = [
-                "scaling", "defense_memory", "defense_network", "defense_gc", "env_latency",
-                "defense_header", "defense_batching", "scaling_workers"
+                "scaling", "env_latency"
             ]
+            
+            # 2. Protocol-Specific Experiments
+            if target_protocol in ['bullshark', 'narwhal', 'tusk']:
+                relevant_experiments.extend([
+                    "defense_memory",   # DAG_STATE_CACHED_ROUNDS
+                    "defense_network",  # SYNC_TIMEOUT_MS
+                    "defense_gc",       # GC_DEPTH
+                    "defense_header",   # HEADER_SIZE, MAX_HEADER_DELAY
+                    "defense_batching", # BATCH_SIZE, MAX_BATCH_DELAY
+                    "scaling_workers"   # NUM_WORKERS
+                ])
+            elif target_protocol == "mahimahi":
+                relevant_experiments.extend([
+                    "mahimahi_wave",    # WAVE_LENGTH
+                    "mahimahi_leaders", # NUMBER_OF_LEADERS
+                    "mahimahi_strategy" # SPECULATIVE_STRATEGY
+                ])
+            
+            # 3. Attack-Specific Experiments
             if target_attack == "fissure":
                 relevant_experiments.append("offense_fissure")
             elif target_attack == "speculative":
@@ -348,16 +393,11 @@ def main():
                 # Run Repetitions
                 for r in range(1, repetitions + 1):
                     # Check if already done
-                    param_keys = ["NUM_NODES", "ATTACKER_RATIO", "SPECULATIVE_P_MAX", 
-                                  "SLUGGISH_TIMEOUT_MULTIPLIER", "DAG_STATE_CACHED_ROUNDS", 
-                                  "SYNC_TIMEOUT_MS", "GC_DEPTH", "LATENCY_JITTER",
-                                  "HEADER_SIZE", "MAX_HEADER_DELAY", "BATCH_SIZE", 
-                                  "MAX_BATCH_DELAY", "NUM_WORKERS"]
                     
                     # Construct full parameter state (MATCHING CSV FORMAT)
                     # We only include the override values because non-overridden values are written as empty strings to the CSV
                     current_vals = []
-                    for pk in param_keys:
+                    for pk in PARAM_KEYS:
                         # Only use the override. If not in override, it will be an empty string in the CSV.
                         val = override.get(pk, "")
                         if val is None or val == "None": val = ""
@@ -370,7 +410,7 @@ def main():
                         print(f"  [-] Skipping {exp_name} | {target_attack} | Rep {r} (Already recorded for {target_protocol})")
                         continue
 
-                    data = run_experiment(override, target_attack, exp_name, r, args.config, local_mode=args.local)
+                    data = run_experiment(override, target_attack, exp_name, r, args.config, local_mode=args.local, no_build=args.no_build)
                     
                     # ONLY record if we got a non-zero ASR (0.0 usually means simulation liveness failure)
                     asr_result = str(data.get('asr', '0.0'))

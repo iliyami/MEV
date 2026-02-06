@@ -8,18 +8,21 @@ import re
 import sys
 from typing import List, Tuple
 
-ATTACKER_ID = 0
-VICTIM_ID = 1
+import os
+
+# Configuration from environment or defaults
+ATTACKER_ID = int(os.environ.get("ATTACKER_ID", 0))
+VICTIM_ID = int(os.environ.get("VICTIM_ID", 1))
+
+# Map authority letters to numbers (A=0, B=1, ...)
+AUTH_MAP = {chr(65 + i): i for i in range(26)}
 
 def extract_committed_blocks(filename: str) -> List[Tuple[int, int]]:
     """Extract committed blocks (authority, round) from log file"""
-    # Pattern: "Decided Commit(A5)" where A-M represents authority 0-12, and number is round
-    pattern = r"Decided Commit\(([A-M])(\d+)\)"
+    # Pattern: "Decided Commit(A5)" where A-Z represents authority 0-25, and number is round
+    pattern = r"Decided Commit\(([A-Z])(\d+)\)"
     committed_blocks = []
     
-    # Map authority letters to numbers (A=0, B=1, ..., M=12)
-    auth_map = {chr(65 + i): i for i in range(13)}  # A-M -> 0-12
-
     try:
         with open(filename, 'r') as file:
             for line in file:
@@ -27,8 +30,9 @@ def extract_committed_blocks(filename: str) -> List[Tuple[int, int]]:
                 if match:
                     authority_letter = match.group(1)
                     round_num = int(match.group(2))
-                    authority = auth_map[authority_letter]
-                    committed_blocks.append((authority, round_num))
+                    if authority_letter in AUTH_MAP:
+                        authority = AUTH_MAP[authority_letter]
+                        committed_blocks.append((authority, round_num))
     except FileNotFoundError:
         print(f"⚠️  Warning: File {filename} not found")
         return []

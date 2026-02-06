@@ -1,35 +1,41 @@
-#!/bin/bash
-# Baseline Test (No Attack) with 13 nodes
+# Configuration
+NUM_NODES=${NUM_NODES:-13}
+DURATION=${DURATION:-120}
 
-echo "📊 Starting BASELINE Test with 13 nodes (No Attack)"
+echo "📊 Starting BASELINE Test with $NUM_NODES nodes (No Attack)"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "Duration: $DURATION seconds"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 output_dir=logs/baseline/
 rm -rf ${output_dir}
 mkdir -p ${output_dir}
 
-pkill -f mysticeti
+pkill -f mysticeti || true
 sleep 2
 
-echo "📦 Building Mahi-Mahi..."
-cargo build --release > /dev/null 2>&1
+# Check if binary exists
+if [ ! -f "./target/release/mysticeti" ]; then
+    echo "📦 Building Mahi-Mahi..."
+    cargo build --release > /dev/null 2>&1
+fi
 
 export RUST_LOG=info,mysticeti_core::consensus=debug,mysticeti_core::core=warn
 
-echo "🚀 Starting 13 nodes (NO ATTACK)..."
+echo "🚀 Starting $NUM_NODES nodes (NO ATTACK)..."
 
-for i in {0..12}; do
-    nohup ./target/release/mysticeti dry-run --committee-size 13 --authority $i > ${output_dir}v${i}.log 2>&1 &
-    sleep 0.5
+for i in $(seq 0 $((NUM_NODES-1))); do
+    nohup ./target/release/mysticeti dry-run --committee-size $NUM_NODES --authority $i > ${output_dir}v${i}.log 2>&1 &
+    sleep 0.1
 done
 
-echo "✅ All 13 nodes started"
-echo "⏳ Running consensus for 120 seconds..."
+echo "✅ All $NUM_NODES nodes started"
+echo "⏳ Running consensus for $DURATION seconds..."
 
-sleep 120
+sleep $DURATION
 
 echo "🛑 Stopping nodes..."
-pkill -f mysticeti
+pkill -f mysticeti || true
 sleep 2
 
 echo ""

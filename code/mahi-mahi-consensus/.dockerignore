@@ -1,0 +1,10 @@
+logs/
+logs/sluggish-comprehensive-results/
+scripts/legacy_automation/logs/
+*.txt
+*.log
+.DS_Store
+.git/
+# Exclude potential large data files
+storage-*/
+genesis/

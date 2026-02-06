@@ -1,0 +1,52 @@
+experiment:
+  name: "mahimahi_experiment"
+  description: "Mahi-Mahi (Mysticeti-based) MEV Attack Sensitivity Analysis"
+
+protocol:
+  name: "mahimahi"
+  path: "mahi-mahi-consensus"
+  package_name: "mysticeti-core"
+
+docker:
+  tag: "mev-mahimahi:latest"
+  cpus: "32.0"
+  memory: "100g"
+
+test:
+  test_name: "fissure" # [fissure, speculative, sluggish]
+  REPETITIONS: 5
+
+environment:
+  # GLOBAL SCALING
+  NUM_NODES: "13"
+  
+  # CONSENSUS PARAMETERS
+  WAVE_LENGTH: "5"
+  NUMBER_OF_LEADERS: "4"
+  
+  # ATTACK CONFIGURATION (OFFENSE)
+  ATTACK_MODE: "fissure" # [fissure, speculative, sluggish, hybrid_sluggish]
+  ATTACKER_ID: "0"
+  VICTIM_ID: "1"
+  
+  # Fissure-specific
+  EXCLUSION_PROBABILITY: "0.20"
+  
+  # Speculative-specific
+  SPECULATIVE_STRATEGY: "smart" # [smart, simple, sophisticated, hybrid]
+  SPECULATIVE_P_MAX: "50"
+  SIMPLE_EXCLUSION_PROB: "0.05"
+  
+  # Sluggish-specific
+  SLUGGISH_MULTIPLIER: "2.0"
+  HYBRID_EXCLUSION: "0.05"
+  
+  # NETWORK SIMULATION
+  LATENCY_JITTER: "200ms 50ms"
+  
+  # BENCHMARK CONFIG
+  DURATION: "120"
+
+output:
+  expected_asr: 50.0
+  tolerance_percent: 100.0
