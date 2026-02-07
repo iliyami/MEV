@@ -158,6 +158,10 @@ def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_p
         config['environment'][k] = str(v)
     
     config['environment']['ATTACK_MODE'] = attack_mode
+    num_nodes = int(config_override.get('NUM_NODES', config['environment'].get('NUM_NODES', 13)))
+    if num_nodes >= 50:
+        config['environment']['DURATION'] = "300" # Increase to 5 mins for stability at scale
+    
     if no_build:
         config['environment']['NO_BUILD'] = "1"
     
