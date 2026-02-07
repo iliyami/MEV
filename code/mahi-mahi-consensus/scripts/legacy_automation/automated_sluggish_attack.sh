@@ -2,7 +2,7 @@
 # Comprehensive Sluggish Attack Testing Suite for Mahi-Mahi
 # Tests Pure Sluggish and Hybrid Sluggish with multiple parameter combinations
 
-# set -e  # Disabled for debugging
+# set -e (disabled for robust error handling)
 
 echo "=========================================="
 echo "  COMPREHENSIVE SLUGGISH ATTACK TESTING"
@@ -34,6 +34,12 @@ else
 fi
 echo ""
 
+# Cleanup previous runs aggressively
+echo "🧹 Cleaning up previous processes..."
+pkill -9 -f mysticeti > /dev/null 2>&1 || true
+sleep 5
+echo ""
+
 # Create results directory
 RESULTS_DIR="logs/sluggish-comprehensive-results"
 rm -rf $RESULTS_DIR
@@ -49,7 +55,7 @@ unset VICTIM_ID
 unset SLUGGISH_MULTIPLIER
 unset HYBRID_EXCLUSION
 
-./scripts/baseline-13nodes.sh > /dev/null 2>&1
+./scripts/baseline-13nodes.sh > /dev/null 2>&1 || true
 BASELINE_ASR=$(python3 scripts/calculate-fissure-asr.py logs/baseline/v*.log 2>&1 | grep "FINAL ATTACK SUCCESS RATE" | grep -oE '[0-9]+\.[0-9]+')
 echo "Baseline ASR: ${BASELINE_ASR}%"
 echo "BASELINE,N/A,N/A,$BASELINE_ASR" >> $RESULTS_DIR/results.csv
@@ -206,6 +212,20 @@ echo "- Mahi-Mahi Speculative: ~52% ASR"
 echo "- Mahi-Mahi Sluggish (Best): ${best_asr}% ASR"
 echo ""
 echo "✅ ALL TESTS COMPLETE!"
+
+echo "=================================================="
+echo " DIAGNOSTIC LOG DUMP (Attacker v0.log)"
+echo "=================================================="
+# Check if any log exists
+LOG_FILE=$(find logs/sluggish-attack -name "v0.log" | head -n 1)
+if [ -f "$LOG_FILE" ]; then
+    cat "$LOG_FILE" | head -n 20
+    echo "..."
+    cat "$LOG_FILE" | tail -n 20
+else
+    echo "No v0.log found."
+fi
+echo "=================================================="
 
 
 

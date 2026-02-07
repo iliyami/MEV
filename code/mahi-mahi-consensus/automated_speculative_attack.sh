@@ -3,7 +3,7 @@
 # Automated Speculative Attack Testing Script for Mahi-Mahi (Mysticeti)
 # This script runs all attack strategies and compares results
 
-set -e
+# set -e (disabled for robust error handling)
 
 echo "========================================"
 echo "    AUTOMATED SPECULATIVE ATTACK TEST   "
@@ -169,6 +169,20 @@ echo ""
 echo "FINAL_ASR_RESULT: ${BEST_ASR}%"
 
 echo -e "${GREEN}All tests completed successfully!${NC}"
+
+echo "=================================================="
+echo " DIAGNOSTIC LOG DUMP (Attacker v0.log)"
+echo "=================================================="
+# Check if any log exists
+LOG_FILE=$(find logs/speculative-attack -name "v0.log" | head -n 1)
+if [ -f "$LOG_FILE" ]; then
+    cat "$LOG_FILE" | head -n 20
+    echo "..."
+    cat "$LOG_FILE" | tail -n 20
+else
+    echo "No v0.log found."
+fi
+echo "=================================================="
 echo "Logs available in:"
 echo "  - logs/baseline/ (baseline test)"
 echo "  - logs/speculative-attack/ (attack tests)"

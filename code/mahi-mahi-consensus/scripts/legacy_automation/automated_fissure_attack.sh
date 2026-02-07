@@ -56,8 +56,8 @@ fi
 # Step 2: Kill any lingering processes
 echo ""
 echo "🧹 Step 2: Cleaning up any lingering processes..."
-pkill -f mysticeti > /dev/null 2>&1
-sleep 2
+pkill -9 -f mysticeti > /dev/null 2>&1 || true
+sleep 5
 echo "  ✅ Environment ready"
 
 # Step 3: Run baseline test (no attack)
