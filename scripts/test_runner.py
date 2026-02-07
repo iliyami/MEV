@@ -86,6 +86,9 @@ def run_attack_test(config: dict) -> dict:
         "-v", f"{protocol_path}/scripts/legacy_automation/automated_fissure_attack.sh:/app/scripts/legacy_automation/automated_fissure_attack.sh",
         "-v", f"{protocol_path}/scripts/legacy_automation/automated_speculative_attack.sh:/app/scripts/legacy_automation/automated_speculative_attack.sh",
         "-v", f"{protocol_path}/scripts/legacy_automation/automated_sluggish_attack.sh:/app/scripts/legacy_automation/automated_sluggish_attack.sh",
+        "-v", f"{protocol_path}/scripts/calculate-fissure-asr.py:/app/scripts/calculate-fissure-asr.py",
+        "-v", f"{protocol_path}/scripts/calculate-sluggish-asr.py:/app/scripts/calculate-sluggish-asr.py",
+        "-v", f"{protocol_path}/scripts/calculate-speculative-asr.py:/app/scripts/calculate-speculative-asr.py",
         "-v", f"{protocol_path}/docker/mev-test/run_attack_test.sh:/app/docker/mev-test/run_attack_test.sh",
         "-e", f"TEST_NAME={test_name}",
     ]
