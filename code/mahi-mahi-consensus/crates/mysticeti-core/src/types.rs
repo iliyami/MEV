@@ -485,8 +485,12 @@ impl AuthoritySet {
     }
 }
 
-pub fn format_authority_index(i: AuthorityIndex) -> char {
-    ('A' as u64 + i) as u8 as char
+pub fn format_authority_index(i: AuthorityIndex) -> String {
+    if i < 26 {
+        (core::char::from_u32('A' as u32 + i as u32).unwrap_or('?')).to_string()
+    } else {
+        format!("[{}]", i)
+    }
 }
 
 pub fn format_authority_round(i: AuthorityIndex, r: RoundNumber) -> String {
