@@ -244,6 +244,7 @@ async fn dryrun(authority: AuthorityIndex, committee_size: usize) -> Result<()> 
     let committee = Committee::new_for_benchmarks(committee_size);
     let client_parameters = ClientParameters::default();
     let node_parameters = NodeParameters::default();
+    println!("DRYRUN PARAMETERS: {:?}", node_parameters);
     let public_config = NodePublicConfig::new_for_benchmarks(ips, Some(node_parameters));
 
     let working_dir = PathBuf::from(format!("dryrun-validator-{authority}"));
