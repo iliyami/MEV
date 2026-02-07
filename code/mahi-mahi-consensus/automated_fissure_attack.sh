@@ -344,6 +344,14 @@ echo "  Test date: $(date '+%Y-%m-%d %H:%M:%S')"
 echo ""
 echo "FINAL_ASR_RESULT: $ATTACK_ASR"
 
+echo "=================================================="
+echo " DIAGNOSTIC LOG DUMP (Attacker v0.log)"
+echo "=================================================="
+cat "${output_dir}v0.log" | head -n 20
+echo "..."
+cat "${output_dir}v0.log" | tail -n 20
+echo "=================================================="
+
 # Clean up temporary files
 rm -f "$ATTACK_OUTPUT" "$BASELINE_OUTPUT"
 
