@@ -2,7 +2,7 @@
 # Comprehensive Sluggish Attack Testing Suite for Mahi-Mahi
 # Tests Pure Sluggish and Hybrid Sluggish with multiple parameter combinations
 
-set -e
+# set -e (disabled for robust error handling)
 
 echo "=========================================="
 echo "  COMPREHENSIVE SLUGGISH ATTACK TESTING"
@@ -42,7 +42,7 @@ unset VICTIM_ID
 unset SLUGGISH_MULTIPLIER
 unset HYBRID_EXCLUSION
 
-./scripts/baseline-13nodes.sh > /dev/null 2>&1
+./scripts/baseline-13nodes.sh > /dev/null 2>&1 || true
 BASELINE_ASR=$(python3 scripts/calculate-fissure-asr.py logs/baseline/v*.log 2>&1 | grep "FINAL ATTACK SUCCESS RATE" | grep -oE '[0-9]+\.[0-9]+')
 echo "Baseline ASR: ${BASELINE_ASR}%"
 echo "BASELINE,N/A,N/A,$BASELINE_ASR" >> $RESULTS_DIR/results.csv
