@@ -19,8 +19,8 @@ AUTH_MAP = {chr(65 + i): i for i in range(26)}
 
 def extract_committed_blocks(filename: str) -> List[Tuple[int, int]]:
     """Extract committed blocks (authority, round) from log file"""
-    # Pattern: "Decided Commit(A5)" where A-Z represents authority 0-25, and number is round
-    pattern = r"Decided Commit\(([A-Z])(\d+)\)"
+    # Pattern: "Decided Commit(A5)" or "Decided Commit([26]5)"
+    pattern = r"Decided Commit\((?:([A-Z])|\[(\d+)\])(\d+)\)"
     committed_blocks = []
     
     try:
@@ -28,11 +28,14 @@ def extract_committed_blocks(filename: str) -> List[Tuple[int, int]]:
             for line in file:
                 match = re.search(pattern, line)
                 if match:
-                    authority_letter = match.group(1)
-                    round_num = int(match.group(2))
-                    if authority_letter in AUTH_MAP:
+                    if match.group(1): # Format: A5
+                        authority_letter = match.group(1)
                         authority = AUTH_MAP[authority_letter]
-                        committed_blocks.append((authority, round_num))
+                    else: # Format: [26]5
+                        authority = int(match.group(2))
+                        
+                    round_num = int(match.group(3))
+                    committed_blocks.append((authority, round_num))
     except FileNotFoundError:
         print(f"⚠️  Warning: File {filename} not found")
         return []
