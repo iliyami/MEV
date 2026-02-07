@@ -201,6 +201,20 @@ echo "- Mahi-Mahi Sluggish (Best): ${best_asr}% ASR"
 echo ""
 echo "✅ ALL TESTS COMPLETE!"
 
+echo "=================================================="
+echo " DIAGNOSTIC LOG DUMP (Attacker v0.log)"
+echo "=================================================="
+# Check if any log exists
+LOG_FILE=$(find logs/sluggish-attack -name "v0.log" | head -n 1)
+if [ -f "$LOG_FILE" ]; then
+    cat "$LOG_FILE" | head -n 20
+    echo "..."
+    cat "$LOG_FILE" | tail -n 20
+else
+    echo "No v0.log found."
+fi
+echo "=================================================="
+
 
 
 
