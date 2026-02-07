@@ -142,8 +142,8 @@ ATTACK_ASR=$(grep "FINAL ATTACK SUCCESS RATE (ASR):" "$ATTACK_OUTPUT" | grep -oE
 # Extract detailed metrics from attack
 ATTACK_PAIRS=$(grep "Total pairs analyzed:" "$ATTACK_OUTPUT" | grep -oE '[0-9,]+' | tr -d ',')
 ATTACK_SUCCESS=$(grep "Successful frontrunning:" "$ATTACK_OUTPUT" | grep -oE '[0-9,]+' | tr -d ',')
-ATTACKER_BLOCKS=$(grep "Attacker blocks (Node 0):" "$ATTACK_OUTPUT" | grep -oE '[0-9]+' | head -1)
-VICTIM_BLOCKS=$(grep "Victim blocks (Node 1):" "$ATTACK_OUTPUT" | grep -oE '[0-9]+' | head -1)
+ATTACKER_BLOCKS=$(grep "Attacker blocks (Node $ATTACKER_ID):" "$ATTACK_OUTPUT" | grep -oE '[0-9]+$' | head -1)
+VICTIM_BLOCKS=$(grep "Victim blocks (Node $VICTIM_ID):" "$ATTACK_OUTPUT" | grep -oE '[0-9]+$' | head -1)
 EXCLUSIONS=$(grep "Fissure attack detected:" "$ATTACK_OUTPUT" | grep -oE '[0-9]+' | head -1)
 
 echo "🎯 FISSURE ATTACK RESULTS:"
