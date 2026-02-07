@@ -110,6 +110,8 @@ impl Default for NodeParameters {
             .map(Duration::from_millis)
             .unwrap_or(node_defaults::default_leader_timeout());
 
+        println!("MYSTICETI_CONFIG: Loaded leader_timeout = {:?}", leader_timeout);
+
         Self {
             wave_length,
             leader_timeout,
