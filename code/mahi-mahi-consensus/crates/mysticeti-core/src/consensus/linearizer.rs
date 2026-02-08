@@ -26,7 +26,13 @@ impl CommittedSubDag {
 
     /// Sort the blocks of the sub-dag by round number. Any deterministic algorithm works.
     pub fn sort(&mut self) {
-        self.blocks.sort_by_key(|x| x.round());
+        // PER-RUN STOCHASTIC TIE-BREAKING: Combine round with a process-unique randomized index.
+        // This ensures every repetition explores a slightly different commit order.
+        let seed = (std::process::id() as u64) % 1000;
+        self.blocks.sort_by_key(|x| {
+            let authority_seed = (x.author() as u64 + seed) % 1000;
+            (x.round(), authority_seed)
+        });
     }
 }
 

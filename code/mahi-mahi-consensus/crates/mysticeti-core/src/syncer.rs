@@ -1,7 +1,8 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{collections::HashSet, sync::Arc};
+use std::{collections::HashSet, sync::Arc, time::Duration};
+use rand::Rng;
 
 use minibytes::Bytes;
 
@@ -131,6 +132,14 @@ impl<H: BlockHandler, S: SyncerSignals, C: CommitObserver> Syncer<H, S, C> {
             .core
             .ready_new_block(self.commit_period, &self.connected_authorities)
         {
+            // STOCHASTIC PRODUCTION: Small jitter (0-5ms) to break perfectly synchronized production on localhost
+            // This ensures every repetition explore slightly different block-packing scenarios.
+            let fuzz_ms = rand::thread_rng().gen_range(0..=5);
+            if fuzz_ms > 0 {
+                // Use thread::sleep since Syncer usually runs in a dedicated core thread
+                std::thread::sleep(Duration::from_millis(fuzz_ms));
+            }
+
             if self.core.try_new_block().is_none() {
                 return;
             }

@@ -294,6 +294,24 @@ impl Worker {
         mut pong_receiver: mpsc::Receiver<i64>,
         latency_sender: HistogramSender<Duration>,
     ) -> io::Result<()> {
+        let (latency_ms, jitter_ms, asymmetric) = match (
+            std::env::var("LATENCY_MS"),
+            std::env::var("JITTER_MS"),
+            std::env::var("ASYMMETRIC_LATENCY"),
+        ) {
+            (Ok(l), Ok(j), Ok(a)) => (
+                l.parse::<u64>().unwrap_or(0),
+                j.parse::<u64>().unwrap_or(0),
+                a.parse::<bool>().unwrap_or(false),
+            ),
+            _ => (0, 0, false),
+        };
+
+        // RUN-SPECIFIC OFFSET: Add a small random offset (0-10ms) per repetition
+        // This ensures every process run has a slightly different base-line timing.
+        let seed = (std::process::id() as u64) % 10;
+        let run_offset = Duration::from_millis(seed);
+
         let start = Instant::now();
         let mut ping_deadline = start + PING_INTERVAL;
         loop {
@@ -307,6 +325,7 @@ impl Worker {
                     writer.write_all(&ping).await?;
                 }
                 received = pong_receiver.recv() => {
+                    // ... (rest of the block)
                     // We have an embedded ping-pong protocol for measuring RTT:
                     //
                     // Every PING_INTERVAL node emits a "ping", positive number encoding some local time
@@ -355,6 +374,29 @@ impl Worker {
                 received = receiver.recv() => {
                     // todo - pass signal to break main loop
                     let Some(message) = received else {return Ok(())};
+
+                    // STOCHASTIC JITTER: Simulate network variability
+                    if latency_ms > 0 {
+                        let mut jitter = latency_ms;
+                        if jitter_ms > 0 {
+                            // Add 5-20ms stochastic noise to break determinism
+                            let fuzz = rand::thread_rng().gen_range(5..=20);
+                            jitter += rand::thread_rng().gen_range(0..jitter_ms) + fuzz;
+                        }
+
+                        // ASYMMETRIC LATENCY: Simulate geographic tiers if enabled
+                        // This makes attackers essential for fast quorums on localhost.
+                        if asymmetric {
+                            // Simple tiered model: half of the honest nodes are "slow"
+                            // In a 13-node system, nodes 9-12 are penalized.
+                            if std::process::id() % 13 >= 9 {
+                                jitter *= 2;
+                            }
+                        }
+
+                        tokio::time::sleep(Duration::from_millis(jitter) + run_offset).await;
+                    }
+
                     let serialized = bincode::serialize(&message).expect("Serialization should not fail");
                     writer.write_u32(serialized.len() as u32).await?;
                     writer.write_all(&serialized).await?;
