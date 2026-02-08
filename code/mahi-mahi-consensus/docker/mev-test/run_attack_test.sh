@@ -54,6 +54,11 @@ echo "========================================"
 # The scripts output "FINAL_ASR_RESULT: XX.XX%"
 FINAL_ASR=$(grep -a "FINAL_ASR_RESULT:" /app/results/test_output.log | tail -1 | sed -n 's/.*FINAL_ASR_RESULT: \([0-9.]*\)%.*/\1/p')
 
+if [ -z "$FINAL_ASR" ]; then
+    # Fallback to older format if needed
+    FINAL_ASR=$(grep -a "FINAL ATTACK SUCCESS RATE (ASR):" /app/results/test_output.log | tail -1 | sed -n 's/.*ASR): \([0-9.]*\)%.*/\1/p')
+fi
+
 if [ ! -z "$FINAL_ASR" ]; then
     echo "FINAL_ASR=$FINAL_ASR" > /app/results/asr_result.txt
     echo "FINAL_ASR_RESULT: $FINAL_ASR%"
