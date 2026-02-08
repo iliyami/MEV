@@ -48,3 +48,4 @@ build/
 # Nested git repositories (converting to monorepo)
 code/*/.git/
 
+*.csv.backup

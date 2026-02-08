@@ -35,7 +35,7 @@ EXPERIMENTS = {
     "scaling": {
         "params": ["NUM_NODES"],
         "values": [
-            [13], [25], [50]
+            [13], [25], [50], [100]
         ]
     },
     
@@ -393,10 +393,16 @@ def main():
                 for i, param in enumerate(params):
                     override[param] = values[i]
 
-                # Skip 100 nodes for sluggish attack to save time
-                if target_attack == "sluggish" and override.get("NUM_NODES", 0) > 50:
-                    print(f"  [-] Skipping {exp_name} | {target_attack} | {override['NUM_NODES']} nodes (Capped at 50)")
-                    continue
+                # Skip 100 nodes for mahimahi protocol to avoid consensus stalls
+                # Other protocols (Bullshark/Narwhal) handle 100 nodes fine
+                num_nodes = int(override.get("NUM_NODES", 0))
+                if num_nodes > 50:
+                    if target_protocol == "mahimahi":
+                        print(f"  [-] Skipping {exp_name} | {target_protocol} | {num_nodes} nodes (Mahi-Mahi Scaling Limit)")
+                        continue
+                    if target_attack == "sluggish":
+                        print(f"  [-] Skipping {exp_name} | {target_attack} | {num_nodes} nodes (Sluggish Scaling Limit)")
+                        continue
 
                 # Run Repetitions
                 for r in range(1, repetitions + 1):
