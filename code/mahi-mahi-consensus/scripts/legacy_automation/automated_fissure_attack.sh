@@ -358,12 +358,15 @@ rm -f "$ATTACK_OUTPUT" "$BASELINE_OUTPUT"
 # Return success if we got good ASR
 if [ "$ATTACK_ASR" != "Unknown" ]; then
     ATTACK_NUM=$(echo "$ATTACK_ASR" | sed 's/%//')
+    echo "FINAL_ASR_RESULT: ${ATTACK_NUM}%"
     if (( $(echo "$ATTACK_NUM >= 75" | bc -l) )); then
         exit 0
     else
         exit 1
     fi
 else
+    # Fallback to 0.00% instead of leaving it empty to avoid picking up stale values
+    echo "FINAL_ASR_RESULT: 0.00%"
     exit 1
 fi
 

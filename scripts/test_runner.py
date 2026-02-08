@@ -76,6 +76,11 @@ def run_attack_test(config: dict) -> dict:
     print(f"  Image: {tag}")
     print(f"  Attack Mode: {env_vars.get('ATTACK_MODE', 'unknown')}")
     
+    # Delete stale result file if it exists
+    asr_file = results_mount / "asr_result.txt"
+    if asr_file.exists():
+        asr_file.unlink()
+    
     # Build docker run command
     protocol_path = CODE_DIR / config['protocol']['path']
     cmd = [

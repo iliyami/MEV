@@ -24,9 +24,11 @@ export RUST_LOG=info,mysticeti_core::consensus=debug,mysticeti_core::core=warn
 
 echo "🚀 Starting $NUM_NODES nodes (NO ATTACK)..."
 
-for i in $(seq 0 $((NUM_NODES-1))); do
+# Shuffled startup to avoid bias
+for i in $(seq 0 $((NUM_NODES-1)) | shuf); do
     nohup ./target/release/mysticeti dry-run --committee-size $NUM_NODES --authority $i > ${output_dir}v${i}.log 2>&1 &
-    sleep 0.1
+    # Small sleep to prevent thundering herd but keep it fast
+    sleep 0.05
 done
 
 echo "✅ All $NUM_NODES nodes started"
