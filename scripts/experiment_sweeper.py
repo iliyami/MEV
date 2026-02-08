@@ -35,7 +35,7 @@ EXPERIMENTS = {
     "scaling": {
         "params": ["NUM_NODES"],
         "values": [
-            [13], [25], [50], [100]
+            [13], [25], [50]
         ]
     },
     
