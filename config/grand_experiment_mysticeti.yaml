@@ -1,0 +1,50 @@
+experiment:
+  name: "mysticeti_experiment_suite"
+  description: "Mysticeti Protocol Baseline Verification (Certified DAG)"
+
+protocol:
+  name: "mysticeti"
+  path: "mysticeti"
+  package_name: "mysticeti-core"
+  use_scripts: false
+
+docker:
+  tag: "mev-mysticeti:latest"
+  cpus: "32.0"
+  memory: "80g"
+
+test:
+  test_name: "test_fissure_attack_asr_13_nodes"
+  REPETITIONS: 5
+
+environment:
+  NUM_NODES: "13"
+  DURATION: "30"
+  ATTACK_MODE: "fissure" # [fissure, speculative, sluggish, certification_race]
+  ATTACKER_RATIO: "0.307"
+  VICTIM_RATIO: "0.231"
+  SLUGGISH_TIMEOUT_MULTIPLIER: "2.0"
+  NUMBER_OF_LEADERS: "1"
+  LEADER_TIMEOUT_MS: "2000"
+  WAVE_LENGTH: "3"
+  RUST_LOG: "info"
+
+experiments:
+  - name: "scaling"
+    description: "Standard node scaling performance"
+  - name: "offense_fissure"
+    description: "Fissure attack sensitivity"
+  - name: "offense_certification_race"
+    description: "Hyper-aggressive timing attack sensitivity"
+  - name: "mysticeti_timeout"
+    description: "Leader timeout (liveness) sensitivity"
+  - name: "mahimahi_wave"
+    description: "Wave depth (security) sensitivity"
+  - name: "mahimahi_leaders"
+    description: "Parallel leaders scaling"
+  - name: "env_geodist"
+    description: "Geographic distribution (Latency/Jitter) sensitivity"
+
+output:
+  expected_asr: 40.0
+  tolerance_percent: 20.0 # Wide tolerance for exploratory sweeps

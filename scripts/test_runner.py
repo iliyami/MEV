@@ -166,6 +166,18 @@ def run_local_test(config: dict) -> dict:
     if 'SPECULATIVE_P_MAX' not in current_env and 'speculative_p_max' in config.get('test', {}):
         current_env['SPECULATIVE_P_MAX'] = str(config['test']['speculative_p_max'])
 
+    # Parse LATENCY_JITTER for local jitter simulation (added to network.rs)
+    # Only fallback if LATENCY_MS/JITTER_MS are not already set directly
+    if 'LATENCY_JITTER' in current_env:
+        try:
+            parts = current_env['LATENCY_JITTER'].split()
+            if len(parts) >= 1 and 'LATENCY_MS' not in current_env:
+                current_env['LATENCY_MS'] = parts[0].replace('ms', '')
+            if len(parts) >= 2 and 'JITTER_MS' not in current_env:
+                current_env['JITTER_MS'] = parts[1].replace('ms', '')
+        except Exception:
+            pass
+
     print(f"  Command: {' '.join(cmd)}")
     
     # Run from the protocol directory

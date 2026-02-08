@@ -15,11 +15,11 @@ DEFAULT_RESULTS_FILE = "experiment_results.csv"
 # --- GLOBAL FIELDNAMES ---
 FIELDNAMES = [
     "timestamp", "protocol", "experiment", "attack_mode", "rep", "asr", "duration", "exit_code", 
-    "NUM_NODES", "ATTACKER_RATIO", "SPECULATIVE_P_MAX", "SLUGGISH_TIMEOUT_MULTIPLIER",
-    "DAG_STATE_CACHED_ROUNDS", "SYNC_TIMEOUT_MS", "GC_DEPTH", "LATENCY_JITTER",
+    "NUM_NODES", "ATTACKER_RATIO", "SPECULATIVE_P_MAX", "SLUGGISH_TIMEOUT_MULTIPLIER", "SLUGGISH_MULTIPLIER",
+    "DAG_STATE_CACHED_ROUNDS", "SYNC_TIMEOUT_MS", "GC_DEPTH", "LATENCY_JITTER", "LATENCY_MS", "JITTER_MS",
     "HEADER_SIZE", "MAX_HEADER_DELAY", "BATCH_SIZE", "MAX_BATCH_DELAY", "NUM_WORKERS",
-    "WAVE_LENGTH", "NUMBER_OF_LEADERS", "SPECULATIVE_STRATEGY",
-    "EXCLUSION_PROBABILITY", "HYBRID_EXCLUSION", "SLUGGISH_MULTIPLIER", "VICTIM_RATIO"
+    "WAVE_LENGTH", "NUMBER_OF_LEADERS", "SPECULATIVE_STRATEGY", "EXCLUSION_PROBABILITY", "HYBRID_EXCLUSION", 
+    "SIMPLE_EXCLUSION_PROB", "VICTIM_RATIO"
 ]
 
 # Keys that define the experiment's unique configuration (for deduplication)
@@ -91,7 +91,30 @@ EXPERIMENTS = {
         ]
     },
 
-    # 7. Protocol Specific - Narwhal Header Optimization
+    "env_geodist": {
+        "params": ["LATENCY_MS", "JITTER_MS"],
+        "values": [
+            [50, 5], [100, 10], [200, 20], [500, 50] # Latency sweeps with 10% jitter
+        ]
+    },
+
+    # 7. Attack Strength - Exclusion Intensity
+    "offense_exclusion": {
+        "params": ["EXCLUSION_PROBABILITY"],
+        "values": [
+            [0.1], [0.3], [0.5], [0.75], [0.9]
+        ]
+    },
+
+    # 8. Attack Strategy - Speculative Behavior
+    "mysticeti_strategy": {
+        "params": ["SPECULATIVE_STRATEGY"],
+        "values": [
+            ["simple"], ["smart"], ["aggressive"]
+        ]
+    },
+
+    # 9. Protocol Specific - Narwhal Header Optimization
     "defense_header": {
         "params": ["HEADER_SIZE", "MAX_HEADER_DELAY"],
         "values": [
@@ -137,6 +160,22 @@ EXPERIMENTS = {
         "values": [
             ["simple"], ["sophisticated"], ["traversal"], ["smart"], ["hybrid"]
         ]
+    },
+
+    # 13. Protocol Specific - Mysticeti Leader Timeout
+    "mysticeti_timeout": {
+        "params": ["LEADER_TIMEOUT_MS"],
+        "values": [
+            [500], [1000], [2000], [5000], [10000]
+        ]
+    },
+
+    # 14. Attack Power - Certification Race
+    "offense_certification_race": {
+        "params": ["ATTACKER_RATIO"],
+        "values": [
+            [0.1], [0.2], [0.33]
+        ]
     }
 }
 
@@ -159,6 +198,13 @@ def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_p
     
     config['environment']['ATTACK_MODE'] = attack_mode
     num_nodes = int(config_override.get('NUM_NODES', config['environment'].get('NUM_NODES', 13)))
+    duration = int(config['environment'].get('DURATION', 120))
+    # STOCHASTIC DURATION: Add 0-20s jitter to break block-count determinism
+    import random
+    jitter_secs = random.randint(0, 20)
+    config['environment']['DURATION'] = str(duration + jitter_secs)
+    print(f"  [Stochastic] Duration jitter: +{jitter_secs}s (Total: {duration + jitter_secs}s)")
+
     if num_nodes >= 50:
         config['environment']['DURATION'] = "300" 
         config['environment']['LEADER_TIMEOUT'] = "5000"
@@ -168,6 +214,15 @@ def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_p
     
     if no_build:
         config['environment']['NO_BUILD'] = "1"
+        
+    # Ensure LATENCY_MS/JITTER_MS are explicitly passed if available in override
+    # This prevents reliance on deprecated LATENCY_JITTER string parsing
+    if 'LATENCY_MS' in config_override:
+        config['environment']['LATENCY_MS'] = str(config_override['LATENCY_MS'])
+    if 'JITTER_MS' in config_override:
+        config['environment']['JITTER_MS'] = str(config_override['JITTER_MS'])
+    if 'EXCLUSION_PROBABILITY' in config_override:
+        config['environment']['EXCLUSION_PROBABILITY'] = str(config_override['EXCLUSION_PROBABILITY'])
     
     # Set correct test name based on attack mode
     if config['protocol']['name'] in ['bullshark', 'narwhal']:
@@ -177,6 +232,9 @@ def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_p
             "sluggish": "test_sluggish_attack_asr_dynamic"
         }
         config['test']['test_name'] = test_name_map.get(attack_mode, config['test'].get('test_name'))
+    elif config['protocol']['name'] == "mysticeti":
+        # Mysticeti uses test_{attack_mode}_attack_asr_13_nodes
+        config['test']['test_name'] = f"test_{attack_mode}_attack_asr_13_nodes"
     else:
         # For other protocols (mahimahi, etc.), use the default name from config or fallback
         # The internal scripts in their Docker images handle the ATTACK_MODE branches.
@@ -366,11 +424,12 @@ def main():
                     "defense_batching", # BATCH_SIZE, MAX_BATCH_DELAY
                     "scaling_workers"   # NUM_WORKERS
                 ])
-            elif target_protocol == "mahimahi":
+            elif target_protocol == "mysticeti":
                 relevant_experiments.extend([
                     "mahimahi_wave",    # WAVE_LENGTH
                     "mahimahi_leaders", # NUMBER_OF_LEADERS
-                    "mahimahi_strategy" # SPECULATIVE_STRATEGY
+                    "mysticeti_strategy", # SPECULATIVE_STRATEGY
+                    "offense_exclusion"  # EXCLUSION_PROBABILITY
                 ])
             
             # 3. Attack-Specific Experiments
@@ -435,7 +494,7 @@ def main():
                     else:
                         print(f"  [!] Not recording result with ASR={asr_result}% (Likely simulation failure)")
 
-                    # Wait 10s between repetitions to allow Docker/OS cleanup (Mahi-Mahi only)
+                    # Wait between repetitions to allow Docker/OS cleanup or socket release
                     if "mahi" in target_protocol.lower():
                         print("  [Sweeper] Cooling down 10s for Mahi-Mahi cleanup...")
                         try:
@@ -444,6 +503,9 @@ def main():
                         except Exception:
                             pass
                         time.sleep(10)
+                    else:
+                        # Local mode needs time for sockets to enter TIME_WAIT and clear
+                        time.sleep(5)
 
 if __name__ == "__main__":
     main()

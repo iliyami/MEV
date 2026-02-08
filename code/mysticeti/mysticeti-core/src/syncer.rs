@@ -12,6 +12,7 @@ use std::env;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
+use rand::Rng;
 use tokio::sync::watch::Sender;
 use tokio::sync::Notify;
 
@@ -193,7 +194,7 @@ impl<H: BlockHandler, S: SyncerSignals, C: CommitObserver> Syncer<H, S, C> {
                 };
                 
                 // Disable progressive lag to prevent WAL overflow - use fixed delays
-                let lag_multiplier = 1.0; // No progressive lag to prevent WAL overflow
+                let _lag_multiplier = 1.0; // No progressive lag to prevent WAL overflow
                 
                 // Calculate final delay
                 let delay_ms = ((self.commit_period as f64 * sluggish_timeout_multiplier * base_delay_ms as f64) 
@@ -221,6 +222,14 @@ impl<H: BlockHandler, S: SyncerSignals, C: CommitObserver> Syncer<H, S, C> {
                 .core
                 .ready_new_block(self.commit_period, connected_authorities)
         {
+            // STOCHASTIC PRODUCTION: Small jitter (0-5ms) to break perfectly synchronized production on localhost
+            // This ensures every repetition explore slightly different block-packing scenarios.
+            let fuzz_ms = rand::thread_rng().gen_range(0..=5);
+            if fuzz_ms > 0 {
+                // Use thread::sleep since Syncer usually runs in a dedicated core thread
+                std::thread::sleep(Duration::from_millis(fuzz_ms));
+            }
+
             if self.core.try_new_block().is_none() {
                 return;
             }

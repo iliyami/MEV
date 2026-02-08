@@ -143,6 +143,16 @@ impl BlockStore {
         self.read_index_vec(entries)
     }
 
+    pub fn get_block_at_authority_round(
+        &self,
+        authority: AuthorityIndex,
+        round: RoundNumber,
+    ) -> Option<Data<StatementBlock>> {
+        self.get_blocks_at_authority_round(authority, round)
+            .into_iter()
+            .next()
+    }
+
     pub fn block_exists_at_authority_round(
         &self,
         authority: AuthorityIndex,

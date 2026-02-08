@@ -18,6 +18,7 @@ use crate::{
     block_handler::BlockHandler, consensus::universal_committer::UniversalCommitterBuilder,
 };
 use crate::{block_manager::BlockManager, metrics::Metrics};
+use rand::Rng;
 use crate::{
     block_store::{
         BlockStore, BlockWriter, CommitData, OwnBlockData, WAL_ENTRY_COMMIT, WAL_ENTRY_PAYLOAD,
@@ -53,6 +54,7 @@ pub struct Core<H: BlockHandler> {
     rounds_in_epoch: RoundNumber,
     committer: UniversalCommitter,
     store_retain_rounds: u64,
+    wave_length: RoundNumber,
     force_immediate_proposal: bool,
 }
 
@@ -147,8 +149,9 @@ impl<H: BlockHandler> Core<H> {
             signer,
             epoch_manager,
             rounds_in_epoch: parameters.rounds_in_epoch(),
-            store_retain_rounds: parameters.store_retain_rounds,
             committer,
+            store_retain_rounds: parameters.store_retain_rounds,
+            wave_length: parameters.wave_length(),
             force_immediate_proposal: false,
         };
 
@@ -225,13 +228,11 @@ impl<H: BlockHandler> Core<H> {
                 if is_attacker {
                     // AGGRESSIVE STRATEGY 1: Detect victim blocks and trigger immediate proposal
                     let mut victim_block_detected = false;
-                    let mut victim_round = 0;
                     for block in &result {
                         let author_index = block.author() as usize;
                         let is_victim = author_index >= (committee_size - victim_count);
                         if is_victim {
                             victim_block_detected = true;
-                            victim_round = block.round();
                             tracing::info!(
                                 "🏃 CERTIFICATION RACE: Detected victim block {} from authority {} at round {} - triggering immediate proposal",
                                 block.reference(),
@@ -243,7 +244,7 @@ impl<H: BlockHandler> Core<H> {
                     
                     // ULTRA-AGGRESSIVE STRATEGY: Maximize block production for round-level advantages
                     let current_round = self.threshold_clock.get_round();
-                    let wave_position = current_round % 3; // 0=leader, 1=voting, 2=decision
+                    let wave_position = current_round % self.wave_length; // 0=leader, 1=voting ...
                     let is_leader_round = wave_position == 0;
                     let is_decision_round = wave_position == 2;
                     let last_proposed_round = self.last_own_block.block.round();
@@ -319,6 +320,16 @@ impl<H: BlockHandler> Core<H> {
         let is_attacker = (attack_mode == "fissure" || attack_mode == "speculative" || attack_mode == "sluggish" || attack_mode == "certification_race")
             && (self.authority as usize) < attacker_count;
         let _is_victim = (self.authority as usize) >= (committee_size - victim_count);
+
+        let default_exclusion: f64 = env::var("EXCLUSION_PROBABILITY")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0.8);
+        let _hybrid_exclusion: f64 = env::var("HYBRID_EXCLUSION")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0.05);
+        let _speculative_strategy = env::var("SPECULATIVE_STRATEGY").unwrap_or_else(|_| "smart".to_string());
         
         // FISSURE ATTACK (Mysticeti-Specific): Strategic exclusion for wave-based consensus
         // Key insight: Decision rounds (2,5,8...) vote for leaders. Priority = attacker decision blocks > attacker leader > honest > victim
@@ -356,8 +367,8 @@ impl<H: BlockHandler> Core<H> {
             
             // STEP 1: Identify target victim blocks for same-round frontrunning
             // WAVE-AWARE TARGETING: Exploit wave structure and boundaries
-            let current_wave = clock_round / 3;
-            let wave_position = clock_round % 3; // 0=leader, 1=voting, 2=decision
+            let current_wave = clock_round / self.wave_length;
+            let wave_position = clock_round % self.wave_length; // 0=leader, 1=voting, 2=decision
             
             tracing::info!(
                 "🌊 Wave-Aware Fissure: current_wave={}, wave_pos={} ({}), clock_round={}",
@@ -367,255 +378,142 @@ impl<H: BlockHandler> Core<H> {
                 clock_round
             );
             
+            // STEP 1: Identify all victim blocks currently in the window
             let mut target_victim_blocks = Vec::new();
-            for include in &all_includes {
-                let include_author = include.authority as usize;
-                let is_victim = include_author >= (committee_size - victim_count);
-                
-                if is_victim {
-                    let victim_wave = include.round / 3;
-                    let victim_wave_pos = include.round % 3;
-                    let round_diff = clock_round.saturating_sub(include.round);
-                    
-                    // WAVE-ALIGNED TARGETING (most effective):
-                    // 1. Same wave, any position (intra-wave frontrunning)
-                    // 2. Decision rounds from previous wave (inter-wave boundary attacks)
-                    // 3. Current round or 1 round behind (timing attacks)
-                    // 4. Cross-wave leader/decision rounds (certification disruption)
-                    
-                    let same_wave = victim_wave == current_wave;
-                    let previous_wave_decision = (victim_wave == current_wave.saturating_sub(1)) && (victim_wave_pos == 2);
-                    let close_timing = round_diff <= 1;
-                    let is_decision = victim_wave_pos == 2;
-                    let is_leader = victim_wave_pos == 0;
-                    let is_critical_round = (is_decision || is_leader) && include.round >= 3;
-                    
-                    // Target if: same wave, wave boundary, close timing, or critical rounds
-                    if same_wave || previous_wave_decision || (close_timing && include.round >= 3) || is_critical_round {
-                        target_victim_blocks.push(*include);
-                        tracing::info!(
-                            "🎯 WAVE-FRONTRUN TARGET: Victim block {} at round {} wave={} pos={} ({}) - current wave={} pos={} ({})",
-                            include,
-                            include.round,
-                            victim_wave,
-                            victim_wave_pos,
-                            match victim_wave_pos { 0 => "LEADER", 1 => "VOTING", 2 => "DECISION", _ => "?" },
-                            current_wave,
-                            wave_position,
-                            if same_wave { "SAME_WAVE" } else if previous_wave_decision { "WAVE_BOUNDARY" } else if close_timing { "CLOSE_TIMING" } else { "CRITICAL" }
-                        );
+            
+            // Look at recent rounds in the window to find victim targets
+            let min_round = clock_round.saturating_sub(self.wave_length * 2);
+            for round in min_round..=clock_round {
+                for authority in 0..committee_size {
+                    let is_victim = authority >= (committee_size - victim_count);
+                    if is_victim {
+                        if let Some(block) = self.block_store.get_block_at_authority_round(authority as AuthorityIndex, round) {
+                            let block_ref = *block.reference();
+                            let victim_wave = round / self.wave_length;
+                            let victim_wave_pos = round % self.wave_length;
+                            
+                            let same_wave = victim_wave == current_wave;
+                            let previous_wave_decision = (victim_wave == current_wave.saturating_sub(1)) && (victim_wave_pos == 2);
+                            let close_timing = (clock_round as i64 - round as i64).abs() <= 1;
+                            let is_decision = victim_wave_pos == 2;
+                            let is_leader = victim_wave_pos == 0;
+                            let is_critical_round = (is_decision || is_leader) && round >= 3;
+
+                            if same_wave || previous_wave_decision || (close_timing && round >= 3) || is_critical_round {
+                                target_victim_blocks.push(block_ref);
+                                tracing::info!(
+                                    "🎯 WAVE-FRONTRUN TARGET: Victim block {} at round {} wave={} pos={} ({})",
+                                    block_ref, round, victim_wave, victim_wave_pos,
+                                    match victim_wave_pos { 0 => "LEADER", 1 => "VOTING", 2 => "DECISION", _ => "?" }
+                                );
+                            }
+                        }
                     }
                 }
             }
             
-            // STEP 2: Categorize all blocks
+            if target_victim_blocks.is_empty() {
+                tracing::debug!("🎯 No victim targets identified in window (min_round={})", min_round);
+            } else {
+                tracing::info!("🎯 Identified {} victim targets for frontrunning", target_victim_blocks.len());
+            }
+
+            // STEP 2: Categorize all blocks with safety priority
             let mut attacker_blocks = Vec::new();
-            let mut honest_blocks = Vec::new();
-            let mut target_victim_blocks_list = Vec::new(); // Specific blocks we're frontrunning
-            let mut other_victim_blocks = Vec::new(); // Other victim blocks
-            let mut parent_round_stake: u64 = 0;
+            let mut clean_honest_blocks = Vec::new();
+            let mut dirty_honest_blocks = Vec::new();
+            let mut target_victim_blocks_list = Vec::new(); 
+            let mut other_victim_blocks = Vec::new();
+            
+            // Pass 1: Categorize all available blocks
+            let mut current_parent_stake = self.committee.get_stake(self.authority).unwrap_or(0);
             
             for include in &all_includes {
-                if *include == own_prev_block {
-                    continue;
-                }
+                if *include == own_prev_block { continue; }
                 let include_stake = self.committee.get_stake(include.authority).unwrap_or(0);
                 let is_victim = (include.authority as usize) >= (committee_size - victim_count);
                 let is_attacker = (include.authority as usize) < attacker_count;
                 let is_parent = include.round == quorum_round;
-                let is_genesis = include.round == 0;
                 let is_target = target_victim_blocks.contains(include);
                 
-                if is_genesis || include.round <= 2 {
-                    filtered_includes.push(*include); // Always include early rounds
-                    if is_parent {
-                        parent_round_stake += include_stake;
-                    }
+                if include.round <= 2 {
+                    clean_honest_blocks.push((*include, include_stake, is_parent));
+                    if is_parent { current_parent_stake += include_stake; }
                     continue;
-                }
-                
-                if is_parent {
-                    parent_round_stake += include_stake;
-                }
-                
-                // Target victim blocks: EXCLUDE 100% (same-round frontrunning)
-                if is_target {
-                    tracing::info!(
-                        "⚔️ EXCLUDING TARGET: Victim block {} from round {} (same-round frontrun)",
-                        include,
-                        include.round
-                    );
-                    target_victim_blocks_list.push((*include, include_stake, is_parent));
-                    continue; // Skip entirely - this is our frontrunning target
                 }
                 
                 if is_attacker {
                     attacker_blocks.push((*include, include_stake, is_parent));
+                    if is_parent { current_parent_stake += include_stake; }
                 } else if !is_victim {
-                    honest_blocks.push((*include, include_stake, is_parent));
+                    let mut includes_target = false;
+                    if let Some(block) = self.block_store.get_block(*include) {
+                        for parent_ref in block.includes() {
+                            if target_victim_blocks.contains(parent_ref) {
+                                includes_target = true;
+                                break;
+                            }
+                        }
+                    }
+                    if includes_target {
+                        dirty_honest_blocks.push((*include, include_stake, is_parent));
+                    } else {
+                        clean_honest_blocks.push((*include, include_stake, is_parent));
+                        if is_parent { current_parent_stake += include_stake; }
+                    }
+                } else if is_target {
+                    target_victim_blocks_list.push((*include, include_stake, is_parent));
                 } else {
-                    // Other victim blocks (not targets) - will use moderate exclusion
                     other_victim_blocks.push((*include, include_stake, is_parent));
                 }
             }
-            
-            // CRITICAL: Attacker blocks MUST come first for round-first ordering advantage
-            // In Mysticeti (like Bullshark), lower rounds = earlier position in global order
-            // Strategy: Prioritize attacker blocks by sorting with lower rounds first
-            
-            // Sort attacker blocks by round ASCENDING (lower rounds = higher priority)
-            // Within same round, attacker authorities come before others
-            attacker_blocks.sort_by_key(|(include, _, _)| (include.round, include.authority));
-            
-            // Insert attacker blocks at the START (after own_prev_block) for maximum priority
-            let mut attacker_insert_pos = 1; // After own_prev_block
-            for (include, stake, is_parent) in attacker_blocks {
-                // Insert at beginning for maximum ordering priority
-                if attacker_insert_pos < filtered_includes.len() {
-                    filtered_includes.insert(attacker_insert_pos, include);
-                    attacker_insert_pos += 1;
-                } else {
-                    filtered_includes.push(include);
+
+            // Pass 2: Assemble includes starting with clean blocks
+            // Add clean honest blocks
+            for (include, _, _) in &clean_honest_blocks {
+                filtered_includes.push(*include);
+            }
+            // Add attacker blocks
+            for (include, _, _) in &attacker_blocks {
+                filtered_includes.push(*include);
+            }
+
+            // Pass 3: Fill quorum using dirty/victim blocks ONLY IF NECESSARY
+            // Priority: Dirty Honest -> Target Victim -> Other Victim
+            if current_parent_stake < quorum_threshold {
+                for (include, stake, is_parent) in &dirty_honest_blocks {
+                    if current_parent_stake >= quorum_threshold { break; }
+                    filtered_includes.push(*include);
+                    if *is_parent { current_parent_stake += stake; }
                 }
-                if is_parent {
-                    parent_round_stake += stake;
+            } else {
+                for (include, _, _) in &dirty_honest_blocks {
+                    tracing::warn!("🛡️ INDIRECT EXCLUSION: Block {} (Dirty Honest)", include);
+                }
+            }
+
+            if current_parent_stake < quorum_threshold {
+                for (include, stake, is_parent) in &target_victim_blocks_list {
+                    if current_parent_stake >= quorum_threshold { break; }
+                    filtered_includes.push(*include);
+                    if *is_parent { current_parent_stake += stake; }
+                }
+            } else {
+                for (include, _, _) in &target_victim_blocks_list {
+                    tracing::warn!("⚔️ EXCLUDING TARGET: Victim block {}", include);
                 }
             }
             
-            // Sort honest blocks by round
-            honest_blocks.sort_by_key(|(include, _, _)| (include.round, include.authority));
-            for (include, stake, is_parent) in honest_blocks {
-                filtered_includes.push(include);
-                if is_parent {
-                    parent_round_stake += stake;
-                }
-            }
-            
-            // Add other victim blocks with MODERATE exclusion (maintain quorum!)
-            // Key insight: Moderate exclusion maintains quorum while still being effective
-            other_victim_blocks.sort_by_key(|(include, _, _)| (include.round, include.authority));
-            
-            for (include, stake, is_parent) in other_victim_blocks {
-                if is_parent {
-                    let remaining = parent_round_stake;
-                    
-                    // CRITICAL: Always check quorum BEFORE excluding
-                    // Log quorum status for monitoring
-                    let quorum_status = if remaining >= quorum_threshold {
-                        "OK"
-                    } else {
-                        "LOW - must include"
-                    };
-                    if remaining < quorum_threshold + 100 {
-                        tracing::debug!(
-                            "Quorum check: remaining={}, threshold={}, status={}",
-                            remaining,
-                            quorum_threshold,
-                            quorum_status
-                        );
-                    }
-                    
-                    if remaining >= quorum_threshold {
-                        // WAVE-AWARE EXCLUSION: Exploit wave structure and boundaries
-                        let victim_wave = include.round / 3;
-                        let victim_wave_pos = include.round % 3; // 0=leader, 1=voting, 2=decision
-                        let is_decision = victim_wave_pos == 2; // Decision: 2,5,8...
-                        let is_leader = victim_wave_pos == 0; // Leader: 0,3,6...
-                        let is_voting = victim_wave_pos == 1; // Voting: 1,4,7...
-                        
-                        // WAVE BOUNDARY DETECTION: Extra aggressive at wave transitions
-                        let current_wave = clock_round / 3;
-                        let is_wave_boundary = (victim_wave < current_wave) && is_decision;
-                        
-                        // CERTIFICATION-AWARE EXCLUSION:
-                        // Decision rounds vote for leaders → Excluding prevents certification
-                        // Inter-wave boundaries are vulnerable points
-                        let exclusion_prob = if is_wave_boundary {
-                            0.90 // 90% at wave boundaries (inter-wave fissure!)
-                        } else if is_decision {
-                            0.87 // 87% for decision rounds (prevent certification)
-                        } else if is_leader {
-                            0.82 // 82% for leader rounds (critical for commits)
-                        } else {
-                            0.75 // 75% for voting rounds (baseline exclusion)
-                        };
-                        
-                        let should_exclude = {
-                            let block_digest: &[u8] = include.digest.as_ref();
-                            let mut seed: u64 = 0;
-                            for (i, &byte) in block_digest.iter().take(8).enumerate() {
-                                seed ^= (byte as u64) << (i * 8);
-                            }
-                            seed = seed.wrapping_add(include.round as u64 * 31);
-                            seed = seed.wrapping_add(include.authority as u64 * 17);
-                            (seed % 10000) as f64 / 10000.0 < exclusion_prob
-                        };
-                        
-                        if !should_exclude {
-                            filtered_includes.push(include);
-                            parent_round_stake += stake;
-                        } else {
-                            tracing::debug!(
-                                "🌊 Wave-Fissure: Excluded parent victim block {} wave={} pos={} ({}) - wave_boundary={} excl_prob={:.0}%",
-                                include,
-                                victim_wave,
-                                victim_wave_pos,
-                                match victim_wave_pos { 0 => "LEADER", 1 => "VOTING", 2 => "DECISION", _ => "?" },
-                                is_wave_boundary,
-                                exclusion_prob * 100.0
-                            );
-                        }
-                    } else {
-                        // MUST include to maintain quorum
-                        filtered_includes.push(include);
-                        parent_round_stake += stake;
-                    }
+            // For remaining other victims, apply stochastic exclusion IF quorum is safe
+            for (include, stake, is_parent) in &other_victim_blocks {
+                if *is_parent && current_parent_stake < quorum_threshold {
+                     filtered_includes.push(*include);
+                     current_parent_stake += stake;
+                } else if rand::thread_rng().gen_bool(default_exclusion.min(1.0).max(0.0)) {
+                     tracing::info!("🎲 STOCHASTIC EXCLUSION: Victim block {}", include);
                 } else {
-                    // Non-parent: AGGRESSIVE wave-aware exclusion
-                    let victim_wave = include.round / 3;
-                    let victim_wave_pos = include.round % 3;
-                    let is_decision = victim_wave_pos == 2;
-                    let is_leader = victim_wave_pos == 0;
-                    let current_wave = clock_round / 3;
-                    let is_wave_boundary = (victim_wave < current_wave) && is_decision;
-                    
-                    // CERTIFICATION-AWARE: Can push higher since not affecting parent quorum
-                    // Target: Prevent victim transactions from getting >2/3 certification
-                    let exclusion_prob = if is_wave_boundary {
-                        0.93 // 93% at wave boundaries (maximum inter-wave fissure)
-                    } else if is_decision {
-                        0.90 // 90% for decision rounds (prevent certification)
-                    } else if is_leader {
-                        0.86 // 86% for leader rounds
-                    } else {
-                        0.80 // 80% for voting rounds
-                    };
-                    
-                    let should_exclude = {
-                        let block_digest: &[u8] = include.digest.as_ref();
-                        let mut seed: u64 = 0;
-                        for (i, &byte) in block_digest.iter().take(8).enumerate() {
-                            seed ^= (byte as u64) << (i * 8);
-                        }
-                        seed = seed.wrapping_add(include.round as u64 * 31);
-                        seed = seed.wrapping_add(include.authority as u64 * 17);
-                        (seed % 10000) as f64 / 10000.0 < exclusion_prob
-                    };
-                    
-                    let round_gap = clock_round.saturating_sub(include.round);
-                    if !should_exclude || round_gap < 2 {
-                        filtered_includes.push(include);
-                    } else {
-                        tracing::debug!(
-                            "🌊 Wave-Fissure: Excluded non-parent victim block {} wave={} pos={} ({}) - wave_boundary={} excl_prob={:.0}%",
-                            include,
-                            victim_wave,
-                            victim_wave_pos,
-                            match victim_wave_pos { 0 => "LEADER", 1 => "VOTING", 2 => "DECISION", _ => "?" },
-                            is_wave_boundary,
-                            exclusion_prob * 100.0
-                        );
-                    }
+                     filtered_includes.push(*include);
+                     if *is_parent { current_parent_stake += stake; }
                 }
             }
             

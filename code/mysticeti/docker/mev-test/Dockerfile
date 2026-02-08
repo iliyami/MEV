@@ -9,10 +9,13 @@ RUN apt-get update && apt-get install -y \
     libclang-dev \
     pkg-config \
     libssl-dev \
+    libfontconfig1-dev \
     curl \
     git \
     python3 \
     python3-pip \
+    iproute2 \
+    procps \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory

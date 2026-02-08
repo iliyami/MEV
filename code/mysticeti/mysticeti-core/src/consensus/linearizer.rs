@@ -64,9 +64,17 @@ impl CommittedSubDag {
         CommittedSubDag::new(*leader_block_ref, blocks, timestamp_ms, commit_data.height)
     }
 
-    /// Sort the blocks of the sub-dag by round number. Any deterministic algorithm works.
+    /// Sort the blocks of the sub-dag using a stable but per-process randomized key.
+    /// This provides experimental variance across repetitions while maintaining consistency within a run.
     pub fn sort(&mut self) {
-        self.blocks.sort_by_key(|x| x.round());
+        let seed = std::process::id() as u64;
+        tracing::debug!("🎲 Stochastic Sort (PID={})", seed);
+        self.blocks.sort_by_key(|x| {
+            // Mix the authority and round with the process seed to create a unique stable order
+            let mut h = seed.wrapping_add(x.round() as u64).wrapping_mul(0x9E3779B9);
+            h = h.wrapping_add(x.author() as u64).wrapping_mul(0x85EBCA6B);
+            (x.round(), h)
+        });
     }
 }
 

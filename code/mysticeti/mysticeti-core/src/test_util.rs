@@ -186,8 +186,10 @@ pub async fn networks_and_addresses(
     network_connection_max_latency: Duration,
 ) -> (Vec<Network>, Vec<SocketAddr>) {
     let host = Ipv4Addr::LOCALHOST;
+    // Use a random port range below 6000 to satisfy the protocol's port*10 requirement
+    let base_port = 2000 + (std::process::id() % 4000) as u16;
     let addresses: Vec<_> = (0..metrics.len())
-        .map(|i| SocketAddr::V4(SocketAddrV4::new(host, 5001 + i as u16)))
+        .map(|i| SocketAddr::V4(SocketAddrV4::new(host, base_port + i as u16)))
         .collect();
     let networks =
         addresses
