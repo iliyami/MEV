@@ -110,6 +110,10 @@ def run_attack_test(config: dict) -> dict:
     
     cmd.append(tag)
     
+    # Add protocol-specific command to override Dockerfile CMD
+    if config['protocol']['name'] == "mysticeti":
+        cmd.append("/app/docker/mev-test/run_attack_test.sh")
+    
     print(f"  Command: {' '.join(cmd[:10])}...")
     
     result = subprocess.run(cmd, capture_output=False)
