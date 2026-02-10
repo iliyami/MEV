@@ -1,7 +1,36 @@
 import argparse
 import sys
-import yaml
 import os
+
+# Robust YAML import to avoid shadowing by local folders or broken venv
+def _get_working_yaml():
+    # Try current directory first (where we restored the working copy)
+    root_dir = os.getcwd()
+    if os.path.isdir(os.path.join(root_dir, 'yaml')):
+        if root_dir not in sys.path:
+            sys.path.insert(0, root_dir)
+        if 'yaml' in sys.modules:
+            del sys.modules['yaml']
+        try:
+            import yaml
+            if hasattr(yaml, 'safe_load'): return yaml
+        except: pass
+
+    # Try site-packages
+    for path in sys.path:
+        if 'site-packages' in path and os.path.isdir(os.path.join(path, 'yaml')):
+            sys.path.insert(0, path)
+            if 'yaml' in sys.modules: del sys.modules['yaml']
+            try:
+                import yaml
+                if hasattr(yaml, 'safe_load'): return yaml
+            except: pass
+    
+    # Fallback
+    import yaml
+    return yaml
+
+yaml = _get_working_yaml()
 import subprocess
 import itertools
 import csv
@@ -235,6 +264,9 @@ def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_p
     elif config['protocol']['name'] == "mysticeti":
         # Mysticeti uses test_{attack_mode}_attack_asr_13_nodes
         config['test']['test_name'] = f"test_{attack_mode}_attack_asr_13_nodes"
+    elif config['protocol']['name'] == "alephbft":
+        # AlephBFT uses attack_tests::{attack_mode}_attack_test::test_{attack_mode}_attack_asr_13_nodes
+        config['test']['test_name'] = f"attack_tests::{attack_mode}_attack_test::test_{attack_mode}_attack_asr_13_nodes"
     else:
         # For other protocols (mahimahi, etc.), use the default name from config or fallback
         # The internal scripts in their Docker images handle the ATTACK_MODE branches.
@@ -256,7 +288,7 @@ def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_p
     try:
         # 100 Nodes Sluggish can take > 60 minutes
         num_nodes = int(config['environment'].get('NUM_NODES', 0))
-        timeout = 7200 if (attack_mode == "sluggish" and num_nodes >= 50) else 3600
+        timeout = 10000 if (attack_mode == "sluggish" and num_nodes >= 50) else 7200
         
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         output = result.stdout + result.stderr
@@ -424,12 +456,12 @@ def main():
                     "defense_batching", # BATCH_SIZE, MAX_BATCH_DELAY
                     "scaling_workers"   # NUM_WORKERS
                 ])
-            elif target_protocol == "mysticeti":
+            elif target_protocol in ["mysticeti", "alephbft"]:
                 relevant_experiments.extend([
-                    "mahimahi_wave",    # WAVE_LENGTH
-                    "mahimahi_leaders", # NUMBER_OF_LEADERS
-                    "mysticeti_strategy", # SPECULATIVE_STRATEGY
-                    "offense_exclusion"  # EXCLUSION_PROBABILITY
+                    "mahimahi_wave",    # WAVE_LENGTH (Mahi only)
+                    "mahimahi_leaders", # NUMBER_OF_LEADERS (Mahi only)
+                    "mysticeti_strategy", # SPECULATIVE_STRATEGY (Mahi only)
+                    "offense_exclusion"  # EXCLUSION_PROBABILITY (Both)
                 ])
             
             # 3. Attack-Specific Experiments

@@ -1,6 +1,6 @@
 use crate::{
     config::Config,
-    units::{FullUnit, PreUnit, SignedUnit, Unit},
+    units::{PreUnit, SignedUnit, Unit},
     Data, DataProvider, Hasher, MultiKeychain, Receiver, Round, Sender, Terminator,
 };
 use futures::{
@@ -57,8 +57,8 @@ where
             let candidate_unit = packer.pack(preunit.clone(), Some(candidate_data.clone()));
             let candidate_hash = candidate_unit.hash();
             
-            // Lexicographic comparison: larger hash wins
-            if candidate_hash > best_hash {
+            // Lexicographic comparison: smaller hash wins for leader election in AlephBFT
+            if candidate_hash < best_hash {
                 best_hash = candidate_hash;
                 best_data = candidate_data;
             }
@@ -115,7 +115,7 @@ async fn create_unit<U: Unit>(
 async fn process_unit<U: Unit>(
     creator: &mut Creator<U::Hasher>,
     incoming_parents: &mut Receiver<U>,
-    is_attacker: bool,
+    _is_attacker: bool,
 ) -> anyhow::Result<(), CreatorError> {
     // SLUGGISH ATTACK: Strategic delay in processing incoming units
     // Strategy: Small delay for all nodes in sluggish mode to manipulate timing

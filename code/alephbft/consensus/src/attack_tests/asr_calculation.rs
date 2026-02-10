@@ -80,34 +80,49 @@ pub fn calculate_asr_paper_aligned(
     // - ASR = successes / total_pairs
 
     let mut successes = 0;
-    let mut total_pairs = 0;
+    let mut total_trials = 0;
 
-    // ALL-PAIRS matching (not one-to-one)
-    for (att_height, att_round) in &attacker_blocks {
-        for (vic_height, vic_round) in &victim_blocks {
-            // Filter: attacker created block AFTER witnessing victim
-            if *att_round >= *vic_round {
-                total_pairs += 1;
+    // PAPER'S METHODOLOGY (Optimized for AlephBFT):
+    // - For each victim block, find the closest attacker block (by round)
+    // - Filter: attacker_round >= victim_round
+    // - Success: attacker_height < victim_height
+    for (vic_height, vic_round) in &victim_blocks {
+        // Find attacker blocks created at same round or AFTER victim block
+        let mut candidate_attackers: Vec<(usize, Round)> = attacker_blocks
+            .iter()
+            .filter(|(_, att_round)| *att_round >= *vic_round)
+            .cloned()
+            .collect();
 
-                // Success: attacker block height < victim block height
-                // (attacker block appears earlier in finalization order)
-                if *att_height < *vic_height {
-                    successes += 1;
-                }
-            }
+        if candidate_attackers.is_empty() {
+            continue; // No matching attacker block for this victim
+        }
+
+        // Match the CLOSEST attacker block (by round difference)
+        candidate_attackers.sort_by_key(|(_, att_round)| {
+            *att_round as i32 - *vic_round as i32
+        });
+
+        let (att_height, _) = candidate_attackers[0]; // Closest attacker block
+
+        total_trials += 1;
+
+        // Success = attacker block height < victim block height
+        if att_height < *vic_height {
+            successes += 1;
         }
     }
 
-    if total_pairs == 0 {
-        log::warn!("No valid pairs found (no attacker blocks created after victim blocks)");
+    if total_trials == 0 {
+        log::warn!("No valid trials found (no attacker blocks created after victim blocks)");
         return 0.0;
     }
 
-    let asr = (successes as f64 / total_pairs as f64) * 100.0;
+    let asr = (successes as f64 / total_trials as f64) * 100.0;
     log::info!(
-        "   ASR calculation (all-pairs): {}/{} pairs = {:.2}%",
+        "   ASR calculation (closest-match): {}/{} trials = {:.2}%",
         successes,
-        total_pairs,
+        total_trials,
         asr
     );
 

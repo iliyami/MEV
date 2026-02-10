@@ -1,0 +1,31 @@
+experiment:
+  name: "alephbft_performance"
+  description: "AlephBFT MEV Attack Simulation Suite"
+
+protocol:
+  name: "alephbft"
+  path: "alephbft"
+
+test:
+  REPETITIONS: 1
+
+scaling:
+  network_sizes: [13]
+  attacker_ratios: [0.308]
+  victim_ratios: [0.231]
+  latencies: [0, 50, 100]
+  jitters: [0, 10, 20]
+
+attack:
+  modes: ["fissure", "sluggish"]
+  durations: [30]
+
+environment:
+  NUM_NODES: "13"
+  DURATION: "30"
+  ATTACK_MODE: "fissure"
+  ATTACKER_RATIO: "0.308"
+  VICTIM_RATIO: "0.231"
+  SPECULATIVE_P_MAX: "50"
+  SLUGGISH_PROCESSING_DELAY_MS: "11"
+  EXCLUSION_PROBABILITY: "0.95"

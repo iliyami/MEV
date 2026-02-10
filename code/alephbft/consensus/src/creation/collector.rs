@@ -193,7 +193,7 @@ impl<H: Hasher> UnitsCollector<H> {
             
             if is_victim {
                 let is_parent_round = round == parent_round;
-                let mut exclusion_prob = base_optimized_prob;
+                let mut exclusion_prob;
                 
                 // MAXIMUM AGGRESSIVENESS strategy for 80%+ ASR
                 // Key insight: With 4 attackers + 6 honest = 10 > 9 (quorum), we can exclude all 3 victims
@@ -241,7 +241,7 @@ impl<H: Hasher> UnitsCollector<H> {
 
         // Final quorum verification - count only parent-round units for quorum
         let mut remaining_parent_round_count = 0;
-        for (idx, &(_, round)) in filtered.iter() {
+        for (_idx, &(_, round)) in filtered.iter() {
             if round == parent_round {
                 remaining_parent_round_count += 1;
             }

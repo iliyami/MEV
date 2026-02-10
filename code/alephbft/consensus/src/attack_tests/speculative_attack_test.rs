@@ -82,7 +82,7 @@ async fn test_speculative_attack_asr_13_nodes() {
     let spawner = Spawner::new();
     
     // Create network hub and get networks for each node
-    let (mut net_hub, networks) = Router::new(n_members);
+    let (net_hub, networks) = Router::new(n_members);
     spawner.spawn("network-hub", net_hub);
     
     // Create data providers and spawn members

@@ -13,8 +13,37 @@ import argparse
 import os
 import subprocess
 import sys
-import yaml
 from pathlib import Path
+
+# Robust YAML import to avoid shadowing by local folders or broken venv
+def _get_working_yaml():
+    # Try current directory first (where we restored the working copy)
+    root_dir = Path(__file__).parent.parent.resolve()
+    if (root_dir / 'yaml').is_dir():
+        if str(root_dir) not in sys.path:
+            sys.path.insert(0, str(root_dir))
+        if 'yaml' in sys.modules:
+            del sys.modules['yaml']
+        try:
+            import yaml
+            if hasattr(yaml, 'safe_load'): return yaml
+        except: pass
+
+    # Try site-packages
+    for path in sys.path:
+        if 'site-packages' in path and os.path.isdir(os.path.join(path, 'yaml')):
+            sys.path.insert(0, path)
+            if 'yaml' in sys.modules: del sys.modules['yaml']
+            try:
+                import yaml
+                if hasattr(yaml, 'safe_load'): return yaml
+            except: pass
+    
+    # Fallback
+    import yaml
+    return yaml
+
+yaml = _get_working_yaml()
 
 # Base paths
 BASE_DIR = Path(__file__).parent.parent
@@ -87,16 +116,34 @@ def run_attack_test(config: dict) -> dict:
         "docker", "run", "--rm",
         "--cap-add=NET_ADMIN", # Enable Traffic Control (tc)
         "-v", f"{results_mount}:/app/results",
-        # Mount local fixed scripts over the container's scripts to avoid rebuilds
-        "-v", f"{protocol_path}/scripts/legacy_automation/automated_fissure_attack.sh:/app/scripts/legacy_automation/automated_fissure_attack.sh",
-        "-v", f"{protocol_path}/scripts/legacy_automation/automated_speculative_attack.sh:/app/scripts/legacy_automation/automated_speculative_attack.sh",
-        "-v", f"{protocol_path}/scripts/legacy_automation/automated_sluggish_attack.sh:/app/scripts/legacy_automation/automated_sluggish_attack.sh",
-        "-v", f"{protocol_path}/scripts/calculate-fissure-asr.py:/app/scripts/calculate-fissure-asr.py",
-        "-v", f"{protocol_path}/scripts/calculate-sluggish-asr.py:/app/scripts/calculate-sluggish-asr.py",
-        "-v", f"{protocol_path}/scripts/calculate-speculative-asr.py:/app/scripts/calculate-speculative-asr.py",
-        "-v", f"{protocol_path}/docker/mev-test/run_attack_test.sh:/app/docker/mev-test/run_attack_test.sh",
         "-e", f"TEST_NAME={test_name}",
     ]
+
+    # Mount local fixed scripts over the container's scripts to avoid rebuilds
+    # Protocol-specific script mappings
+    script_mounts = []
+    if config['protocol']['name'] == "alephbft":
+        script_mounts = [
+            ("docker/mev-test/run_attack_test.sh", "/app/run_attack_test.sh"),
+        ]
+    else:
+        # Default mounts for Mysticeti/Mahi-Mahi
+        script_mounts = [
+            ("scripts/legacy_automation/automated_fissure_attack.sh", "/app/scripts/legacy_automation/automated_fissure_attack.sh"),
+            ("scripts/legacy_automation/automated_speculative_attack.sh", "/app/scripts/legacy_automation/automated_speculative_attack.sh"),
+            ("scripts/legacy_automation/automated_sluggish_attack.sh", "/app/scripts/legacy_automation/automated_sluggish_attack.sh"),
+            ("scripts/calculate-fissure-asr.py", "/app/scripts/calculate-fissure-asr.py"),
+            ("scripts/calculate-sluggish-asr.py", "/app/scripts/calculate-sluggish-asr.py"),
+            ("scripts/calculate-speculative-asr.py", "/app/scripts/calculate-speculative-asr.py"),
+            ("docker/mev-test/run_attack_test.sh", "/app/docker/mev-test/run_attack_test.sh"),
+        ]
+
+    for local_rel, container_path in script_mounts:
+        local_full = protocol_path / local_rel
+        if local_full.exists():
+            cmd.extend(["-v", f"{local_full}:{container_path}"])
+        else:
+            print(f"  Warning: Skipping mount for non-existent file: {local_rel}")
     
     # Add environment variables
     for key, value in env_vars.items():
@@ -113,6 +160,8 @@ def run_attack_test(config: dict) -> dict:
     # Add protocol-specific command to override Dockerfile CMD
     if config['protocol']['name'] == "mysticeti":
         cmd.append("/app/docker/mev-test/run_attack_test.sh")
+    elif config['protocol']['name'] == "alephbft":
+        cmd.append("/app/run_attack_test.sh")
     
     print(f"  Command: {' '.join(cmd[:10])}...")
     
@@ -152,8 +201,11 @@ def run_local_test(config: dict) -> dict:
         script_path = f"./scripts/legacy_automation/automated_{attack_mode}_attack.sh"
         cmd = ["bash", script_path]
     else:
-        # Build cargo test command
-        package_name = config['protocol'].get('package_name', 'consensus-core')
+        if config['protocol']['name'] == "alephbft":
+            package_name = "aleph-bft"
+        else:
+            package_name = config['protocol'].get('package_name', 'consensus-core')
+            
         cmd = [
             "cargo", "test", "--release",
             "--package", package_name,
@@ -195,6 +247,16 @@ def run_local_test(config: dict) -> dict:
         for line in output.splitlines():
             if "FINAL_ASR_RESULT:" in line:
                 asr = line.split("FINAL_ASR_RESULT:")[1].strip().replace("%", "")
+                break
+    elif "Attack Success Rate (ASR):" in output:
+        # Format used by AlephBFT
+        for line in output.splitlines():
+            if "Attack Success Rate (ASR):" in line:
+                # Extract XX.XX from "Attack Success Rate (ASR): XX.XX%"
+                try:
+                    asr = line.split("SR):")[1].strip().replace("%", "")
+                except (IndexError, AttributeError):
+                    pass
                 break
     
     return {
