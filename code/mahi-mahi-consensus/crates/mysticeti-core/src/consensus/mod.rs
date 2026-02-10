@@ -20,7 +20,7 @@ mod tests;
 pub const DEFAULT_WAVE_LENGTH: RoundNumber = 5;
 
 /// We need at least one leader round, one voting round, and one decision round.
-pub const MINIMUM_WAVE_LENGTH: RoundNumber = 4; // change this for 4 / 5
+pub const MINIMUM_WAVE_LENGTH: RoundNumber = 3; // changed from 4 to allow Sluggish experiments with wavelength 3
 
 /// The status of every leader output by the committers. While the core only cares about committed
 /// leaders, providing a richer status allows for easier debugging, testing, and composition with
