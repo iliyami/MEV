@@ -488,8 +488,8 @@ def main():
                 # Other protocols (Bullshark/Narwhal) handle 100 nodes fine
                 num_nodes = int(override.get("NUM_NODES", 0))
                 if num_nodes > 50:
-                    if target_protocol == "mahimahi":
-                        print(f"  [-] Skipping {exp_name} | {target_protocol} | {num_nodes} nodes (Mahi-Mahi Scaling Limit)")
+                    if target_protocol == "mahimahi" or target_protocol == "mysticeti":
+                        print(f"  [-] Skipping {exp_name} | {target_protocol} | {num_nodes} nodes (Scaling Limit)")
                         continue
                     if target_attack == "sluggish":
                         print(f"  [-] Skipping {exp_name} | {target_attack} | {num_nodes} nodes (Sluggish Scaling Limit)")
