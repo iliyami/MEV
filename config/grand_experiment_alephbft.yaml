@@ -6,18 +6,23 @@ protocol:
   name: "alephbft"
   path: "alephbft"
 
+docker:
+  tag: "mev-alephbft:latest"
+  cpus: "32.0"
+  memory: "64g"
+
 test:
   REPETITIONS: 1
 
 scaling:
-  network_sizes: [13]
+  network_sizes: [13, 25, 50, 100]
   attacker_ratios: [0.308]
   victim_ratios: [0.231]
-  latencies: [0, 50, 100]
-  jitters: [0, 10, 20]
+  latencies: [0, 50, 150, 300]
+  jitters: [0, 10, 30, 50]
 
 attack:
-  modes: ["fissure", "sluggish"]
+  modes: ["fissure", "sluggish", "speculative"]
   durations: [30]
 
 environment:
