@@ -9,10 +9,10 @@ protocol:
 docker:
   tag: "mev-alephbft:latest"
   cpus: "32.0"
-  memory: "64g"
+  memory: "80g"
 
 test:
-  REPETITIONS: 1
+  REPETITIONS: 5
 
 scaling:
   network_sizes: [13, 25, 50, 100]
@@ -34,3 +34,9 @@ environment:
   SPECULATIVE_P_MAX: "50"
   SLUGGISH_PROCESSING_DELAY_MS: "11"
   EXCLUSION_PROBABILITY: "0.95"
+  # ALEPH RESEARCH PARAMETERS
+  ALEPH_ELECTION_LOOKAHEAD: "3"      # Rounds ahead for election (Default: 3)
+  ALEPH_COORD_REQUEST_DELAY_MS: "200" # Base delay for pulling missing units (Default: 200)
+  ALEPH_HASH_SORT_SEED: "0"          # Seed for candidate leader randomization (0 = Deterministic)
+
+output:

@@ -189,8 +189,13 @@ fn default_unit_creation_delay() -> DelaySchedule {
 /// Note that the first request always gets send immediately, so these are delays for _after_ a
 /// request is sent for the nth time.
 fn default_coord_request_delay() -> DelaySchedule {
-    Arc::new(|t| match t {
-        0 => Duration::from_millis(200),
+    let base_delay: u64 = std::env::var("ALEPH_COORD_REQUEST_DELAY_MS")
+        .unwrap_or_else(|_| "200".to_string())
+        .parse()
+        .unwrap_or(200);
+
+    Arc::new(move |t| match t {
+        0 => Duration::from_millis(base_delay),
         1 => Duration::from_millis(1000),
         _ => Duration::from_millis(3000 * (t as u64 - 1)),
     })

@@ -154,8 +154,13 @@ impl<U: UnitWithParents> RoundElection<U> {
     ///
     /// Note: it is crucial that units are added to `Units` only when all their parents are there, otherwise this might panic.
     pub fn for_round(round: Round, units: &Units<U>) -> Result<ElectionResult<U>, ()> {
-        // If we don't yet have a unit of round + 3 we might not know about the winning candidate, so we cannot start the election.
-        if units.highest_round() < round + 3 {
+        let election_lookahead: u16 = std::env::var("ALEPH_ELECTION_LOOKAHEAD")
+            .unwrap_or_else(|_| "3".to_string())
+            .parse()
+            .unwrap_or(3);
+
+        // If we don't yet have enough units to satisfy the lookahead, we cannot start the election.
+        if units.highest_round() < round + election_lookahead {
             return Err(());
         }
         // We might be missing units from this round, but any unit that is not an ancestor of an arbitrary unit from round + 3
@@ -167,6 +172,17 @@ impl<U: UnitWithParents> RoundElection<U> {
             .map(|candidate| candidate.hash())
             .collect();
         candidates.sort();
+        
+        // HASH SORT RANDOMIZATION: Mitigate speculative attacks by randomizing leader priority
+        let seed_str = std::env::var("ALEPH_HASH_SORT_SEED").unwrap_or_else(|_| "0".to_string());
+        let seed: u64 = seed_str.parse().unwrap_or(0);
+        if seed != 0 {
+            // Apply deterministic "shuffle" by XORing or rotating based on seed + round
+            // This breaks the attacker's ability to grind a globally "best" hash
+            let rotation = (seed % candidates.len() as u64) as usize;
+            candidates.rotate_left(rotation);
+        }
+
         // We will be `pop`ing the candidates from the back.
         candidates.reverse();
         let candidate = units

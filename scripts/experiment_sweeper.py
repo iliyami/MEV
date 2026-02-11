@@ -48,7 +48,7 @@ FIELDNAMES = [
     "DAG_STATE_CACHED_ROUNDS", "SYNC_TIMEOUT_MS", "GC_DEPTH", "LATENCY_JITTER", "LATENCY_MS", "JITTER_MS",
     "HEADER_SIZE", "MAX_HEADER_DELAY", "BATCH_SIZE", "MAX_BATCH_DELAY", "NUM_WORKERS",
     "WAVE_LENGTH", "NUMBER_OF_LEADERS", "SPECULATIVE_STRATEGY", "EXCLUSION_PROBABILITY", "HYBRID_EXCLUSION", 
-    "SIMPLE_EXCLUSION_PROB", "VICTIM_RATIO"
+    "SIMPLE_EXCLUSION_PROB", "VICTIM_RATIO", "ALEPH_ELECTION_LOOKAHEAD", "ALEPH_COORD_REQUEST_DELAY_MS", "ALEPH_HASH_SORT_SEED"
 ]
 
 # Keys that define the experiment's unique configuration (for deduplication)
@@ -204,6 +204,30 @@ EXPERIMENTS = {
         "params": ["ATTACKER_RATIO"],
         "values": [
             [0.1], [0.2], [0.33]
+        ]
+    },
+    
+    # 15. AlephBFT Specific - Election Lookahead (Stability)
+    "aleph_lookahead": {
+        "params": ["ALEPH_ELECTION_LOOKAHEAD"],
+        "values": [
+            [2], [3], [5], [8]
+        ]
+    },
+
+    # 16. AlephBFT Specific - Coordination Request Delay (Sync Speed)
+    "aleph_sync_speed": {
+        "params": ["ALEPH_COORD_REQUEST_DELAY_MS"],
+        "values": [
+            [50], [200], [1000]
+        ]
+    },
+
+    # 17. AlephBFT Specific - Hash Sort Randomization (Speculative Resistance)
+    "aleph_hash_randomization": {
+        "params": ["ALEPH_HASH_SORT_SEED"],
+        "values": [
+            [0], [123], [456]
         ]
     }
 }
@@ -456,7 +480,14 @@ def main():
                     "defense_batching", # BATCH_SIZE, MAX_BATCH_DELAY
                     "scaling_workers"   # NUM_WORKERS
                 ])
-            elif target_protocol in ["mysticeti", "alephbft"]:
+            elif target_protocol == "alephbft":
+                relevant_experiments.extend([
+                    "offense_exclusion", # EXCLUSION_PROBABILITY
+                    "aleph_lookahead",
+                    "aleph_sync_speed",
+                    "aleph_hash_randomization"
+                ])
+            elif target_protocol == "mysticeti":
                 relevant_experiments.extend([
                     "mahimahi_wave",    # WAVE_LENGTH (Mahi only)
                     "mahimahi_leaders", # NUMBER_OF_LEADERS (Mahi only)
