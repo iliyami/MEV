@@ -1,5 +1,5 @@
 // Copyright(C) Facebook, Inc. and its affiliates.
-use crate::messages::Certificate;
+use crate::messages::{Certificate, Header};
 use crate::primary::PrimaryWorkerMessage;
 use bytes::Bytes;
 use config::Committee;
@@ -18,8 +18,8 @@ pub struct GarbageCollector {
     store: Store,
     /// The current consensus round (used for cleanup).
     consensus_round: Arc<AtomicU64>,
-    /// Receives the ordered certificates from consensus.
-    rx_consensus: Receiver<Certificate>,
+    /// Receives the ordered headers from consensus.
+    rx_consensus: Receiver<Header>,
     /// A loopback channel to the primary's core.
     tx_loopback: Sender<Certificate>,
     /// The network addresses of our workers.
@@ -34,7 +34,7 @@ impl GarbageCollector {
         committee: &Committee,
         store: Store,
         consensus_round: Arc<AtomicU64>,
-        rx_consensus: Receiver<Certificate>,
+        rx_consensus: Receiver<Header>,
         tx_loopback: Sender<Certificate>,
     ) {
         let addresses = committee
@@ -60,25 +60,24 @@ impl GarbageCollector {
 
     async fn run(&mut self) {
         let mut last_committed_round = 0;
-        while let Some(certificate) = self.rx_consensus.recv().await {
+        while let Some(header) = self.rx_consensus.recv().await {
             // TODO [issue #9]: Re-include batch digests that have not been sequenced into our next block.
 
             // Loop back the certificate from HotStuff in case we haven't seen it.
-            if self
+            // NOTE: In Autobahn, we commit headers. We only loop back if we have a certificate.
+            // Since we only have the header here, we skip the loopback for now or modify it to loop back the parent cert if missing.
+            /*if self
                 .store
-                .read(certificate.digest().to_vec())
+                .read(header.digest().to_vec())
                 .await
                 .expect("Failed to read from store")
                 .is_none()
             {
-                self.tx_loopback
-                    .send(certificate.clone())
-                    .await
-                    .expect("Failed to loop back certificate to core");
-            }
+                // ...
+            }*/
 
             // Cleanup all the modules.
-            let round = certificate.height();
+            let round = header.height();
             if round > last_committed_round {
                 last_committed_round = round;
 

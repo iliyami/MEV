@@ -93,7 +93,7 @@ def build_docker_image(config: dict) -> bool:
 def run_attack_test(config: dict) -> dict:
     """Run the attack test in Docker container."""
     tag = config['docker']['tag']
-    test_name = config['test']['test_name']
+    test_name = config['test'].get('test_name', config['experiment']['name'])
     env_vars = config['environment']
     
     # Create results directory
@@ -125,6 +125,11 @@ def run_attack_test(config: dict) -> dict:
     if config['protocol']['name'] == "alephbft":
         script_mounts = [
             ("docker/mev-test/run_attack_test.sh", "/app/run_attack_test.sh"),
+        ]
+    elif config['protocol']['name'] == "autobahn":
+        script_mounts = [
+            ("docker/mev-test/run_attack_test.sh", "/app/run_attack_test.sh"),
+            ("scripts/calculate-fissure-asr.py", "/app/scripts/calculate-fissure-asr.py"),
         ]
     else:
         # Default mounts for Mysticeti/Mahi-Mahi
@@ -160,7 +165,7 @@ def run_attack_test(config: dict) -> dict:
     # Add protocol-specific command to override Dockerfile CMD
     if config['protocol']['name'] == "mysticeti":
         cmd.append("/app/docker/mev-test/run_attack_test.sh")
-    elif config['protocol']['name'] == "alephbft":
+    elif config['protocol']['name'] in ["alephbft", "autobahn"]:
         cmd.append("/app/run_attack_test.sh")
     
     print(f"  Command: {' '.join(cmd[:10])}...")
@@ -268,7 +273,7 @@ def run_local_test(config: dict) -> dict:
 
 def verify_parity(config: dict, result: dict) -> bool:
     """Check if the ASR result matches expected within tolerance."""
-    expected = config.get('output', {}).get('expected_asr', 50.0)
+    expected = (config.get('output') or {}).get('expected_asr', 50.0)
     tolerance = config.get('output', {}).get('tolerance_percent', 100.0)
     
     try:

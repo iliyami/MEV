@@ -48,7 +48,8 @@ FIELDNAMES = [
     "DAG_STATE_CACHED_ROUNDS", "SYNC_TIMEOUT_MS", "GC_DEPTH", "LATENCY_JITTER", "LATENCY_MS", "JITTER_MS",
     "HEADER_SIZE", "MAX_HEADER_DELAY", "BATCH_SIZE", "MAX_BATCH_DELAY", "NUM_WORKERS",
     "WAVE_LENGTH", "NUMBER_OF_LEADERS", "SPECULATIVE_STRATEGY", "EXCLUSION_PROBABILITY", "HYBRID_EXCLUSION", 
-    "SIMPLE_EXCLUSION_PROB", "VICTIM_RATIO", "ALEPH_ELECTION_LOOKAHEAD", "ALEPH_COORD_REQUEST_DELAY_MS", "ALEPH_HASH_SORT_SEED"
+    "SIMPLE_EXCLUSION_PROB", "VICTIM_RATIO", "ALEPH_ELECTION_LOOKAHEAD", "ALEPH_COORD_REQUEST_DELAY_MS", "ALEPH_HASH_SORT_SEED",
+    "AUTOBAHN_K", "AUTOBAHN_FAST_PATH_TIMEOUT", "AUTOBAHN_USE_FAST_PATH"
 ]
 
 # Keys that define the experiment's unique configuration (for deduplication)
@@ -228,6 +229,20 @@ EXPERIMENTS = {
         "params": ["ALEPH_HASH_SORT_SEED"],
         "values": [
             [0], [123], [456]
+        ]
+    },
+    # 18. Autobahn Specific - K (Concurrency vs Security)
+    "autobahn_k": {
+        "params": ["AUTOBAHN_K"],
+        "values": [
+            [1], [2], [4], [8], [16]
+        ]
+    },
+    # 19. Autobahn Specific - Fast Path Sensitivity
+    "autobahn_fast_path": {
+        "params": ["AUTOBAHN_FAST_PATH_TIMEOUT"],
+        "values": [
+            [50], [200], [500], [1000]
         ]
     }
 }
@@ -486,6 +501,12 @@ def main():
                     "aleph_lookahead",
                     "aleph_sync_speed",
                     "aleph_hash_randomization"
+                ])
+            elif target_protocol == "autobahn":
+                relevant_experiments.extend([
+                    "offense_exclusion", # EXCLUSION_PROBABILITY
+                    "autobahn_k",
+                    "autobahn_fast_path"
                 ])
             elif target_protocol == "mysticeti":
                 relevant_experiments.extend([

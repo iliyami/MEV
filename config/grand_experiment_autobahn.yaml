@@ -1,0 +1,43 @@
+experiment:
+  name: "autobahn_performance"
+  description: "Autobahn BFT MEV Attack Simulation Suite"
+
+protocol:
+  name: "autobahn"
+  path: "autobahn-artifact"
+
+docker:
+  tag: "mev-autobahn:latest"
+  cpus: "32.0"
+  memory: "80g"
+
+test:
+  test_name: "test_autobahn_asr"
+  REPETITIONS: 5
+
+scaling:
+  network_sizes: [13, 25, 50, 100]
+  attacker_ratios: [0.308]
+  victim_ratios: [0.231]
+  latencies: [0, 50, 150, 300]
+  jitters: [0, 10, 30, 50]
+
+attack:
+  modes: ["fissure", "sluggish", "leader_support", "tip_exclusion", "timing"]
+  durations: [60]
+
+environment:
+  NUM_NODES: "13"
+  DURATION: "60"
+  ATTACK_MODE: "fissure"
+  ATTACKER_ID: "0"
+  VICTIM_ID: "1"
+  EXCLUSION_PROBABILITY: "1.0"
+  VICTIM_DELAY_MS: "50"
+  SLUGGISH_TIMEOUT_MULTIPLIER: "5.0"
+  # AUTOBAHN RESEARCH PARAMETERS
+  AUTOBAHN_K: "4"                    # Max open consensus instances (Default: 4)
+  AUTOBAHN_FAST_PATH_TIMEOUT: "200"  # Timeout for fast path in ms (Default: 200)
+  AUTOBAHN_USE_FAST_PATH: "true"     # Toggle fast path (Default: true)
+
+output: {}

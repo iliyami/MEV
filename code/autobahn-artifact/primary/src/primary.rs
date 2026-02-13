@@ -84,7 +84,7 @@ impl Primary {
         _tx_consensus: Sender<Certificate>,
         _tx_committer: Sender<Certificate>,
         rx_committer: Receiver<Certificate>,
-        rx_consensus: Receiver<Certificate>,
+        rx_consensus: Receiver<Header>,
         _tx_sailfish: Sender<Header>,
         _rx_pushdown_cert: Receiver<Certificate>,
         rx_request_header_sync: Receiver<Digest>,
