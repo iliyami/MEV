@@ -3,13 +3,25 @@
 # Runs the specified attack test and outputs ASR results
 
 set -e
+export RUST_LOG=consensus_core=debug,info
 
 echo "========================================"
 echo "MEV Attack Test Runner"
 echo "========================================"
 echo "Attack Mode: $ATTACK_MODE"
+echo "Attack Type: $ATTACK_TYPE"
 echo "Nodes: ${NUM_NODES:-13}"
+echo "Attacker Ratio: $ATTACKER_RATIO"
+echo "Victim Ratio: $VICTIM_RATIO"
 echo "Test Name: ${TEST_NAME:-test_fissure_attack_asr_dynamic}"
+
+echo "Attack Mode: $ATTACK_MODE" > /app/results/debug_vars.log
+echo "Attack Type: $ATTACK_TYPE" >> /app/results/debug_vars.log
+echo "Nodes: ${NUM_NODES:-13}" >> /app/results/debug_vars.log
+echo "Attacker Ratio: $ATTACKER_RATIO" >> /app/results/debug_vars.log
+echo "Victim Ratio: $VICTIM_RATIO" >> /app/results/debug_vars.log
+echo "Test Name: ${TEST_NAME:-test_fissure_attack_asr_dynamic}" >> /app/results/debug_vars.log
+chmod 666 /app/results/debug_vars.log
 
 # -----------------------------------------------------
 # Network Simulation (Geo-Distribution / Jitter) - Defense 2/3

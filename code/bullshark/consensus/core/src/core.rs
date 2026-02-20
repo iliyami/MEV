@@ -123,11 +123,25 @@ pub(crate) struct Core {
     round_tracker: Arc<RwLock<PeerRoundTracker>>,
     // Speculative attack configuration
     attack_mode: String,
+    attack_type: String, // "frontrun" or "backrun"
     attacker_ratio: f64,
     victim_ratio: f64,
     speculative_p_max: usize,
     is_attacker: bool,
+    is_back_attacker: bool, // New field to identify back-attackers (for sandwich/backrun)
+    is_honest_sandwich_node: bool, // New field for Slow Honest strategy
     attack_active: bool,
+    /// Tracking when each round started (or first proposal attempt) for Slow Honest
+    last_round_timestamp: park_core_thread::Mutex<(Round, Instant)>,
+}
+
+mod park_core_thread {
+    use super::*;
+    pub struct Mutex<T>(parking_lot::Mutex<T>);
+    impl<T> Mutex<T> {
+        pub fn new(t: T) -> Self { Self(parking_lot::Mutex::new(t)) }
+        pub fn lock(&self) -> parking_lot::MutexGuard<T> { self.0.lock() }
+    }
 }
 
 impl Core {
@@ -194,10 +208,12 @@ impl Core {
 
         // --- Speculative attack configuration from environment ---
         let attack_mode = env::var("ATTACK_MODE").unwrap_or_default();
+        let attack_type = env::var("ATTACK_TYPE").unwrap_or("none".to_string());
         let attacker_ratio: f64 = env::var("ATTACKER_RATIO")
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or(0.33);
+
         let victim_ratio: f64 = env::var("VICTIM_RATIO")
             .ok()
             .and_then(|s| s.parse().ok())
@@ -215,21 +231,80 @@ impl Core {
 
         let committee_size = context.committee.size();
         let attacker_count = ((committee_size as f64) * attacker_ratio).floor() as usize;
-        let is_attacker = (attack_mode == "fissure" || attack_mode == "speculative" || attack_mode == "sluggish")
-            && context.own_index.value() < attacker_count;
-        let attack_active = attack_mode == "fissure" || attack_mode == "speculative" || attack_mode == "sluggish";
+        let victim_count = ((committee_size as f64) * victim_ratio).floor() as usize;
+
+        // In a fixed-order protocol (Round -> Author), an attacker can only backrun a victim in the same round
+        // if the attacker's Author Index is greater than the victim's.
+        // Therefore, for the 'backrun' experimental scenario, we demonstrate "Smart Key Grinding"
+        // by positioning attackers IMMEDIATELY after the victim set to maximize L1/L2 opportunities.
+        // Topology: [Victims (0..V)] -> [Attackers (V..V+A)] -> [Honest (V+A..N)]
+        
+        let mut i_am_attacker = false;
+        let mut i_am_back_attacker = false;
+        let mut i_am_honest_sandwich_node = false;
+
+        if attack_type == "frontrun" {
+            // Frontrunning: Attackers are [0 .. attacker_count]
+            if context.own_index.value() < attacker_count {
+                i_am_attacker = true;
+            }
+        } else if attack_type == "backrun" {
+            // Backrunning: Attackers are [N - attacker_count .. N] (or after victims in smart topology)
+            // Smart Topology: Victims [0..V], Attackers [V..V+A]
+            let back_start = victim_count;
+            if context.own_index.value() >= back_start 
+                && context.own_index.value() < (back_start + attacker_count) {
+                i_am_attacker = true;
+                i_am_back_attacker = true;
+            }
+            // Fallback for "dumb" topology if needed? No, let's stick to this as it worked for backrun.
+        } else if attack_type == "sandwich" {
+            // Sandwich Topology: Split attackers into two groups to surround victims.
+            // [Front Attackers (0..A/2)] -> [Victims (A/2..V)] -> [Back Attackers (V..V+A/2)]
+            let front_count = attacker_count / 2;
+            let back_count = attacker_count - front_count;
+            
+            if context.own_index.value() < front_count {
+                i_am_attacker = true;
+            } else {
+                 // Victims start at `front_count`. Count is `victim_count`.
+                 // Back starts at `front_count + victim_count`.
+                 let back_start = front_count + victim_count;
+                 if context.own_index.value() >= back_start 
+                    && context.own_index.value() < (back_start + back_count) {
+                     i_am_attacker = true;
+                     i_am_back_attacker = true;
+                 } else if context.own_index.value() >= (back_start + back_count) {
+                    i_am_honest_sandwich_node = true;
+                 }
+
+
+            }
+        } else {
+             // Default (fissure/random): Attackers are [0..A]
+             if context.own_index.value() < attacker_count {
+                 i_am_attacker = true;
+             }
+        }
+
+        let attack_active = (attack_mode == "fissure" || attack_mode == "speculative" || attack_mode == "sluggish") && i_am_attacker;
         
         let sluggish_timeout_multiplier: f64 = env::var("SLUGGISH_TIMEOUT_MULTIPLIER")
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or_else(|| {
+                // If explicit sluggish mode, require var. Else default.
                 if attack_mode == "sluggish" {
-                    panic!("Error: SLUGGISH_TIMEOUT_MULTIPLIER environment variable must be set (parse error or missing)");
+                     // panic!("Error: SLUGGISH_TIMEOUT_MULTIPLIER environment variable must be set (parse error or missing)");
+                     // Don't panic, just warn and default
+                     warn!("SLUGGISH_TIMEOUT_MULTIPLIER not set, defaulting to 2.0");
+                     2.0
+                } else {
+                    2.0
                 }
-                2.0
             });
 
-        Self {
+        let mut core = Self {
             context,
             leader_schedule,
             transaction_consumer,
@@ -245,18 +320,23 @@ impl Core {
             ancestor_state_manager,
             round_tracker,
             attack_mode,
+            attack_type,
             attacker_ratio,
             victim_ratio,
             speculative_p_max,
-            is_attacker,
+            is_attacker: i_am_attacker,
+            is_back_attacker: i_am_back_attacker,
+            is_honest_sandwich_node: i_am_honest_sandwich_node,
             attack_active,
             sluggish_timeout_multiplier,
             last_signaled_round,
             last_included_ancestors,
             last_decided_leader,
             propagation_delay: 0,
-        }
-        .recover()
+            last_round_timestamp: park_core_thread::Mutex::new((0, tokio::time::Instant::now())),
+        };
+
+        core.recover()
     }
 
     fn recover(mut self) -> Self {
@@ -513,23 +593,28 @@ impl Core {
     // Attempts to create a new block, persist and propose it to all peers.
     // When force is true, ignore if leader from the last round exists among ancestors and if
     // the minimum round delay has passed.
+    // Attempts to create a new block, persist and propose it to all peers.
+    // When force is true, ignore if leader from the last round exists among ancestors and if
+    // the minimum round delay has passed.
     fn try_propose(&mut self, force: bool) -> ConsensusResult<Option<VerifiedBlock>> {
-        // SLUGGISH ATTACK: Add delay for attackers in sluggish mode
-        // The delay should be significant relative to leader_timeout to cause round lagging
-        if self.attack_active && self.is_attacker && self.attack_mode == "sluggish" {
-            // Use leader_timeout as base, multiply by sluggish_timeout_multiplier for significant lag
-            let base_timeout_ms = self.context.parameters.leader_timeout.as_millis() as f64;
-            let delay_ms = (base_timeout_ms * self.sluggish_timeout_multiplier) as u64;
-            info!(
-                "Sluggish attack: Node {} delaying block proposal by {}ms (multiplier: {:.1}x leader_timeout={}ms)",
-                self.context.own_index.value(), delay_ms, self.sluggish_timeout_multiplier, base_timeout_ms
-            );
-            std::thread::sleep(std::time::Duration::from_millis(delay_ms));
-        }
-
-        if !self.should_propose() {
+        if !force && !self.should_propose() {
             return Ok(None);
         }
+
+        // Slow Honest Strategy: Temporal Deferral
+        if !force && self.attack_type == "sandwich" && self.is_honest_sandwich_node {
+            let clock_round = self.dag_state.read().threshold_clock_round();
+            let mut ts = self.last_round_timestamp.lock();
+            if ts.0 != clock_round {
+                *ts = (clock_round, tokio::time::Instant::now());
+                debug!("Slow Honest: Round {clock_round} detected, starting 500ms delay.");
+                return Ok(None);
+            }
+            if ts.1.elapsed() < Duration::from_millis(500) {
+                return Ok(None);
+            }
+        }
+
         if let Some(extended_block) = self.try_new_block(force) {
             self.signals.new_block(extended_block.clone())?;
 
@@ -774,8 +859,14 @@ impl Core {
                         best_transactions = candidate.clone();
                     }
                     Some(current) => {
-                        // Lexicographic comparison: larger digest wins
-                        if digest.0 > current.0 {
+                        // Lexicographic comparison: larger digest wins for frontrun, smaller for backrun
+                        let is_better = if self.attack_type == "backrun" {
+                            digest.0 < current.0
+                        } else {
+                            digest.0 > current.0
+                        };
+
+                        if is_better {
                             best_digest = Some(digest);
                             best_transactions = candidate.clone();
                         }
@@ -1095,6 +1186,11 @@ impl Core {
 
     /// Whether the core should propose new blocks.
     pub(crate) fn should_propose(&self) -> bool {
+        let round = self.last_known_proposed_round.unwrap_or(0) + 1;
+
+
+        // Standard propagation delay and subscriber checks follow...
+
         let clock_round = self.dag_state.read().threshold_clock_round();
         let core_skipped_proposals = &self.context.metrics.node_metrics.core_skipped_proposals;
 
@@ -1451,7 +1547,8 @@ impl Core {
     ) -> (Vec<VerifiedBlock>, FissureAttackMetrics) {
         // Check if attack is enabled via environment variables
         let attack_mode = std::env::var("ATTACK_MODE").unwrap_or_default();
-        if attack_mode != "fissure" {
+        let is_sluggish_backrun = attack_mode == "sluggish" && self.attack_type == "backrun";
+        if attack_mode != "fissure" && !is_sluggish_backrun {
             return (ancestors, FissureAttackMetrics::default());
         }
 
@@ -1469,6 +1566,31 @@ impl Core {
         }
 
         let quorum_round = clock_round.saturating_sub(1);
+        
+        // BACKRUNNING LOGIC: Force Include Victim
+        if self.attack_type == "backrun" {
+            let mut found_victim_parent = false;
+            for ancestor in &ancestors {
+                if ancestor.round() == quorum_round && self.is_victim_block(ancestor, victim_count) {
+                    found_victim_parent = true;
+                    break;
+                }
+            }
+            
+            if !found_victim_parent {
+                debug!(
+                    "Backrun Fissure: Waiting for victim block in round {} to be available as parent.",
+                    quorum_round
+                );
+                // Return empty ancestors to force waiting (smart_ancestors_to_propose will wait/retry)
+                return (vec![], FissureAttackMetrics::default());
+            }
+            
+            // If victim found, proceed normally (include everyone)
+            return (ancestors, FissureAttackMetrics::default());
+        }
+
+        // FRONTRUNNING LOGIC (Default Fissure)
         
         // Count current stake and victims in parent round to ensure quorum
         let mut parent_round_stake = 0;

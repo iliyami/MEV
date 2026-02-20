@@ -43,7 +43,7 @@ DEFAULT_RESULTS_FILE = "experiment_results.csv"
 
 # --- GLOBAL FIELDNAMES ---
 FIELDNAMES = [
-    "timestamp", "protocol", "experiment", "attack_mode", "rep", "asr", "duration", "exit_code", 
+    "timestamp", "protocol", "experiment", "attack_mode", "attack_type", "rep", "asr", "asr_l1", "asr_l2", "asr_histogram", "duration", "exit_code", 
     "NUM_NODES", "ATTACKER_RATIO", "SPECULATIVE_P_MAX", "SLUGGISH_TIMEOUT_MULTIPLIER", "SLUGGISH_MULTIPLIER",
     "DAG_STATE_CACHED_ROUNDS", "SYNC_TIMEOUT_MS", "GC_DEPTH", "LATENCY_JITTER", "LATENCY_MS", "JITTER_MS",
     "HEADER_SIZE", "MAX_HEADER_DELAY", "BATCH_SIZE", "MAX_BATCH_DELAY", "NUM_WORKERS",
@@ -67,6 +67,16 @@ EXPERIMENTS = {
         "values": [
             [13], [25], [50], [100]
         ]
+    },
+
+    "simple": {
+        "params": ["NUM_NODES"],
+        "values": [[19]] if os.environ.get("ATTACK_TYPE") == "sandwich" else [[13]] # Sandwich needs 19 nodes for decent results
+    },
+
+    "medium": {
+        "params": ["NUM_NODES"],
+        "values": [[19]]
     },
     
     # 2. Attack Power (Offense) - Context dependent
@@ -259,12 +269,20 @@ def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_p
 
     # 1. Prepare Configuration
     config = load_base_config(base_config_path)
+
+    # Global Environment Overrides: Allow ANY shell env var to override YAML if it matches a param
+    for key in FIELDNAMES:
+        if key in os.environ:
+            config['environment'][key] = os.environ[key]
     
-    # Override values
+    # Override values from the experiment sweep (takes priority over global env)
     for k, v in config_override.items():
         config['environment'][k] = str(v)
     
     config['environment']['ATTACK_MODE'] = attack_mode
+    # Pass the attack type (frontrun/backrun) to the test runner
+    config['environment']['ATTACK_TYPE'] = config_override.get('ATTACK_TYPE', 'frontrun') 
+    
     num_nodes = int(config_override.get('NUM_NODES', config['environment'].get('NUM_NODES', 13)))
     duration = int(config['environment'].get('DURATION', 120))
     # STOCHASTIC DURATION: Add 0-20s jitter to break block-count determinism
@@ -346,6 +364,34 @@ def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_p
                 asr = line.split("FINAL_ASR_RESULT:")[1].strip().replace("%", "")
                 break
     
+    # 3b. Parse Backrun Stats
+    backrun_stats = {}
+    if "FINAL_BACKRUN_STATS:" in output:
+        for line in output.splitlines():
+            if "FINAL_BACKRUN_STATS:" in line:
+                try:
+                    import json
+                    json_str = line.split("FINAL_BACKRUN_STATS:")[1].strip()
+                    backrun_stats = json.loads(json_str)
+                except Exception as e:
+                    print(f"  [!] Failed to parse backrun stats: {e}")
+                break
+    
+    # 3c. Parse Sandwich Stats
+    sandwich_stats = {}
+    if "FINAL_SANDWICH_STATS:" in output:
+        for line in output.splitlines():
+            if "FINAL_SANDWICH_STATS:" in line:
+                try:
+                    import json
+                    json_str = line.split("FINAL_SANDWICH_STATS:")[1].strip()
+                    sandwich_stats = json.loads(json_str)
+                    # For sandwich attacks, override the generic ASR with SeSR
+                    asr = str(sandwich_stats.get("sesr", asr))
+                except Exception as e:
+                    print(f"  [!] Failed to parse sandwich stats: {e}")
+                break
+    
     # Save log for debugging
     with open(log_file, "w") as f:
         f.write(output)
@@ -369,6 +415,10 @@ def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_p
         "attack_mode": attack_mode,
         "rep": rep_id,
         "asr": asr,
+        "asr_l1": backrun_stats.get("l1_asr", ""),
+        "asr_l2": backrun_stats.get("l2_asr", ""),
+        "asr_histogram": str(backrun_stats.get("histogram", "")), # Save list as string
+        "attack_type": config['environment'].get('ATTACK_TYPE', 'frontrun'), # Capture the attack type
         "duration": duration,
         "exit_code": exit_code,
         **config_override
@@ -451,6 +501,7 @@ def main():
     parser.add_argument("--local", action="store_true", help="Run tests locally via cargo instead of Docker")
     parser.add_argument("--out", default=DEFAULT_RESULTS_FILE, help=f"Output CSV file for results (default: {DEFAULT_RESULTS_FILE})")
     parser.add_argument("--no-build", action="store_true", help="Skip building binary inside Docker (use existing)")
+    parser.add_argument("--type", default="frontrun", choices=["frontrun", "backrun", "sandwich"], help="MEV Attack Type: frontrun, backrun, or sandwich")
     args = parser.parse_args()
 
     results_file = args.out
@@ -567,6 +618,18 @@ def main():
                         print(f"  [-] Skipping {exp_name} | {target_attack} | Rep {r} (Already recorded for {target_protocol})")
                         continue
 
+                    # Inject ATTACK_TYPE into override for run_experiment
+                    override['ATTACK_TYPE'] = args.type
+                    
+                    # Smart Defaults: Force 19 nodes and high ratio for sandwich attacks in 'scaling' or 'simple' 
+                    # if not explicitly set in environment or sweep
+                    if args.type == "sandwich":
+                        if "NUM_NODES" not in os.environ and override.get("NUM_NODES", 13) == 13:
+                            print("  [Config] Upgrading to 19 nodes for Sandwich Attack (Auto-Default)")
+                            override["NUM_NODES"] = 19
+                        if "ATTACKER_RATIO" not in os.environ and float(override.get("ATTACKER_RATIO", 0.0)) < 0.37:
+                            override["ATTACKER_RATIO"] = 0.37
+                            
                     data = run_experiment(override, target_attack, exp_name, r, args.config, local_mode=args.local, no_build=args.no_build)
                     
                     # ONLY record if we got a non-zero ASR (0.0 usually means simulation liveness failure)
@@ -577,6 +640,8 @@ def main():
                         os.fsync(csvfile.fileno()) # Force OS to flush buffers
                     else:
                         print(f"  [!] Not recording result with ASR={asr_result}% (Likely simulation failure)")
+                        # FOR DEBUGGING: Print log snippet if 0% ASR
+                        print(f"      [Debug Log]:\n{data.get('output', 'No output captured')[-1000:]}")
 
                     # Wait between repetitions to allow Docker/OS cleanup or socket release
                     if "mahi" in target_protocol.lower():

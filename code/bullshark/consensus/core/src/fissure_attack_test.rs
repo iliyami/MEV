@@ -295,6 +295,10 @@ fn calculate_asr(commits: &[CommittedSubDag], num_validators: usize, num_attacke
     //
     // Additionally, we count pairs where attacker is in an EARLIER round (natural advantage).
     
+    // Check Attack Type
+    let attack_type = std::env::var("ATTACK_TYPE").unwrap_or_else(|_| "frontrun".to_string());
+    let is_backrun = attack_type == "backrun";
+
     // Method 1: Same-Round ASR (Primary Metric - Matches Paper)
     let mut same_round_successes = 0;
     let mut same_round_total = 0;
@@ -304,7 +308,14 @@ fn calculate_asr(commits: &[CommittedSubDag], num_validators: usize, num_attacke
             if att_round == vic_round {
                 // Same round - this is where Fissure's author-index advantage applies
                 same_round_total += 1;
-                if att_pos < vic_pos {
+                
+                let success = if is_backrun {
+                    att_pos > vic_pos
+                } else {
+                    att_pos < vic_pos
+                };
+                
+                if success {
                     same_round_successes += 1;
                 }
             }
@@ -317,7 +328,14 @@ fn calculate_asr(commits: &[CommittedSubDag], num_validators: usize, num_attacke
             for (vic_pos, vic_round) in &victim_positions {
                 if att_round <= vic_round {
                     total_pairs += 1;
-                    if att_pos < vic_pos {
+                    
+                    let success = if is_backrun {
+                        att_pos > vic_pos
+                    } else {
+                        att_pos < vic_pos
+                    };
+
+                    if success {
                         successes += 1;
                     }
                 }

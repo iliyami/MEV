@@ -240,7 +240,13 @@ async fn test_speculative_attack_asr_dynamic() {
     }
     
     // Assert reasonable ASR
-    assert!(asr > 50.0, "ASR too low: {:.1}%", asr);
+    let attack_type_env = env::var("ATTACK_TYPE").unwrap_or_else(|_| "frontrun".to_string());
+    if attack_type_env == "sandwich" {
+        // Sandwich attacks are harder (require 2 attackers per victim), so threshold is lower
+        assert!(asr > 5.0, "Sandwich SeSR too low: {:.1}%", asr);
+    } else {
+        assert!(asr > 50.0, "ASR too low: {:.1}%", asr);
+    }
     
     info!("✅ Test completed successfully with ASR {:.1}%", asr);
 }
@@ -255,6 +261,10 @@ fn calculate_asr(
         warn!("No commits to analyze");
         return 0.0;
     }
+
+    let attack_type = std::env::var("ATTACK_TYPE").unwrap_or_else(|_| "frontrun".to_string());
+    let is_backrun = attack_type == "backrun";
+    let is_sandwich = attack_type == "sandwich";
     
     // Build global ordering
     let mut global_order = Vec::new();
@@ -272,9 +282,34 @@ fn calculate_asr(
     
     for (pos, (author, round, _block_ref)) in global_order.iter().enumerate() {
         let author_index = author.value() as usize;
-        if author_index < num_attacker {
+        
+        // Match the topology defined in Core::new
+        let is_attacker_node = if is_backrun {
+            // New Topology: [Victim (0..V)] [Attacker (V..V+A)] [Honest]
+            author_index >= num_victim && author_index < (num_victim + num_attacker)
+        } else if is_sandwich {
+            // Sandwich Topology: [Front (0..A/2)] [Victim (A/2..V)] [Back (V..V+A/2)]
+            let front_count = num_attacker / 2;
+            let back_count = num_attacker - front_count;
+            let back_start = front_count + num_victim;
+            
+            author_index < front_count || (author_index >= back_start && author_index < (back_start + back_count))
+        } else {
+            author_index < num_attacker
+        };
+
+        let is_victim_node = if is_backrun {
+            author_index < num_victim
+        } else if is_sandwich {
+            let front_count = num_attacker / 2;
+            author_index >= front_count && author_index < (front_count + num_victim)
+        } else {
+            author_index >= num_validators - num_victim
+        };
+
+        if is_attacker_node {
             attacker_positions.push((pos, *round));
-        } else if author_index >= num_validators - num_victim {
+        } else if is_victim_node {
             victim_positions.push((pos, *round));
         }
     }
@@ -293,28 +328,104 @@ fn calculate_asr(
     // SPECULATIVE ASR Calculation logic
     // We strictly compare blocks in the SAME ROUND (competition)
     // ASR = (Attacker < Victim)
-    
+    let attack_type = std::env::var("ATTACK_TYPE").unwrap_or_else(|_| "frontrun".to_string());
+    // -- Sandwich Logic --
+    if is_sandwich {
+        // For sandwich: Success = Victim block has (Attacker < Victim) AND (Attacker > Victim) in SAME ROUND
+        // Denominator = Total Victim Blocks in round
+
+        let mut sandwiched_victims = 0;
+        let mut total_victim_opportunities = 0;
+
+        for (vic_pos, vic_round) in &victim_positions {
+            total_victim_opportunities += 1;
+
+            let has_front = attacker_positions.iter().any(|(att_pos, att_round)| *att_round == *vic_round && att_pos < vic_pos);
+            let has_back = attacker_positions.iter().any(|(att_pos, att_round)| *att_round == *vic_round && att_pos > vic_pos);
+
+            if has_front && has_back {
+                sandwiched_victims += 1;
+            }
+        }
+
+        let sesr = if total_victim_opportunities > 0 {
+            (sandwiched_victims as f64 / total_victim_opportunities as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        info!("SeSR calculation: {}/{} victims sandwiched = {:.1}%", sandwiched_victims, total_victim_opportunities, sesr);
+
+        // Print standardized output for sweeper (using "asr" field for compatibility)
+        // Also print specific sandwich stats
+        println!(
+            "FINAL_SANDWICH_STATS: {{\"sesr\": {:.2}}}",
+            sesr
+        );
+
+        return sesr;
+    }
+
     for (att_pos, att_round) in &attacker_positions {
         for (vic_pos, vic_round) in &victim_positions {
             // Strict competition in the SAME round
             if *att_round == *vic_round {
                 total_pairs += 1;
-                
-                // Success: attacker ordered before victim
-                if att_pos < vic_pos {
+
+                let success = if is_backrun {
+                    att_pos > vic_pos
+                } else {
+                    att_pos < vic_pos
+                };
+
+                if success {
                     successes += 1;
                 }
             }
         }
     }
-    
+
     if total_pairs == 0 {
         warn!("No comparable block pairs found in same round");
         return 0.0;
     }
-    
+
     let asr = (successes as f64 / total_pairs as f64) * 100.0;
     info!("ASR calculation (Same-Round): {}/{} pairs = {:.1}%", successes, total_pairs, asr);
-    
+
+    // --- Detailed Backrun Metrics ---
+    if is_backrun {
+        let mut gaps = Vec::new();
+        let mut l1_count = 0;
+        let mut l2_count = 0; // Gap 2 or 3
+
+        for (att_pos, att_round) in &attacker_positions {
+            for (vic_pos, vic_round) in &victim_positions {
+                if *att_round == *vic_round && *att_pos > *vic_pos {
+                    let gap = att_pos - vic_pos;
+                    gaps.push(gap);
+                    
+                    if gap == 1 {
+                        l1_count += 1;
+                    } else if gap == 2 || gap == 3 {
+                        l2_count += 1;
+                    }
+                }
+            }
+        }
+
+        // Calculate L1/L2 ASR relative to *Total Pairs* (same denominator as ASR)
+        // This answers: "What % of all opportunities resulted in an L1 attack?"
+        let l1_asr = (l1_count as f64 / total_pairs as f64) * 100.0;
+        let l2_asr = (l2_count as f64 / total_pairs as f64) * 100.0;
+
+        // Print structured stats for the sweeper to parse
+        // specific format: FINAL_BACKRUN_STATS: {"l1_asr": 12.5, "l2_asr": 5.0, "histogram": [1, 1, 2, 5]}
+        println!(
+            "FINAL_BACKRUN_STATS: {{\"l1_asr\": {:.2}, \"l2_asr\": {:.2}, \"histogram\": {:?}}}",
+            l1_asr, l2_asr, gaps
+        );
+    }
+
     asr
 }

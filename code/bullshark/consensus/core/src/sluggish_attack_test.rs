@@ -307,6 +307,10 @@ fn calculate_asr(
            // Compare blocks: attackers lag behind (lower rounds), victims advance (higher rounds)
            // Success when attacker (lower round) is ordered before victim (higher round)
            // Optimized: Expanded window to capture more lag effects
+           
+           let attack_type = std::env::var("ATTACK_TYPE").unwrap_or_else(|_| "frontrun".to_string());
+           let is_backrun = attack_type == "backrun";
+
            for (att_pos, att_round) in &attacker_positions {
                for (vic_pos, vic_round) in &victim_positions {
                    // Compare blocks where attacker is at same or lower round than victim
@@ -316,8 +320,17 @@ fn calculate_asr(
                    if round_diff >= 0 && round_diff <= 6 {
                        // Only count when attacker is at same or lower round (normal sluggish behavior)
                        total_pairs += 1;
-                       // Success: attacker block (lower/same round) ordered before victim block (higher round)
-                       if att_pos < vic_pos {
+                       
+                       let success = if is_backrun {
+                           att_pos > vic_pos
+                       } else {
+                           att_pos < vic_pos
+                       };
+                       
+                       // ASR Success: 
+                       // Frontrun: Attacker ordered BEFORE victim (att_pos < vic_pos)
+                       // Backrun: Attacker ordered AFTER victim (att_pos > vic_pos)
+                       if success {
                            successes += 1;
                        }
                    }

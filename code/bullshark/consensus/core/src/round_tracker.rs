@@ -83,7 +83,6 @@ impl PeerRoundTracker {
         }
     }
 
-    /// Update accepted & received rounds based on probing results
     pub(crate) fn update_from_probe(
         &mut self,
         accepted_rounds: Vec<Vec<Round>>,
@@ -91,6 +90,16 @@ impl PeerRoundTracker {
     ) {
         self.probed_accepted_rounds = accepted_rounds;
         self.probed_received_rounds = received_rounds;
+    }
+
+    /// Returns the highest accepted round for a specific authority based on received blocks.
+    pub(crate) fn get_highest_accepted_round(&self, authority: AuthorityIndex) -> Option<Round> {
+        let auth_idx = authority.value();
+        if auth_idx < self.block_accepted_rounds.len() {
+             Some(self.block_accepted_rounds[auth_idx][auth_idx])
+        } else {
+            None
+        }
     }
 
     // Returns the propagation delay of own blocks.

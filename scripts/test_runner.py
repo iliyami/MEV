@@ -112,6 +112,8 @@ def run_attack_test(config: dict) -> dict:
     
     # Build docker run command
     protocol_path = CODE_DIR / config['protocol']['path']
+    # Build docker run command
+    protocol_path = CODE_DIR / config['protocol']['path']
     cmd = [
         "docker", "run", "--rm",
         "--cap-add=NET_ADMIN", # Enable Traffic Control (tc)
@@ -132,23 +134,30 @@ def run_attack_test(config: dict) -> dict:
             ("scripts/calculate-fissure-asr.py", "/app/scripts/calculate-fissure-asr.py"),
         ]
     else:
-        # Default mounts for Mysticeti/Mahi-Mahi
+        # Default mounts for Bullshark/Mysticeti
         script_mounts = [
+            ("docker/mev-test/run_attack_test.sh", "/app/run_attack_test.sh"),
+            # Mount source code for rapid iteration
+            ("consensus/core", "/app/consensus/core"),
             ("scripts/legacy_automation/automated_fissure_attack.sh", "/app/scripts/legacy_automation/automated_fissure_attack.sh"),
             ("scripts/legacy_automation/automated_speculative_attack.sh", "/app/scripts/legacy_automation/automated_speculative_attack.sh"),
             ("scripts/legacy_automation/automated_sluggish_attack.sh", "/app/scripts/legacy_automation/automated_sluggish_attack.sh"),
             ("scripts/calculate-fissure-asr.py", "/app/scripts/calculate-fissure-asr.py"),
             ("scripts/calculate-sluggish-asr.py", "/app/scripts/calculate-sluggish-asr.py"),
             ("scripts/calculate-speculative-asr.py", "/app/scripts/calculate-speculative-asr.py"),
-            ("docker/mev-test/run_attack_test.sh", "/app/docker/mev-test/run_attack_test.sh"),
         ]
 
     for local_rel, container_path in script_mounts:
-        local_full = protocol_path / local_rel
+        # Check if it's a global script or protocol-specific
+        if local_rel.startswith("scripts/"):
+            local_full = BASE_DIR / local_rel
+        else:
+            local_full = protocol_path / local_rel
+            
         if local_full.exists():
             cmd.extend(["-v", f"{local_full}:{container_path}"])
         else:
-            print(f"  Warning: Skipping mount for non-existent file: {local_rel}")
+            print(f"  Warning: Skipping mount for non-existent file: {local_rel} (checked {local_full})")
     
     # Add environment variables
     for key, value in env_vars.items():
@@ -222,6 +231,19 @@ def run_local_test(config: dict) -> dict:
     current_env = os.environ.copy()
     for key, value in env_vars.items():
         current_env[key] = str(value)
+
+    # Force disable sccache for local runs to avoid "Operation not permitted"
+    current_env["RUSTC_WRAPPER"] = ""
+    
+    # Set TMPDIR to a local writable directory to avoid sandbox issues with rustc
+    # Use a 'tmp' directory in the project root
+    local_tmp_dir = (BASE_DIR / "tmp").resolve()
+    try:
+        local_tmp_dir.mkdir(parents=True, exist_ok=True)
+        current_env["TMPDIR"] = str(local_tmp_dir)
+    except Exception:
+        # Fallback if we can't create the directory
+        pass
     
     # Special handle for speculative attack p_max if in config but not env
     if 'SPECULATIVE_P_MAX' not in current_env and 'speculative_p_max' in config.get('test', {}):
