@@ -13,11 +13,11 @@ docker:
 
 test:
   test_name: "test_fissure_attack_asr_dynamic" # Default, overridden by runner
-  REPETITIONS: 1
+  REPETITIONS: 5
 
 environment:
   # GLOBAL SCALING
-  NUM_NODES: "19"
+  NUM_NODES: "13"
   
   # ATTACK CONFIGURATION (OFFENSE)
   ATTACK_MODE: "fissure" # [fissure, speculative, sluggish]

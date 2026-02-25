@@ -248,6 +248,11 @@ fn calculate_asr(commits: &[CommittedSubDag], num_validators: usize, num_attacke
         return 0.0;
     }
     
+    // Check Attack Type
+    let attack_type = std::env::var("ATTACK_TYPE").unwrap_or_else(|_| "frontrun".to_string());
+    let is_backrun = attack_type == "backrun";
+    let is_sandwich = attack_type == "sandwich";
+
     // Build global ordering
     let mut global_order = Vec::new();
     for commit in commits {
@@ -258,17 +263,40 @@ fn calculate_asr(commits: &[CommittedSubDag], num_validators: usize, num_attacke
     
     info!("Global order contains {} blocks", global_order.len());
     
-    // Identify attacker and victim blocks
-    // Attackers are first num_attacker nodes (indices 0 to num_attacker-1)
-    // Victims are last num_victim nodes (indices num_validators-num_victim to num_validators-1)
+    // Identify attacker and victim blocks based on topology
     let mut attacker_positions = Vec::new();
     let mut victim_positions = Vec::new();
     
     for (pos, (author, round, _block_ref)) in global_order.iter().enumerate() {
         let author_index = author.value() as usize;
-        if author_index < num_attacker {
+
+        let is_attacker_node = if is_backrun {
+            // Backrun Topology: [Victim (0..V)] [Attacker (V..V+A)]
+            author_index >= num_victim && author_index < (num_victim + num_attacker)
+        } else if is_sandwich {
+            // Sandwich Topology: [Front (0..A/2)] [Victim (A/2..V)] [Back (V..V+A/2)]
+            let front_count = num_attacker / 2;
+            let back_count = num_attacker - front_count;
+            let back_start = front_count + num_victim;
+            
+            author_index < front_count || (author_index >= back_start && author_index < (back_start + back_count))
+        } else {
+            // Default Fissure: [Attacker (0..A)] [Honest] [Victim (N-V..N)]
+            author_index < num_attacker
+        };
+
+        let is_victim_node = if is_backrun {
+            author_index < num_victim
+        } else if is_sandwich {
+            let front_count = num_attacker / 2;
+            author_index >= front_count && author_index < (front_count + num_victim)
+        } else {
+            author_index >= num_validators - num_victim
+        };
+
+        if is_attacker_node {
             attacker_positions.push((pos, *round));
-        } else if author_index >= num_validators - num_victim {
+        } else if is_victim_node {
             victim_positions.push((pos, *round));
         }
     }
@@ -281,33 +309,43 @@ fn calculate_asr(commits: &[CommittedSubDag], num_validators: usize, num_attacke
         return 0.0;
     }
     
-    // Count successful frontrunning (attacker before victim)
-    // For fissure attack: attackers exclude victim blocks from parents,
-    // causing their blocks to be ordered before victim blocks
+    // --- Sandwich Logic ---
+    if is_sandwich {
+        let mut sandwiched_victims = 0;
+        let mut total_victim_opportunities = 0;
+
+        for (vic_pos, vic_round) in &victim_positions {
+            total_victim_opportunities += 1;
+
+            let has_front = attacker_positions.iter().any(|(att_pos, att_round)| *att_round == *vic_round && att_pos < vic_pos);
+            let has_back = attacker_positions.iter().any(|(att_pos, att_round)| *att_round == *vic_round && att_pos > vic_pos);
+
+            if has_front && has_back {
+                sandwiched_victims += 1;
+            }
+        }
+
+        let sesr = if total_victim_opportunities > 0 {
+            (sandwiched_victims as f64 / total_victim_opportunities as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        info!("SeSR calculation: {}/{} victims sandwiched = {:.1}%", sandwiched_victims, total_victim_opportunities, sesr);
+        println!("FINAL_SANDWICH_STATS: {{\"sesr\": {:.2}}}", sesr);
+
+        return sesr;
+    }
+
+    // --- Standard / Backrun ASR ---
     let mut successes = 0;
     let mut total_pairs = 0;
     
-    // ASR METHODOLOGY (Aligned with Paper):
-    // Fissure Attack gives advantage in SAME ROUND through Author Index sorting.
-    // Attackers (0-3) are naturally sorted before Victims (10-12) within same round.
-    //
-    // We measure: P(AttackerPos < VictimPos | Same Round)
-    //
-    // Additionally, we count pairs where attacker is in an EARLIER round (natural advantage).
-    
-    // Check Attack Type
-    let attack_type = std::env::var("ATTACK_TYPE").unwrap_or_else(|_| "frontrun".to_string());
-    let is_backrun = attack_type == "backrun";
-
-    // Method 1: Same-Round ASR (Primary Metric - Matches Paper)
-    let mut same_round_successes = 0;
-    let mut same_round_total = 0;
-    
     for (att_pos, att_round) in &attacker_positions {
         for (vic_pos, vic_round) in &victim_positions {
+            // Strict competition in the SAME round
             if att_round == vic_round {
-                // Same round - this is where Fissure's author-index advantage applies
-                same_round_total += 1;
+                total_pairs += 1;
                 
                 let success = if is_backrun {
                     att_pos > vic_pos
@@ -316,43 +354,49 @@ fn calculate_asr(commits: &[CommittedSubDag], num_validators: usize, num_attacke
                 };
                 
                 if success {
-                    same_round_successes += 1;
+                    successes += 1;
                 }
             }
         }
-    }
-    
-    // Fallback: if no same-round pairs, use all-pairs where attacker is at same or earlier round
-    if same_round_total == 0 {
-        for (att_pos, att_round) in &attacker_positions {
-            for (vic_pos, vic_round) in &victim_positions {
-                if att_round <= vic_round {
-                    total_pairs += 1;
-                    
-                    let success = if is_backrun {
-                        att_pos > vic_pos
-                    } else {
-                        att_pos < vic_pos
-                    };
-
-                    if success {
-                        successes += 1;
-                    }
-                }
-            }
-        }
-    } else {
-        total_pairs = same_round_total;
-        successes = same_round_successes;
     }
     
     if total_pairs == 0 {
-        warn!("No comparable block pairs found");
+        warn!("No comparable block pairs found in same round");
         return 0.0;
     }
     
     let asr = (successes as f64 / total_pairs as f64) * 100.0;
     info!("ASR calculation: {}/{} pairs = {:.1}%", successes, total_pairs, asr);
+    
+    // --- Detailed Backrun Metrics ---
+    if is_backrun {
+        let mut gaps = Vec::new();
+        let mut l1_count = 0;
+        let mut l2_count = 0;
+
+        for (att_pos, att_round) in &attacker_positions {
+            for (vic_pos, vic_round) in &victim_positions {
+                if att_round == vic_round && att_pos > vic_pos {
+                    let gap = att_pos - vic_pos;
+                    gaps.push(gap);
+                    
+                    if gap == 1 {
+                        l1_count += 1;
+                    } else if gap == 2 || gap == 3 {
+                        l2_count += 1;
+                    }
+                }
+            }
+        }
+
+        let l1_asr = (l1_count as f64 / total_pairs as f64) * 100.0;
+        let l2_asr = (l2_count as f64 / total_pairs as f64) * 100.0;
+
+        println!(
+            "FINAL_BACKRUN_STATS: {{\"l1_asr\": {:.2}, \"l2_asr\": {:.2}, \"histogram\": {:?}}}",
+            l1_asr, l2_asr, gaps
+        );
+    }
     
     asr
 }

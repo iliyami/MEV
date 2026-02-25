@@ -663,18 +663,25 @@ impl Core {
                 return None;
             }
 
+            let mut min_round_delay = self.context.parameters.min_round_delay;
+
+            // Sluggish Attack: Intentional temporal delay for attackers
+            if self.attack_mode == "sluggish" && self.is_attacker {
+                min_round_delay = min_round_delay.mul_f64(self.sluggish_timeout_multiplier);
+            }
+
             if Duration::from_millis(
                 self.context
                     .clock
                     .timestamp_utc_ms()
                     .saturating_sub(self.last_proposed_timestamp_ms()),
-            ) < self.context.parameters.min_round_delay
+            ) < min_round_delay
             {
                 debug!(
                     "Skipping block proposal for round {} as it is too soon after the last proposed block timestamp {}; min round delay is {}ms",
                     clock_round,
                     self.last_proposed_timestamp_ms(),
-                    self.context.parameters.min_round_delay.as_millis(),
+                    min_round_delay.as_millis(),
                 );
                 return None;
             }
@@ -1547,8 +1554,9 @@ impl Core {
     ) -> (Vec<VerifiedBlock>, FissureAttackMetrics) {
         // Check if attack is enabled via environment variables
         let attack_mode = std::env::var("ATTACK_MODE").unwrap_or_default();
-        let is_sluggish_backrun = attack_mode == "sluggish" && self.attack_type == "backrun";
-        if attack_mode != "fissure" && !is_sluggish_backrun {
+        let is_sluggish_variant = attack_mode == "sluggish" && (self.attack_type == "backrun" || self.attack_type == "sandwich");
+        
+        if attack_mode != "fissure" && !is_sluggish_variant {
             return (ancestors, FissureAttackMetrics::default());
         }
 
@@ -1567,8 +1575,10 @@ impl Core {
 
         let quorum_round = clock_round.saturating_sub(1);
         
-        // BACKRUNNING LOGIC: Force Include Victim
-        if self.attack_type == "backrun" {
+        // BACKRUNNING / SANDWICH LOGIC
+        let should_backrun = self.attack_type == "backrun" || (self.attack_type == "sandwich" && self.is_back_attacker);
+
+        if should_backrun {
             let mut found_victim_parent = false;
             for ancestor in &ancestors {
                 if ancestor.round() == quorum_round && self.is_victim_block(ancestor, victim_count) {
@@ -1579,7 +1589,7 @@ impl Core {
             
             if !found_victim_parent {
                 debug!(
-                    "Backrun Fissure: Waiting for victim block in round {} to be available as parent.",
+                    "Backrun/Sandwich Fissure: Waiting for victim block in round {} to be available as parent.",
                     quorum_round
                 );
                 // Return empty ancestors to force waiting (smart_ancestors_to_propose will wait/retry)

@@ -236,13 +236,16 @@ async fn test_sluggish_attack_asr_dynamic() {
     // Env details:
     println!("🎯 SLUGGISH ATTACK RESULTS:");
     println!("  Mode: sluggish");
+    println!("  Type: {}", env::var("ATTACK_TYPE").unwrap_or_else(|_| "frontrun".to_string()));
     println!("  Network: {} validators", num_validators);
     println!("  Attackers: {} (~{:.1}%)", num_attacker, (num_attacker as f64 / num_validators as f64) * 100.0);
     println!("  Victims: {} (~{:.1}%)", num_victim, (num_victim as f64 / num_validators as f64) * 100.0);
-    println!("  SLUGGISH_TIMEOUT_MULTIPLIER: {}", env::var("SLUGGISH_TIMEOUT_MULTIPLIER").unwrap_or("1.0".to_string()));
-    println!("  Attack Success Rate: {:.1}%", asr);
+    println!("  SLUGGISH_TIMEOUT_MULTIPLIER: {}", env::var("SLUGGISH_TIMEOUT_MULTIPLIER").unwrap_or_else(|_| "1.0".to_string()));
+    
+    // Detailed metrics will be printed by calculate_asr
+    let asr = calculate_asr(&all_commits, num_validators, num_attacker, num_victim);
+    
     println!("  FINAL_ASR_RESULT: {:.1}%", asr);
-    println!("  Paper Target: ~87% (13 nodes)");
     println!("========================================\n");
     
     // Stop all authorities
@@ -257,17 +260,17 @@ async fn test_sluggish_attack_asr_dynamic() {
     info!("✅ Test completed successfully with ASR: {:.1}%", asr);
 }
 
-fn calculate_asr(
-    commits: &[CommittedSubDag],
-    _num_validators: usize,
-    num_attacker: usize,
-    num_victim: usize
-) -> f64 {
+fn calculate_asr(commits: &[CommittedSubDag], num_validators: usize, num_attacker: usize, num_victim: usize) -> f64 {
     if commits.is_empty() {
         warn!("No commits to analyze");
         return 0.0;
     }
     
+    // Check Attack Type
+    let attack_type = std::env::var("ATTACK_TYPE").unwrap_or_else(|_| "frontrun".to_string());
+    let is_backrun = attack_type == "backrun";
+    let is_sandwich = attack_type == "sandwich";
+
     // Build global ordering
     let mut global_order = Vec::new();
     for commit in commits {
@@ -276,18 +279,42 @@ fn calculate_asr(
         }
     }
     
-    // Sort by commit order (already in order from commits)
     info!("Global order contains {} blocks", global_order.len());
     
-    // Identify attacker and victim blocks
+    // Identify attacker and victim blocks based on topology
     let mut attacker_positions = Vec::new();
     let mut victim_positions = Vec::new();
     
     for (pos, (author, round, _block_ref)) in global_order.iter().enumerate() {
         let author_index = author.value() as usize;
-        if author_index < num_attacker {
+
+        let is_attacker_node = if is_backrun {
+            // Backrun Topology: [Victim (0..V)] [Attacker (V..V+A)]
+            author_index >= num_victim && author_index < (num_victim + num_attacker)
+        } else if is_sandwich {
+            // Sandwich Topology: [Front (0..A/2)] [Victim (A/2..V)] [Back (V..V+A/2)]
+            let front_count = num_attacker / 2;
+            let back_count = num_attacker - front_count;
+            let back_start = front_count + num_victim;
+            
+            author_index < front_count || (author_index >= back_start && author_index < (back_start + back_count))
+        } else {
+            // Default Sluggish: [Attacker (0..A)] [Honest] [Victim (N-V..N)]
+            author_index < num_attacker
+        };
+
+        let is_victim_node = if is_backrun {
+            author_index < num_victim
+        } else if is_sandwich {
+            let front_count = num_attacker / 2;
+            author_index >= front_count && author_index < (front_count + num_victim)
+        } else {
+            author_index >= num_validators - num_victim
+        };
+
+        if is_attacker_node {
             attacker_positions.push((pos, *round));
-        } else if author_index < (num_attacker + num_victim) {
+        } else if is_victim_node {
             victim_positions.push((pos, *round));
         }
     }
@@ -300,51 +327,128 @@ fn calculate_asr(
         return 0.0;
     }
     
-    // Count successful frontrunning (attacker before victim)
+    // Metrics
     let mut successes = 0;
     let mut total_pairs = 0;
     
-           // Compare blocks: attackers lag behind (lower rounds), victims advance (higher rounds)
-           // Success when attacker (lower round) is ordered before victim (higher round)
-           // Optimized: Expanded window to capture more lag effects
-           
-           let attack_type = std::env::var("ATTACK_TYPE").unwrap_or_else(|_| "frontrun".to_string());
-           let is_backrun = attack_type == "backrun";
+    // Backrunning metrics
+    let mut l1_successes = 0;
+    let mut l2_successes = 0;
+    let mut lx_successes = 0;
+    let mut backrun_total = 0;
+    let mut backrun_hist = vec![0; 11];
 
-           for (att_pos, att_round) in &attacker_positions {
-               for (vic_pos, vic_round) in &victim_positions {
-                   // Compare blocks where attacker is at same or lower round than victim
-                   // (attackers lag behind in sluggish attack)
-                   let round_diff = *vic_round as i32 - *att_round as i32;
-                   // Expanded window: <= 6 (from <= 3) to capture more lag effects
-                   if round_diff >= 0 && round_diff <= 6 {
-                       // Only count when attacker is at same or lower round (normal sluggish behavior)
-                       total_pairs += 1;
-                       
-                       let success = if is_backrun {
-                           att_pos > vic_pos
-                       } else {
-                           att_pos < vic_pos
-                       };
-                       
-                       // ASR Success: 
-                       // Frontrun: Attacker ordered BEFORE victim (att_pos < vic_pos)
-                       // Backrun: Attacker ordered AFTER victim (att_pos > vic_pos)
-                       if success {
-                           successes += 1;
-                       }
-                   }
-               }
-           }
-    
-    if total_pairs == 0 {
-        warn!("No comparable block pairs found");
-        return 0.0;
+    // Sandwich metrics
+    let mut victims_sandwiched = 0;
+    let mut total_victims_for_sandwich = 0;
+
+    // ASR-F / ASR-B Logic
+    for (att_pos, att_round) in &attacker_positions {
+        for (vic_pos, vic_round) in &victim_positions {
+            // Compare blocks in a window
+            // Sluggish specific: Attacker might lag by several rounds (window=6)
+            let round_diff = (*vic_round as i32 - *att_round as i32).abs();
+            if round_diff <= 6 {
+                total_pairs += 1;
+                
+                let success = if is_backrun || is_sandwich {
+                    *att_pos > *vic_pos
+                } else {
+                    *att_pos < *vic_pos
+                };
+                
+                if success {
+                    successes += 1;
+                }
+            }
+        }
     }
-    
+
+    // Granular Backrun Analysis (L1, L2, LX)
+    if is_backrun || is_sandwich {
+        for (vic_pos, vic_round) in &victim_positions {
+            backrun_total += 1;
+            let mut found_backrun = false;
+            
+            // Look for closest attacker AFTER victim
+            for (att_pos, att_round) in &attacker_positions {
+                if *att_pos > *vic_pos {
+                    let dist = *att_pos - *vic_pos;
+                    let r_diff = (*att_round as i32 - *vic_round as i32).abs();
+                    
+                    if r_diff <= 3 { // Tighter window for "direct" backrun
+                        found_backrun = true;
+                        lx_successes += 1;
+                        if dist == 1 { l1_successes += 1; }
+                        if dist == 2 { l2_successes += 1; }
+                        
+                        let hist_idx = dist.min(10);
+                        backrun_hist[hist_idx] += 1;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // Sandwich Analysis (SeSR)
+    if is_sandwich {
+        let front_count = num_attacker / 2;
+        let back_start = front_count + num_victim;
+
+        for (vic_pos, vic_round) in &victim_positions {
+            total_victims_for_sandwich += 1;
+            let mut has_front = false;
+            let mut has_back = false;
+
+            // Find Frontrun
+            for (att_pos, att_author_ref) in global_order.iter().enumerate() {
+                let author_idx = att_author_ref.0.value() as usize;
+                let round = att_author_ref.1;
+                if author_idx < front_count && att_pos < *vic_pos && (round as i32 - *vic_round as i32).abs() <= 3 {
+                    has_front = true;
+                    break;
+                }
+            }
+
+            // Find Backrun
+            for (att_pos, att_author_ref) in global_order.iter().enumerate() {
+                let author_idx = att_author_ref.0.value() as usize;
+                let round = att_author_ref.1;
+                if author_idx >= back_start && att_pos > *vic_pos && (round as i32 - *vic_round as i32).abs() <= 3 {
+                    has_back = true;
+                    break;
+                }
+            }
+
+            if has_front && has_back {
+                victims_sandwiched += 1;
+            }
+        }
+    }
+
     let asr = (successes as f64 / total_pairs as f64) * 100.0;
-    info!("ASR calculation: {}/{} pairs = {:.1}%", successes, total_pairs, asr);
     
+    if is_backrun {
+        let l1 = (l1_successes as f64 / backrun_total as f64) * 100.0;
+        let l2 = (l2_successes as f64 / backrun_total as f64) * 100.0;
+        let lx = (lx_successes as f64 / backrun_total as f64) * 100.0;
+        println!("  ASR-B (Overall): {:.1}%", asr);
+        println!("  L1 Success: {:.1}% ({}/{})", l1, l1_successes, backrun_total);
+        println!("  L2 Success: {:.1}% ({}/{})", l2, l2_successes, backrun_total);
+        println!("  LX Success: {:.1}% ({}/{})", lx, lx_successes, backrun_total);
+        println!("  Backrun Histogram (Gap 1-10): {:?}", &backrun_hist[1..]);
+        return lx; // Use LX as the final result for backrunning
+    }
+
+    if is_sandwich {
+        let sesr = (victims_sandwiched as f64 / total_victims_for_sandwich as f64) * 100.0;
+        println!("  ASR-S (Precedence): {:.1}%", asr);
+        println!("  Sandwich Efficiency (SeSR): {:.1}% ({}/{})", sesr, victims_sandwiched, total_victims_for_sandwich);
+        return sesr; // Use SeSR as the final result for sandwiching
+    }
+
+    println!("  ASR-F (Frontrun): {:.1}%", asr);
     asr
 }
 
