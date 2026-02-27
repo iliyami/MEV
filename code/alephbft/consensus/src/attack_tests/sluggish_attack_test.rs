@@ -3,7 +3,7 @@
 //! This test measures the Attack Success Rate (ASR) of the sluggish attack
 //! where attackers delay unit proposals to manipulate round priority.
 
-use crate::attack_tests::asr_calculation::calculate_asr_paper_aligned;
+use crate::attack_tests::asr_calculation::calculate_asr_paper_aligned_advanced;
 use crate::testing::{gen_config, gen_delay_config, init_log};
 use crate::{LocalIO, NodeCount, OrderedUnit, UnitFinalizationHandler, run_session, Terminator};
 use aleph_bft_mock::{Data, DataProvider, Hasher64, Keychain, Loader, Router, Saver, Spawner};
@@ -144,7 +144,7 @@ async fn test_sluggish_attack_asr_13_nodes() {
     
     // Calculate ASR
     let finalized_units_guard = finalized_units.lock();
-    let asr = calculate_asr_paper_aligned(&finalized_units_guard, num_nodes, num_attackers, num_victims);
+    let asr = calculate_asr_paper_aligned_advanced(&finalized_units_guard, num_nodes, num_attackers, num_victims);
     log::info!("📊 Attack Success Rate (ASR): {:.2}%", asr * 100.0);
     drop(finalized_units_guard);
     

@@ -296,7 +296,7 @@ def run_local_test(config: dict) -> dict:
 def verify_parity(config: dict, result: dict) -> bool:
     """Check if the ASR result matches expected within tolerance."""
     expected = (config.get('output') or {}).get('expected_asr', 50.0)
-    tolerance = config.get('output', {}).get('tolerance_percent', 100.0)
+    tolerance = (config.get('output') or {}).get('tolerance_percent', 100.0)
     
     try:
         actual = float(result['asr'])

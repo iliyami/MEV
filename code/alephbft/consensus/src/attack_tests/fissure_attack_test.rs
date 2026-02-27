@@ -3,7 +3,7 @@
 //! This test measures the Attack Success Rate (ASR) of the fissure attack
 //! where attackers exclude victim units from their parent sets.
 
-use crate::attack_tests::asr_calculation::calculate_asr_paper_aligned;
+use crate::attack_tests::asr_calculation::calculate_asr_paper_aligned_advanced;
 use crate::testing::{gen_config, gen_delay_config, init_log};
 use crate::{LocalIO, NodeCount, OrderedUnit, UnitFinalizationHandler, run_session, Terminator};
 use aleph_bft_mock::{Data, DataProvider, Hasher64, Keychain, Loader, Router, Saver, Spawner};
@@ -78,7 +78,7 @@ async fn test_fissure_attack_asr_13_nodes() {
     let spawner = Spawner::new();
     
     // Create network hub and get networks for each node
-    let (mut net_hub, networks) = Router::new(n_members);
+    let (net_hub, networks) = Router::new(n_members);
     spawner.spawn("network-hub", net_hub);
     
     // Create data providers and spawn members
@@ -151,7 +151,7 @@ async fn test_fissure_attack_asr_13_nodes() {
     }
     log::info!("📊 Units by creator: {:?}", units_by_creator);
     
-    let asr = calculate_asr_paper_aligned(&finalized_units_guard, num_nodes, num_attackers, num_victims);
+    let asr = calculate_asr_paper_aligned_advanced(&finalized_units_guard, num_nodes, num_attackers, num_victims);
     log::info!("📊 Attack Success Rate (ASR): {:.2}%", asr * 100.0);
     drop(finalized_units_guard);
     
@@ -262,7 +262,7 @@ async fn test_baseline_asr_13_nodes_no_attack() {
     }
     log::info!("📊 Units by creator: {:?}", units_by_creator);
     
-    let asr = calculate_asr_paper_aligned(&finalized_units_guard, num_nodes, num_attackers, num_victims);
+    let asr = calculate_asr_paper_aligned_advanced(&finalized_units_guard, num_nodes, num_attackers, num_victims);
     let asr_percent = asr * 100.0;
     log::info!("📊 Baseline Attack Success Rate (ASR): {:.2}%", asr_percent);
     log::info!("📊 Expected: ~50% (random ordering in fair system)");

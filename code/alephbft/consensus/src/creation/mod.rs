@@ -51,6 +51,9 @@ where
     let mut best_data = first_data;
     
     // Try getting data multiple times - data provider may vary it
+    let attack_type = env::var("ATTACK_TYPE").unwrap_or_else(|_| "frontrun".to_string());
+    let is_backrun = attack_type == "backrun";
+
     for _i in 1..p_max {
         if let Some(candidate_data) = data_provider.get_data().await {
             // Create a FullUnit with this candidate data
@@ -58,7 +61,14 @@ where
             let candidate_hash = candidate_unit.hash();
             
             // Lexicographic comparison: smaller hash wins for leader election in AlephBFT
-            if candidate_hash < best_hash {
+            // For backrunning, we want the LARGEST hash to ensure we lose the race
+            let is_better = if is_backrun {
+                candidate_hash > best_hash
+            } else {
+                candidate_hash < best_hash
+            };
+
+            if is_better {
                 best_hash = candidate_hash;
                 best_data = candidate_data;
             }

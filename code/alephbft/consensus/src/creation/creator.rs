@@ -48,11 +48,11 @@ impl<H: Hasher> Creator<H> {
                     .get(usize::from(prev_round))
                     .ok_or(ConstraintError::NotEnoughParents)?;
                 
-                // FISSURE ATTACK: Use filtered parents if attack is active
-                let parents = std::env::var("ATTACK_MODE")
+                // Use filtered parents if any attack is active
+                let attack_mode = std::env::var("ATTACK_MODE")
                     .unwrap_or_default();
                 
-                if parents == "fissure" {
+                if !attack_mode.is_empty() {
                     let filtered_parents = collector.prospective_parents_filtered(self.node_id, self.node_id)?;
                     ControlHash::new(&filtered_parents)
                 } else {

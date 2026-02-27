@@ -152,7 +152,7 @@ impl<H: Hasher> UnitsCollector<H> {
         // Determine parent round (round we're creating unit for - 1)
         let parent_round = self.for_round.saturating_sub(1);
         let quorum_threshold = n_members.consensus_threshold().0;
-        
+
         // Count parents in parent round for quorum check
         let mut parent_round_count = 0;
         let mut parent_round_victims = 0;
@@ -166,7 +166,33 @@ impl<H: Hasher> UnitsCollector<H> {
                 }
             }
         }
-        
+
+        // FORCE-INCLUDE GATING (Backrun / Sandwich)
+        let attack_type = env::var("ATTACK_TYPE").unwrap_or_else(|_| "frontrun".to_string());
+        let is_backrun = attack_type == "backrun";
+        let is_sandwich = attack_type == "sandwich";
+
+        if is_backrun || is_sandwich {
+            let mut should_wait = false;
+            
+            if is_backrun {
+                should_wait = true;
+            } else if is_sandwich {
+                // Split attackers for sandwich: first half frontruns, second half backruns
+                let half_attackers = n_attackers / 2;
+                if attacker_id.0 >= half_attackers {
+                    should_wait = true;
+                }
+            }
+
+            if should_wait && parent_round_victims == 0 && parent_round > 0 {
+                // If we are backrunning/sandwiching and haven't seen any victim units from the previous round yet,
+                // we "starve" the creator by claiming we don't have enough parents yet.
+                // This forces the Creator to loop and call process_unit() until a victim arrives.
+                return Err(ConstraintError::NotEnoughParents);
+            }
+        }
+
         // Smart quorum calculation: Can we exclude ALL victims from parent round?
         // Quorum = attackers (4) + honest (6) = 10 > 9 (threshold) ✓
         // So we can safely exclude all victims from parent-round!
