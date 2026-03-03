@@ -173,17 +173,6 @@ impl<U: UnitWithParents> RoundElection<U> {
             .collect();
         candidates.sort();
         
-        // HASH SORT RANDOMIZATION: Mitigate speculative attacks by randomizing leader priority
-        let seed_str = std::env::var("ALEPH_HASH_SORT_SEED").unwrap_or_else(|_| "0".to_string());
-        let seed: u64 = seed_str.parse().unwrap_or(0);
-        if seed != 0 {
-            // Apply deterministic "shuffle" by XORing or rotating based on seed + round
-            // This breaks the attacker's ability to grind a globally "best" hash
-            let rotation = (seed % candidates.len() as u64) as usize;
-            candidates.rotate_left(rotation);
-        }
-
-        // We will be `pop`ing the candidates from the back.
         candidates.reverse();
         let candidate = units
             .get(&candidates.pop().expect("there is a candidate"))

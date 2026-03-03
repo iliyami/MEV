@@ -169,29 +169,10 @@ impl<H: Hasher> UnitsCollector<H> {
 
         // FORCE-INCLUDE GATING (Backrun / Sandwich)
         let attack_type = env::var("ATTACK_TYPE").unwrap_or_else(|_| "frontrun".to_string());
-        let is_backrun = attack_type == "backrun";
-        let is_sandwich = attack_type == "sandwich";
-
-        if is_backrun || is_sandwich {
-            let mut should_wait = false;
-            
-            if is_backrun {
-                should_wait = true;
-            } else if is_sandwich {
-                // Split attackers for sandwich: first half frontruns, second half backruns
-                let half_attackers = n_attackers / 2;
-                if attacker_id.0 >= half_attackers {
-                    should_wait = true;
-                }
-            }
-
-            if should_wait && parent_round_victims == 0 && parent_round > 0 {
-                // If we are backrunning/sandwiching and haven't seen any victim units from the previous round yet,
-                // we "starve" the creator by claiming we don't have enough parents yet.
-                // This forces the Creator to loop and call process_unit() until a victim arrives.
-                return Err(ConstraintError::NotEnoughParents);
-            }
-        }
+        
+        // REVERT: Removed protocol-violating blocking wait. 
+        // Real nodes should never stall by returning NotEnoughParents if they actually have N-f parents.
+        // Instead, we just adjust parent selection logic if needed, but here we keep it simple to verify true resilience.
 
         // Smart quorum calculation: Can we exclude ALL victims from parent round?
         // Quorum = attackers (4) + honest (6) = 10 > 9 (threshold) ✓
@@ -218,36 +199,28 @@ impl<H: Hasher> UnitsCollector<H> {
             let is_victim = victim_indices.contains(&idx);
             
             if is_victim {
+                let is_backrun = attack_type == "backrun";
+                let is_sandwich = attack_type == "sandwich";
                 let is_parent_round = round == parent_round;
-                let mut exclusion_prob;
+                let exclusion_prob;
                 
-                // MAXIMUM AGGRESSIVENESS strategy for 80%+ ASR
-                // Key insight: With 4 attackers + 6 honest = 10 > 9 (quorum), we can exclude all 3 victims
-                if is_parent_round {
-                    // Parent-round: Quorum-aware but extremely aggressive exclusion
-                    if can_exclude_all_parent_round_victims {
-                        // We have enough non-victim parents - DETERMINISTIC exclusion (100%)
-                        // With 4 attackers + 6 honest = 10 > 9, we can safely exclude all 3 victims
-                        // This is the key to high ASR: consistent exclusion of all parent-round victims
-                        exclusion_prob = 1.0;
-                    } else {
-                        // Quorum is tight - check remaining count dynamically
-                        let remaining_after_exclusion = parent_round_count - excluded_parent_round_count - 1;
-                        if remaining_after_exclusion >= quorum_threshold {
-                            // Safe to exclude - use very high probability
-                            exclusion_prob = 0.99;
-                        } else {
-                            // Would break quorum - use high but safe probability
-                            exclusion_prob = 0.96;
-                        }
-                    }
+                if is_backrun || is_sandwich {
+                    // For backrunning/sandwiching, we MUST include the victim
+                    exclusion_prob = 0.0;
                 } else {
-                    // Non-parent-round: DETERMINISTIC exclusion (100%)
-                    // These don't affect quorum directly, so we can exclude ALL of them
-                    // This maximizes the impact on DAG structure and ordering
-                    exclusion_prob = 1.0;
+                    // MAXIMUM AGGRESSIVENESS strategy for frontrunning
+                    if is_parent_round {
+                        if can_exclude_all_parent_round_victims {
+                            exclusion_prob = 1.0;
+                        } else {
+                            let remaining_after_exclusion = parent_round_count - excluded_parent_round_count - 1;
+                            exclusion_prob = if remaining_after_exclusion >= quorum_threshold { 0.99 } else { 0.95 };
+                        }
+                    } else {
+                        exclusion_prob = 1.0;
+                    }
                 }
-                
+
                 // Exclude with calculated probability
                 if rng.gen::<f64>() < exclusion_prob {
                     if is_parent_round {

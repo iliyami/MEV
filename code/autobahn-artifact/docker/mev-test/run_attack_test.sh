@@ -100,6 +100,7 @@ for i in $(seq 0 $(($NUM_NODES - 1))); do
     if [ "$i" -eq "$ATTACKER_ID" ]; then
         echo "🔧 Starting attacker node $i"
         ATTACK_MODE=$ATTACK_MODE \
+        ATTACK_TYPE=$ATTACK_TYPE \
         ATTACKER_ID=$ATTACKER_ID \
         VICTIM_ID=$VICTIM_ID \
         EXCLUSION_PROBABILITY=$EXCLUSION_PROBABILITY \
@@ -147,15 +148,16 @@ PRIMARY_LOGS=$(ls logs/primary-*.log)
 python3 scripts/calculate-fissure-asr.py $PRIMARY_LOGS > /app/results/asr_output.log 2>&1
 
 # Extract ASR
-ASR=$(grep "FINAL ATTACK SUCCESS RATE (ASR):" /app/results/asr_output.log | tail -n 1 | sed 's/.*ASR): \([0-9.]*\)%/\1/')
+# Extract Success Rate (ASR/BSR/SSR)
+SUCCESS_RATE=$(grep -E "FINAL SUCCESS RATE \((ASR|BSR|SSR)\):" /app/results/asr_output.log | tail -n 1 | sed -E 's/.*: ([0-9.]*)%/\1/')
 
-if [ -z "$ASR" ]; then
-    echo "Error: Could not extract ASR from logs."
+if [ -z "$SUCCESS_RATE" ]; then
+    echo "Error: Could not extract success rate (ASR/BSR/SSR) from logs."
     cat /app/results/asr_output.log
     exit 1
 fi
 
-echo "Extracted ASR: $ASR"
-echo "FINAL_ASR=$ASR" > /app/results/asr_result.txt
+echo "Extracted Success Rate: $SUCCESS_RATE%"
+echo "FINAL_ASR=$SUCCESS_RATE" > /app/results/asr_result.txt
 
 echo "Test completed. Results saved to /app/results/asr_result.txt"

@@ -130,7 +130,7 @@ impl Committer {
                     debug!("Currently executing slot {:?}", state.last_executed_slot + 1);
                     match current_commit_message {
                         ConsensusMessage::Commit { slot: _, view: _, qc: _, proposals } => {
-                            for (pk, proposal) in proposals {
+                            for (pk, proposal) in proposals.iter() {
                                 let stop_height = *state.last_executed_heights.get(pk).unwrap();
                                 // Don't execute proposals which are too old
                                 if proposal.height <= stop_height {

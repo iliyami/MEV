@@ -8,8 +8,8 @@ protocol:
 
 docker:
   tag: "mev-autobahn:latest"
-  cpus: "32.0"
-  memory: "80g"
+  cpus: "12.0"
+  memory: "16g"
 
 test:
   test_name: "test_autobahn_asr"
@@ -30,6 +30,7 @@ environment:
   NUM_NODES: "13"
   DURATION: "60"
   ATTACK_MODE: "fissure"
+  ATTACK_TYPE: "sandwich"
   ATTACKER_ID: "0"
   VICTIM_ID: "1"
   EXCLUSION_PROBABILITY: "1.0"
@@ -38,6 +39,6 @@ environment:
   # AUTOBAHN RESEARCH PARAMETERS
   AUTOBAHN_K: "4"                    # Max open consensus instances (Default: 4)
   AUTOBAHN_FAST_PATH_TIMEOUT: "200"  # Timeout for fast path in ms (Default: 200)
-  AUTOBAHN_USE_FAST_PATH: "true"     # Toggle fast path (Default: true)
+  AUTOBAHN_USE_FAST_PATH: "false"     # Toggle fast path (Default: true)
 
 output: {}

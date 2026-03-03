@@ -48,7 +48,7 @@ yaml = _get_working_yaml()
 # Base paths
 BASE_DIR = Path(__file__).parent.parent
 CODE_DIR = BASE_DIR / "code"
-RESULTS_DIR = BASE_DIR / "results"
+RESULTS_DIR = BASE_DIR / "results_new"
 
 
 def load_config(config_path: str) -> dict:
@@ -72,21 +72,61 @@ def build_docker_image(config: dict) -> bool:
     print(f"  Protocol: {protocol}")
     print(f"  Context: {protocol_path}")
     
+    env = os.environ.copy()
+    # Allow environment to override, default to 0 for maximum compatibility on CloudLab
+    buildkit = env.get("DOCKER_BUILDKIT", "1")
+
+    # Isolate build context to avoid .DS_Store issues on macOS
+    import shutil
+    import time
+    temp_context = Path(f"/tmp/docker-build-{protocol}-{int(time.time())}")
+    temp_context.mkdir(parents=True, exist_ok=True)
+    
+    print(f"  Isolating context to: {temp_context}")
+    # Use rsync if available for efficiency and excluding .DS_Store
+    try:
+        subprocess.run([
+            "rsync", "-a", 
+            "--exclude", ".DS_Store", 
+            "--exclude", "target",
+            "--exclude", "*.log",
+            "--exclude", "logs/",
+            "--exclude", "__pycache__/",
+            "--exclude", "*.pyc",
+            str(protocol_path) + "/", str(temp_context)
+        ], check=True)
+    except Exception:
+        # Fallback to shutil if rsync fails (slower)
+        def ignore_func(path, names):
+            return [n for n in names if n == '.DS_Store' or n == 'target' or n.endswith('.log') or n == 'logs' or n == '__pycache__' or n.endswith('.pyc')]
+        shutil.copytree(protocol_path, temp_context, ignore=ignore_func, dirs_exist_ok=True)
+
+    # Re-calculate Dockerfile path relative to temp context
+    dockerfile_rel = dockerfile_path.relative_to(protocol_path)
+    temp_dockerfile = temp_context / dockerfile_rel
+    
     cmd = [
         "docker", "build",
         "-t", tag,
-        "-f", str(dockerfile_path),
-        "--progress=plain",
-        str(protocol_path)
+        "-f", str(temp_dockerfile),
     ]
+    
+    # Legacy builder (DOCKER_BUILDKIT=0) does not support --progress
+    if buildkit == "1":
+        cmd.append("--progress=plain")
+        
+    cmd.append(str(temp_context))
     
     print(f"  Command: {' '.join(cmd)}")
     
-    env = os.environ.copy()
-    # Allow environment to override, default to 0 for maximum compatibility on CloudLab
-    env["DOCKER_BUILDKIT"] = os.environ.get("DOCKER_BUILDKIT", "1")
-    
     result = subprocess.run(cmd, env=env, capture_output=False)
+    
+    # Cleanup temp context
+    try:
+        shutil.rmtree(temp_context)
+    except Exception:
+        pass
+        
     return result.returncode == 0
 
 
@@ -148,11 +188,16 @@ def run_attack_test(config: dict) -> dict:
         ]
 
     for local_rel, container_path in script_mounts:
-        # Check if it's a global script or protocol-specific
-        if local_rel.startswith("scripts/"):
-            local_full = BASE_DIR / local_rel
+        # Check protocol-specific path first, then fall back to global scripts
+        protocol_local = protocol_path / local_rel
+        global_local = BASE_DIR / local_rel
+        
+        if protocol_local.exists():
+            local_full = protocol_local
+        elif local_rel.startswith("scripts/") and global_local.exists():
+            local_full = global_local
         else:
-            local_full = protocol_path / local_rel
+            local_full = protocol_local # Default fallback for warning
             
         if local_full.exists():
             cmd.extend(["-v", f"{local_full}:{container_path}"])

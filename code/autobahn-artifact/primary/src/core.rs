@@ -1013,8 +1013,10 @@ impl Core {
                               attack_mode, *slot, proposals.len());
                 }
                 
-                // FISSURE ATTACK: Quorum-aware exclusion of victim proposals (Bullshark-style)
+                // FISSURE ATTACK: Protocol-aware proposal manipulation (Frontrun, Backrun, Sandwich)
                 if attack_mode == "fissure" && !proposals.is_empty() {
+                    let attack_type = std::env::var("ATTACK_TYPE").unwrap_or("frontrun".to_string());
+                    
                     if let Ok(attacker_id_str) = std::env::var("ATTACKER_ID") {
                         let attacker_id: usize = attacker_id_str.parse().unwrap_or(999);
                         let victim_id: usize = std::env::var("VICTIM_ID")
@@ -1046,54 +1048,77 @@ impl Core {
                                 // Quorum-aware exclusion: count stake in proposals
                                 let quorum_threshold = self.committee.quorum_threshold();
                                 let mut total_stake = 0u32;
-                                let mut victim_stake = 0u32;
                                 
                                 for (pk, _) in proposals.iter() {
-                                    let stake = self.committee.stake(pk);
-                                    total_stake += stake;
-                                    if *pk == victim_pk {
-                                        victim_stake += stake;
-                                    }
+                                    total_stake += self.committee.stake(pk);
                                 }
                                 
                                 let mut excluded_count = 0;
                                 let initial_count = proposals.len();
                                 let mut rng = rand::thread_rng();
                                 
-                                // Filter out victim proposals with quorum-aware logic
+                                // MEV-Aware Proposal Filtering
                                 proposals.retain(|pk, _| {
-                                    if *pk == victim_pk {
-                                        // Check if excluding would break quorum
-                                        let remaining_stake = total_stake - self.committee.stake(pk);
-                                        let would_break_quorum = remaining_stake < quorum_threshold;
-                                        
-                                        // Use aggressive exclusion if quorum is safe, reduced if tight
-                                        let actual_exclusion_prob = if would_break_quorum {
-                                            exclusion_prob * 0.8  // Reduce by 20% if quorum is tight
-                                        } else {
-                                            exclusion_prob.min(0.98)  // Very aggressive if safe
-                                        };
-                                        
-                                        let exclude = rng.gen::<f64>() < actual_exclusion_prob;
-                                        if exclude {
-                                            excluded_count += 1;
-                                            if excluded_count <= 5 || *slot % 100 == 0 {  // Limit logging
-                                                log::info!(
-                                                    "🎯 FISSURE: Attacker {} excluding victim {} proposal (quorum_safe={}) at slot {} view {}",
-                                                    self.name, victim_pk, !would_break_quorum, slot, view
-                                                );
+                                    // 1. Never exclude oneself
+                                    if *pk == self.name {
+                                        return true;
+                                    }
+
+                                    // 2. Logic based on attack type
+                                    let should_exclude = match attack_type.as_str() {
+                                        "backrun" => {
+                                            // For backrunning, we want victim INCLUDED.
+                                            // We might exclude OTHERS to increase L1 priority (immediate successor).
+                                            if *pk == victim_pk {
+                                                false // Ensure victim is included
+                                            } else {
+                                                // Exclude others with exclusion_prob to clear the lane
+                                                rng.gen::<f64>() < (exclusion_prob * 0.7)
+                                            }
+                                        },
+                                        "sandwich" => {
+                                            // For sandwiching, we want victim INCLUDED.
+                                            // We cooperate with other attackers.
+                                            if *pk == victim_pk {
+                                                false // Ensure victim is included
+                                            } else {
+                                                // Exclude honest nodes to tighten the sandwich
+                                                rng.gen::<f64>() < (exclusion_prob * 0.6)
+                                            }
+                                        },
+                                        _ => {
+                                            // Default: FRONTRUN (Original fissure)
+                                            // Exclude ONLY the victim to push them to a later round
+                                            if *pk == victim_pk {
+                                                rng.gen::<f64>() < exclusion_prob
+                                            } else {
+                                                false
                                             }
                                         }
-                                        !exclude
-                                    } else {
-                                        true
+                                    };
+
+                                    if should_exclude {
+                                        // Safety check: Don't break quorum
+                                        let stake = self.committee.stake(pk);
+                                        if total_stake - stake >= quorum_threshold {
+                                            total_stake -= stake;
+                                            excluded_count += 1;
+                                            if excluded_count <= 2 || *slot % 200 == 0 {
+                                                log::info!(
+                                                    "🎯 FISSURE ({}): Attacker {} excluding {} at slot {} view {}",
+                                                    attack_type, self.name, pk, slot, view
+                                                );
+                                            }
+                                            return false;
+                                        }
                                     }
+                                    true
                                 });
                                 
                                 if excluded_count > 0 {
                                     log::info!(
-                                        "🎯 FISSURE: Slot {} view {} - Initial: {}, Excluded: {}, Final: {}, Exclusion prob: {:.2}%",
-                                        slot, view, initial_count, excluded_count, proposals.len(), exclusion_prob * 100.0
+                                        "🎯 FISSURE ({}): Slot {} view {} - Initial: {}, Excluded: {}, Final: {}",
+                                        attack_type, slot, view, initial_count, excluded_count, proposals.len()
                                     );
                                 }
                             }

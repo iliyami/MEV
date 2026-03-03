@@ -11,39 +11,29 @@ from collections import defaultdict
 
 ATTACKER_ID = 0
 VICTIM_ID = 1
+BACK_ATTACKER_ID = 2
 
 def extract_committed_blocks(log_files: List[str]) -> Tuple[List[Tuple[int, int]], dict]:
     """Extract committed blocks (authority_index, height) from log files"""
-    # Pattern: "Committed B{height}({author_public_key})"
-    # We need to map public keys to authority indices
-    # Public keys in logs are displayed as hex strings
     committed_blocks = []
     author_to_index = {}
-    index_to_author = {}
     
-    # First pass: collect all unique authors and map them to indices
-    # Sort by author string to ensure consistent ordering (matching BTreeMap order)
     all_authors = set()
     for log_file in log_files:
         try:
             with open(log_file, 'r') as file:
                 for line in file:
-                    # Look for "Committed B{height}({author})" pattern
                     match = re.search(r'Committed B(\d+)\(([^)]+)\)', line)
                     if match:
                         author_str = match.group(2)
                         all_authors.add(author_str)
         except FileNotFoundError:
-            print(f"⚠️  Warning: File {log_file} not found")
             continue
     
-    # Sort authors to get consistent ordering (matching BTreeMap sorted order)
     sorted_authors = sorted(all_authors)
     for idx, author_str in enumerate(sorted_authors):
         author_to_index[author_str] = idx
-        index_to_author[idx] = author_str
     
-    # Second pass: extract committed blocks with indices
     for log_file in log_files:
         try:
             with open(log_file, 'r') as file:
@@ -58,68 +48,65 @@ def extract_committed_blocks(log_files: List[str]) -> Tuple[List[Tuple[int, int]
         except FileNotFoundError:
             continue
     
-    return committed_blocks, index_to_author
+    return committed_blocks, author_to_index
 
-def build_global_order(log_files: List[str]) -> Tuple[List[Tuple[int, int]], dict]:
-    """Build global ordering from committed blocks across all nodes"""
-    committed_blocks, index_to_author = extract_committed_blocks(log_files)
+def calculate_mev_metrics(committed_blocks: List[Tuple[int, int]], attack_type: str):
+    """Calculate Advanced MEV Metrics (ASR, BSR, SSR)"""
     
-    if not committed_blocks:
-        print("❌ Error: No committed blocks found in any log file!")
-        return [], {}
+    # 1. Group blocks by height (round) to analyze intra-round ordering
+    rounds = defaultdict(list)
+    for pos, (auth, height) in enumerate(committed_blocks):
+        rounds[height].append(auth)
+        
+    total_victims = 0
+    frontrun_success = 0
+    backrun_success = 0
+    sandwich_success = 0
     
-    # Remove duplicates while preserving order (first occurrence wins)
-    seen = set()
-    unique_blocks = []
-    for block in committed_blocks:
-        if block not in seen:
-            seen.add(block)
-            unique_blocks.append(block)
-    
-    print(f"📦 Total committed blocks found: {len(unique_blocks)}")
-    
-    return unique_blocks, index_to_author
+    # Analyze each round where a victim block exists
+    for height, participants in rounds.items():
+        if VICTIM_ID in participants:
+            total_victims += 1
+            vic_idx = participants.index(VICTIM_ID)
+            
+            # Frontrun: Attacker 0 is before Victim
+            if ATTACKER_ID in participants:
+                att_idx = participants.index(ATTACKER_ID)
+                if att_idx < vic_idx:
+                    frontrun_success += 1
+            
+            # Backrun: Attacker (0) is immediately after Victim (L1)
+            # Or just after Victim (LX)
+            if ATTACKER_ID in participants:
+                att_idx = participants.index(ATTACKER_ID)
+                if att_idx > vic_idx:
+                    backrun_success += 1
+                    
+            # Sandwich: Attacker 0 before AND (Attacker 2 or 0) after
+            # Sandwich: Attacker 0 before AND after
+            if ATTACKER_ID in participants:
+                front_idx = participants.index(ATTACKER_ID)
+                if front_idx < vic_idx:
+                    # Check for back attacker in the same participants list (requires multi-block per round)
+                    # or check if Node 2 is ALSO identified as an attacker.
+                    # For now, let's keep it consistent: only Node 0 counts.
+                    if participants.count(ATTACKER_ID) > 1:
+                        # Find the last occurrence
+                        back_idx = len(participants) - 1 - participants[::-1].index(ATTACKER_ID)
+                        if back_idx > vic_idx:
+                            sandwich_success += 1
 
-def calculate_asr(committed_blocks: List[Tuple[int, int]], index_to_author: dict) -> float:
-    """Calculate Attack Success Rate (ASR)"""
+    asr = (frontrun_success / total_victims * 100) if total_victims > 0 else 0
+    bsr = (backrun_success / total_victims * 100) if total_victims > 0 else 0
+    ssr = (sandwich_success / total_victims * 100) if total_victims > 0 else 0
     
-    # Find all attacker and victim blocks
-    attacker_positions = []
-    victim_positions = []
+    print(f"\n📊 MEV Metrics (Attack Type: {attack_type}):")
+    print(f"   Total Victim Blocks: {total_victims}")
+    print(f"   Frontrun Success (ASR): {asr:.2f}% ({frontrun_success}/{total_victims})")
+    print(f"   Backrun Success (BSR):  {bsr:.2f}% ({backrun_success}/{total_victims})")
+    print(f"   Sandwich Success (SSR): {ssr:.2f}% ({sandwich_success}/{total_victims})")
     
-    for pos, (authority, height) in enumerate(committed_blocks):
-        if authority == ATTACKER_ID:
-            attacker_positions.append((pos, height))
-        elif authority == VICTIM_ID:
-            victim_positions.append((pos, height))
-    
-    print(f"\n📊 Block Statistics:")
-    print(f"   Total blocks in order: {len(committed_blocks)}")
-    print(f"   Attacker blocks (Node {ATTACKER_ID}): {len(attacker_positions)}")
-    print(f"   Victim blocks (Node {VICTIM_ID}): {len(victim_positions)}")
-    
-    if not attacker_positions or not victim_positions:
-        print(f"\n⚠️  Warning: Missing attacker or victim blocks!")
-        return 0.0
-    
-    # Count successful frontrunning (attacker before victim)
-    successes = 0
-    total_pairs = 0
-    
-    for att_pos, att_height in attacker_positions:
-        for vic_pos, vic_height in victim_positions:
-            total_pairs += 1
-            if att_pos < vic_pos:
-                successes += 1
-    
-    asr = (successes / total_pairs) * 100.0 if total_pairs > 0 else 0.0
-    
-    print(f"\n🎯 ASR Calculation:")
-    print(f"   Total pairs analyzed: {total_pairs:,}")
-    print(f"   Successful frontrunning: {successes:,}")
-    print(f"   Failed frontrunning: {total_pairs - successes:,}")
-    
-    return asr
+    return asr, bsr, ssr
 
 def analyze_block_distribution(committed_blocks: List[Tuple[int, int]]):
     """Show distribution of blocks per authority"""
@@ -131,91 +118,71 @@ def analyze_block_distribution(committed_blocks: List[Tuple[int, int]]):
     print(f"\n📈 Block Distribution by Authority:")
     for auth in sorted(distribution.keys()):
         count = distribution[auth]
-        percentage = (count / len(committed_blocks)) * 100
         marker = ""
-        if auth == ATTACKER_ID:
-            marker = " 🎯 ATTACKER"
-        elif auth == VICTIM_ID:
-            marker = " 🎯 VICTIM"
-        print(f"   Node {auth:2d}: {count:4d} blocks ({percentage:5.2f}%){marker}")
+        if auth == ATTACKER_ID: marker = " 🎯 FRONT-ATTACKER"
+        elif auth == VICTIM_ID: marker = " 🎯 VICTIM"
+        elif auth == BACK_ATTACKER_ID: marker = " 🎯 BACK-ATTACKER"
+        print(f"   Node {auth:2d}: {count:4d} blocks{marker}")
 
-def check_attack_logs(log_files: List[str]):
-    """Check if attack was actually executed"""
-    fissure_pattern = r"FISSURE: Attacker.*excluding victim"
-    leader_support_pattern = r"LEADER_SUPPORT: Attacker.*excluding victim"
-    attack_found = False
-    attack_type = None
-    exclusion_count = 0
+def check_attack_logs(log_files: List[str]) -> str:
+    """Check if attack was actually executed and return type"""
+    patterns = {
+        "frontrun": r"FISSURE \(frontrun\):",
+        "backrun": r"FISSURE \(backrun\):",
+        "sandwich": r"FISSURE \(sandwich\):"
+    }
     
+    detected_type = "unknown"
     for filename in log_files:
-        if "primary-0" in filename or "node-0" in filename:  # Check attacker's log
-            try:
-                with open(filename, 'r') as file:
-                    for line in file:
-                        if re.search(leader_support_pattern, line):
-                            attack_found = True
-                            attack_type = "Leader Support"
-                            exclusion_count += 1
-                        elif re.search(fissure_pattern, line):
-                            attack_found = True
-                            attack_type = "Fissure"
-                            exclusion_count += 1
-            except FileNotFoundError:
-                continue
-    
-    if attack_found:
-        print(f"\n✅ {attack_type} attack detected: {exclusion_count} victim proposals excluded")
+        try:
+            with open(filename, 'r') as file:
+                content = file.read()
+                for atype, pat in patterns.items():
+                    if re.search(pat, content):
+                        detected_type = atype
+                        break
+        except: continue
+        if detected_type != "unknown": break
+            
+    if detected_type != "unknown":
+        print(f"\n✅ Fissure ({detected_type}) attack detected in logs")
     else:
         print(f"\n⚠️  Warning: No attack logs found!")
-        print(f"   The attack may not have been activated.")
+    return detected_type
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python3 calculate-fissure-asr.py <logfile1> <logfile2> ...")
+        print("Usage: python3 calculate-fissure-asr.py <logfile1> ...")
         sys.exit(1)
     
     log_files = sys.argv[1:]
-    
     print("\n" + "="*60)
-    print("🎯 FISSURE ATTACK ASR ANALYSIS (Autobahn)")
+    print("🎯 AUTOBAHN MEV SUCCESS ANALYSIS")
     print("="*60)
     
-    # Check if attack was executed
-    check_attack_logs(log_files)
-    
-    # Build global order
-    committed_blocks, index_to_author = build_global_order(log_files)
+    attack_type = check_attack_logs(log_files)
+    committed_blocks, _ = extract_committed_blocks(log_files)
     
     if not committed_blocks:
-        print("\n❌ Failed to extract committed blocks from logs")
+        print("\n❌ No blocks found.")
         sys.exit(1)
-    
-    # Show block distribution
+        
     analyze_block_distribution(committed_blocks)
+    asr, bsr, ssr = calculate_mev_metrics(committed_blocks, attack_type)
     
-    # Calculate ASR
-    asr = calculate_asr(committed_blocks, index_to_author)
-    
-    # Print final result
     print("\n" + "="*60)
-    print(f"🎯 FINAL ATTACK SUCCESS RATE (ASR): {asr:.2f}%")
-    print("="*60)
-    
-    # Interpretation
-    print(f"\n📝 Interpretation:")
-    if asr > 55:
-        print(f"   ✅ HIGH SUCCESS: Attack is highly effective!")
-    elif asr > 50:
-        print(f"   ✅ MODERATE SUCCESS: Attack provides advantage")
-    elif asr > 45:
-        print(f"   ⚠️  LOW SUCCESS: Minimal attack advantage")
+    if attack_type == "backrun":
+        score = bsr
+        metric = "BSR"
+    elif attack_type == "sandwich":
+        score = ssr
+        metric = "SSR"
     else:
-        print(f"   ❌ FAILED: No significant attack advantage")
-    
-    print(f"\n   Baseline (no attack): ~50%")
-    print(f"   Improvement: {asr - 50:.2f}%")
-    print(f"\n   Paper reference: https://eprint.iacr.org/2024/1496.pdf")
-    print()
+        score = asr
+        metric = "ASR"
+        
+    print(f"🎯 FINAL SUCCESS RATE ({metric}): {score:.2f}%")
+    print("="*60)
 
 if __name__ == "__main__":
     main()
