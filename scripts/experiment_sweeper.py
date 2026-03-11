@@ -320,7 +320,10 @@ def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_p
         config['test']['test_name'] = test_name_map.get(attack_mode, config['test'].get('test_name'))
     elif config['protocol']['name'] == "mysticeti":
         # Mysticeti uses test_{attack_mode}_attack_asr_13_nodes
-        config['test']['test_name'] = f"test_{attack_mode}_attack_asr_13_nodes"
+        if attack_mode == "none":
+            config['test']['test_name'] = "test_baseline_asr_13_nodes"
+        else:
+            config['test']['test_name'] = f"test_{attack_mode}_attack_asr_13_nodes"
     elif config['protocol']['name'] == "alephbft":
         # AlephBFT uses attack_tests::{attack_mode}_attack_test::test_{attack_mode}_attack_asr_13_nodes
         config['test']['test_name'] = f"attack_tests::{attack_mode}_attack_test::test_{attack_mode}_attack_asr_13_nodes"

@@ -10,8 +10,8 @@ protocol:
 
 docker:
   tag: "mev-mysticeti:latest"
-  cpus: "32.0"
-  memory: "80g"
+  cpus: "12"
+  memory: "16g"
 
 test:
   test_name: "test_fissure_attack_asr_13_nodes"

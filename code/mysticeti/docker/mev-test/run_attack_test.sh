@@ -42,6 +42,9 @@ case "${ATTACK_MODE}" in
     "certification_race")
         ./scripts/legacy_automation/automated_certification_race_attack.sh 2>&1 | tee /app/results/test_output.log || true
         ;;
+    "none")
+        ./scripts/legacy_automation/automated_baseline_test.sh 2>&1 | tee /app/results/test_output.log || true
+        ;;
     *)
         echo "Unknown attack mode: $ATTACK_MODE"
         exit 1
