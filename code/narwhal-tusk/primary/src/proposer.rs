@@ -450,7 +450,18 @@ impl Proposer {
             let enough_parents = !self.last_parents.is_empty();
             let enough_digests = self.payload_size >= self.header_size;
             let timer_expired = timer.is_elapsed();
-            if (timer_expired || enough_digests) && enough_parents {
+            // --- SLUGGISH ATTACK FIX ---
+            // If in sluggish mode, we WANT to be late. 
+            // We should ONLY propose if timer_expired, ignoring enough_digests.
+            let is_sluggish = self.attack_active && self.is_attacker && self.attack_mode == "sluggish";
+            
+            let should_propose = if is_sluggish {
+                timer_expired && enough_parents
+            } else {
+                (timer_expired || enough_digests) && enough_parents
+            };
+
+            if should_propose {
                 // Make a new header.
                 self.make_header().await;
                 self.payload_size = 0;
@@ -497,48 +508,75 @@ impl Proposer {
         let p_max = std::cmp::min(self.speculative_p_max, p_max_limit);
         
         let start_time = Instant::now();
+        // SCALE FIX: Reduce default timeout from 100ms to 20ms for better quorum maintenance
         let timeout_ms: u64 = std::env::var("SPECULATIVE_TIMEOUT_MS")
-            .unwrap_or_else(|_| "100".to_string())
+            .unwrap_or_else(|_| "20".to_string())
             .parse()
-            .unwrap_or(100);
+            .unwrap_or(20);
         let timeout_duration = std::time::Duration::from_millis(timeout_ms);
         
         let mut best_digest: Option<Digest> = None;
         let mut best_candidate_digests: Option<Vec<(Digest, u32)>> = None;
+        let mut best_parents: Option<std::collections::BTreeSet<Digest>> = None;
         
-        info!("Speculative attack: Generating {} candidate blocks by sampling worker batches (timeout: {}ms)", p_max, timeout_duration.as_millis());
+        info!("Speculative attack: Generating {} candidate blocks with parent-subset grinding (timeout: {}ms)", p_max, timeout_duration.as_millis());
         
         // Get all available digests from workers
         let all_digests: Vec<(Digest, u32)> = self.digests.drain(..).collect();
+        // Quorum requirements for parent grinding
+        let f = (self.committee_size - 1) / 3;
+        let min_parents = 2 * f + 1;
         
-        // Generate candidates by sampling different combinations of worker batches
+        // Generate candidates by sampling different combinations of worker batches AND parents
         for i in 0..p_max {
             // Check timeout
-            if start_time.elapsed() > timeout_duration {
-                warn!("Speculative attack: Timeout reached after {}ms, stopping at candidate {}", 
+            if i > 0 && start_time.elapsed() > timeout_duration {
+                debug!("Speculative attack: Timeout reached after {}ms at candidate {}", 
                       start_time.elapsed().as_millis(), i);
                 break;
             }
             
-            // Sample different combinations of worker batches for this candidate
+            // 1. Sample combinations of worker batches
             let candidate_digests = self.sample_worker_batches(&all_digests, i);
             
-            // Create a temporary header to compute its digest
-            let temp_payload: std::collections::BTreeMap<Digest, u32> = candidate_digests.iter().cloned().collect();
-            let temp_parents_set: std::collections::BTreeSet<Digest> = parents.iter().cloned().collect();
+            // 2. Sample subsets of parents
+            let mut candidate_parents = std::collections::BTreeSet::new();
+            let total_avail = parents.len();
             
-            // Compute the header digest (this is what determines ordering)
-            let header_digest = self.compute_header_digest(&temp_payload, &temp_parents_set);
+            if total_avail <= min_parents {
+                candidate_parents = parents.iter().cloned().collect();
+            } else {
+                let skip_idx = if i == 0 { None } else { Some((i - 1) % total_avail) };
+                for (idx, p) in parents.iter().enumerate() {
+                    if Some(idx) == skip_idx && total_avail > min_parents {
+                        continue;
+                    }
+                    candidate_parents.insert(p.clone());
+                }
+            }
+
+            // 3. Add Nonce-based grinding (DIVERSITY ENHANCEMENT)
+            // Even if payloads and parents are the same, we want unique digests.
+            // Since we can't add a field to Header, we vary the "include/exclude" of batches 
+            // more aggressively in sample_worker_batches using candidate_index.
+            
+            // Create a temporary header format to compute its digest
+            let temp_payload: std::collections::BTreeMap<Digest, u32> = candidate_digests.iter().cloned().collect();
+            
+            // Compute the header digest
+            let header_digest = self.compute_header_digest(&temp_payload, &candidate_parents);
             
             match &best_digest {
                 None => {
                     best_digest = Some(header_digest.clone());
                     best_candidate_digests = Some(candidate_digests);
+                    best_parents = Some(candidate_parents);
                 },
                 Some(current_best) => {
                     if self.digest_wins_over(&header_digest, current_best) {
                         best_digest = Some(header_digest.clone());
                         best_candidate_digests = Some(candidate_digests);
+                        best_parents = Some(candidate_parents);
                     }
                 }
             }
@@ -549,21 +587,21 @@ impl Proposer {
         
         let chosen_digests = best_candidate_digests.expect("Should have at least one candidate");
         let chosen_digest = best_digest.expect("Should have at least one candidate");
+        let chosen_parents = best_parents.expect("Should have at least one candidate");
         
         info!(
-            "Speculative attack: Chose best candidate with digest {:?} from {} attempts in {}ms",
-            chosen_digest, p_max, start_time.elapsed().as_millis()
+            "Speculative attack: Chose optimized candidate with digest {:?} using {} parents from {} attempts in {}ms",
+            chosen_digest, chosen_parents.len(), p_max, start_time.elapsed().as_millis()
         );
         
-        // Create the final header with the chosen worker batch combination
+        // Create the final header with the best found combination
         let payload: std::collections::BTreeMap<Digest, u32> = chosen_digests.into_iter().collect();
-        let parents_set: std::collections::BTreeSet<Digest> = parents.into_iter().collect();
         
         let final_header = Header::new(
             self.name,
             self.round,
             payload,
-            parents_set,
+            chosen_parents,
             &mut self.signature_service,
         ).await;
         
@@ -583,7 +621,7 @@ impl Proposer {
             .unwrap_or(4);
         
         // Use more sophisticated sampling based on candidate index
-        let base_seed = candidate_index * 7 + self.round as usize; // Add round for variation
+        let base_seed = candidate_index * 13 + self.round as usize; // Prime multiplier for better spread
         
         for worker_id in 0..num_workers {
             // Find digests from this worker
@@ -593,22 +631,25 @@ impl Proposer {
                 .collect();
             
             if !worker_digests.is_empty() {
-                // Use different sampling strategies for each candidate
-                let sample_index = match candidate_index % 4 {
-                    0 => (base_seed + worker_id) % worker_digests.len(), // Sequential
-                    1 => (base_seed * 3 + worker_id * 2) % worker_digests.len(), // Multiplicative
-                    2 => (base_seed ^ worker_id) % worker_digests.len(), // XOR variation
-                    _ => (base_seed + worker_id * 5) % worker_digests.len(), // Strided
-                };
+                // Strategy: Include or exclude batches to maximize entropy
+                let variant = (base_seed + worker_id) % 3;
                 
-                // CRITICAL FIX: Conditionally include batches to create diversity even with few transactions
-                // If we always include the same batch, we get identical digests -> 50% ASR
-                // Vary inclusion based on candidate_index
-                let include_batch = (candidate_index + worker_id) % 3 != 0; // Exclude 1/3rd of the time
-                
-                if include_batch {
-                    if let Some((digest, wid)) = worker_digests.get(sample_index) {
-                        sampled.push((digest.clone(), *wid));
+                match variant {
+                    0 => {
+                        // Include the "latest" batch
+                        if let Some((digest, wid)) = worker_digests.last() {
+                            sampled.push(((*digest).clone(), *wid));
+                        }
+                    },
+                    1 => {
+                        // Include a "middle" batch
+                        let idx = (base_seed + worker_id) % worker_digests.len();
+                        if let Some((digest, wid)) = worker_digests.get(idx) {
+                            sampled.push(((*digest).clone(), *wid));
+                        }
+                    },
+                    _ => {
+                        // Exclude this worker's batches for this candidate to vary digest
                     }
                 }
             }

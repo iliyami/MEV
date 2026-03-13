@@ -26,7 +26,16 @@ class LocalBench:
 
     def _background_run(self, command, log_file):
         name = splitext(basename(log_file))[0]
-        cmd = f'{command} 2> {log_file}'
+        
+        # PROPAGATE ATTACK ENV VARS: Ensure local simulation respects attack config
+        attack_vars = [
+            'ATTACK_MODE', 'ATTACKER_RATIO', 'VICTIM_RATIO',
+            'SPECULATIVE_P_MAX', 'SLUGGISH_TIMEOUT_MULTIPLIER',
+            'SPECULATIVE_TIMEOUT_MS', 'ASR_ROUND_WINDOW'
+        ]
+        envs = ' '.join([f'{v}="{os.environ[v]}"' for v in attack_vars if v in os.environ])
+        
+        cmd = f'{envs} {command} 2> {log_file}'
         subprocess.run(['tmux', 'new', '-d', '-s', name, cmd], check=True)
 
     def _kill_nodes(self):

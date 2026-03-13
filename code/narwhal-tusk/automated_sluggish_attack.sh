@@ -25,6 +25,7 @@ export NUM_NODES=${1:-${NUM_NODES:-15}}
 export ATTACKER_RATIO=${2:-${ATTACKER_RATIO:-0.33}}
 export VICTIM_RATIO=${3:-${VICTIM_RATIO:-0.22}}
 export DURATION=${4:-${DURATION:-35}}
+export ATTACK_MODE=${ATTACK_MODE:-sluggish}
 export SLUGGISH_TIMEOUT_MULTIPLIER=${SLUGGISH_TIMEOUT_MULTIPLIER:-2.0}
 # Position 30:
 export PAPER_TARGET=${PAPER_TARGET:-82.4}
@@ -77,10 +78,11 @@ echo "  ✅ Previous logs cleaned"
 echo ""
 
 # --- Step 4: Run ---
-echo "🚀 Step 4: Running 15-node network with sluggish attack..."
-echo "  Duration: 35 seconds"
-echo "  Network: $COMMITTEE_SIZE nodes"
-echo "  Expected ASR: ~82.4%"
+echo "🚀 Step 4: Running $NUM_NODES-node network with sluggish attack...
+  Duration: $DURATION seconds
+  Network: $NUM_NODES nodes
+  Expected ASR: ~$PAPER_TARGET%
+"
 echo ""
 echo "  Starting sluggish attack..."
 
