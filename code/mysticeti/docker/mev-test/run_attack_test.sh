@@ -63,6 +63,9 @@ FINAL_ASR=$(grep -a "FINAL_ASR_RESULT:" /app/results/test_output.log | tail -1 |
 if [ ! -z "$FINAL_ASR" ]; then
     echo "FINAL_ASR=$FINAL_ASR" > /app/results/asr_result.txt
     echo "FINAL_ASR_RESULT: $FINAL_ASR%"
+    # Forward backrun/sandwich stats for the experiment sweeper to capture
+    grep -a "FINAL_BACKRUN_STATS:" /app/results/test_output.log || true
+    grep -a "FINAL_SANDWICH_STATS:" /app/results/test_output.log || true
     exit 0
 else
     echo "ERROR: Could not parse ASR from output"

@@ -51,49 +51,54 @@ def extract_committed_blocks(log_files: List[str]) -> Tuple[List[Tuple[int, int]
     return committed_blocks, author_to_index
 
 def calculate_mev_metrics(committed_blocks: List[Tuple[int, int]], attack_type: str):
-    """Calculate Advanced MEV Metrics (ASR, BSR, SSR)"""
+    """Calculate Advanced MEV Metrics (ASR, BSR, SSR) with distance histogram"""
     
     # 1. Group blocks by height (round) to analyze intra-round ordering
     rounds = defaultdict(list)
     for pos, (auth, height) in enumerate(committed_blocks):
-        rounds[height].append(auth)
+        rounds[height].append((auth, pos))  # Store auth AND global position
         
     total_victims = 0
     frontrun_success = 0
     backrun_success = 0
     sandwich_success = 0
+    backrun_gaps = []  # Track distance for histogram
     
     # Analyze each round where a victim block exists
-    for height, participants in rounds.items():
+    for height, participants_with_pos in rounds.items():
+        participants = [auth for auth, _ in participants_with_pos]
+        positions = [pos for _, pos in participants_with_pos]
+        
         if VICTIM_ID in participants:
             total_victims += 1
             vic_idx = participants.index(VICTIM_ID)
+            vic_global_pos = positions[vic_idx]
             
             # Frontrun: Attacker 0 is before Victim
             if ATTACKER_ID in participants:
                 att_idx = participants.index(ATTACKER_ID)
+                att_global_pos = positions[att_idx]
                 if att_idx < vic_idx:
                     frontrun_success += 1
             
-            # Backrun: Attacker (0) is immediately after Victim (L1)
-            # Or just after Victim (LX)
+            # Backrun: Attacker (0) is after Victim
             if ATTACKER_ID in participants:
                 att_idx = participants.index(ATTACKER_ID)
+                att_global_pos = positions[att_idx]
                 if att_idx > vic_idx:
                     backrun_success += 1
+                    gap = att_global_pos - vic_global_pos
+                    backrun_gaps.append(gap)
                     
-            # Sandwich: Attacker 0 before AND (Attacker 2 or 0) after
-            # Sandwich: Attacker 0 before AND after
+            # Sandwich: Attacker 0 before (gap <= 3) AND (Attacker 2 or 0) after (gap <= 3)
             if ATTACKER_ID in participants:
                 front_idx = participants.index(ATTACKER_ID)
-                if front_idx < vic_idx:
-                    # Check for back attacker in the same participants list (requires multi-block per round)
-                    # or check if Node 2 is ALSO identified as an attacker.
-                    # For now, let's keep it consistent: only Node 0 counts.
+                front_global_pos = positions[front_idx]
+                if front_idx < vic_idx and (vic_global_pos - front_global_pos) <= 3:
                     if participants.count(ATTACKER_ID) > 1:
-                        # Find the last occurrence
                         back_idx = len(participants) - 1 - participants[::-1].index(ATTACKER_ID)
-                        if back_idx > vic_idx:
+                        back_global_pos = positions[back_idx]
+                        if back_idx > vic_idx and (back_global_pos - vic_global_pos) <= 3:
                             sandwich_success += 1
 
     asr = (frontrun_success / total_victims * 100) if total_victims > 0 else 0
@@ -105,6 +110,22 @@ def calculate_mev_metrics(committed_blocks: List[Tuple[int, int]], attack_type: 
     print(f"   Frontrun Success (ASR): {asr:.2f}% ({frontrun_success}/{total_victims})")
     print(f"   Backrun Success (BSR):  {bsr:.2f}% ({backrun_success}/{total_victims})")
     print(f"   Sandwich Success (SSR): {ssr:.2f}% ({sandwich_success}/{total_victims})")
+
+    # Emit FINAL_BACKRUN_STATS for backrun attacks
+    if attack_type == "backrun" and total_victims > 0:
+        l1_count = sum(1 for g in backrun_gaps if g == 1)
+        l2_count = sum(1 for g in backrun_gaps if g in (2, 3))
+        l1_asr = (l1_count / total_victims * 100) if total_victims > 0 else 0
+        l2_asr = (l2_count / total_victims * 100) if total_victims > 0 else 0
+        import json
+        stats = {"l1_asr": round(l1_asr, 2), "l2_asr": round(l2_asr, 2), "histogram": backrun_gaps}
+        print(f"FINAL_BACKRUN_STATS: {json.dumps(stats)}")
+
+    # Emit FINAL_SANDWICH_STATS for sandwich attacks
+    if attack_type == "sandwich" and total_victims > 0:
+        import json
+        stats = {"sesr": round(ssr, 2)}
+        print(f"FINAL_SANDWICH_STATS: {json.dumps(stats)}")
     
     return asr, bsr, ssr
 
@@ -126,6 +147,12 @@ def analyze_block_distribution(committed_blocks: List[Tuple[int, int]]):
 
 def check_attack_logs(log_files: List[str]) -> str:
     """Check if attack was actually executed and return type"""
+    import os
+    env_attack_type = os.environ.get("ATTACK_TYPE")
+    if env_attack_type in ["frontrun", "backrun", "sandwich"]:
+        print(f"\n✅ Attack type '{env_attack_type}' detected from environment.")
+        return env_attack_type
+
     patterns = {
         "frontrun": r"FISSURE \(frontrun\):",
         "backrun": r"FISSURE \(backrun\):",
@@ -145,7 +172,7 @@ def check_attack_logs(log_files: List[str]) -> str:
         if detected_type != "unknown": break
             
     if detected_type != "unknown":
-        print(f"\n✅ Fissure ({detected_type}) attack detected in logs")
+        print(f"\n✅ Attack ({detected_type}) detected in logs")
     else:
         print(f"\n⚠️  Warning: No attack logs found!")
     return detected_type

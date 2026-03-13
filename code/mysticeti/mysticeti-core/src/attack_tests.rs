@@ -125,6 +125,10 @@ use tracing::{info, warn};
             warn!("No commits to analyze");
             return 0.0;
         }
+
+        let attack_type = std::env::var("ATTACK_TYPE").unwrap_or_else(|_| "frontrun".to_string());
+        let is_backrun = attack_type == "backrun";
+        let is_sandwich = attack_type == "sandwich";
         
         // Build global ordering from all commits
         let mut global_order = Vec::new();
@@ -136,17 +140,38 @@ use tracing::{info, warn};
         
         info!("Global order contains {} blocks", global_order.len());
         
-        // Identify attacker and victim blocks
-        // Attackers are first NUM_ATTACKER nodes (indices 0 to NUM_ATTACKER-1)
-        // Victims are last NUM_VICTIM nodes (indices NUM_VALIDATORS-NUM_VICTIM to NUM_VALIDATORS-1)
+        // Identify attacker and victim blocks based on attack type topology
         let mut attacker_positions = Vec::new();
         let mut victim_positions = Vec::new();
         
         for (pos, (author, round)) in global_order.iter().enumerate() {
             let author_index = *author as usize;
-            if author_index < num_attacker {
+
+            let is_attacker_node = if is_backrun {
+                // Backrun Topology: [Victim (0..V)] [Attacker (V..V+A)] [Honest]
+                author_index >= num_victim && author_index < (num_victim + num_attacker)
+            } else if is_sandwich {
+                let front_count = num_attacker / 2;
+                let back_count = num_attacker - front_count;
+                let back_start = front_count + num_victim;
+                author_index < front_count || (author_index >= back_start && author_index < (back_start + back_count))
+            } else {
+                // Frontrun Topology: [Attacker (0..A)] ... [Victim (N-V..N)]
+                author_index < num_attacker
+            };
+
+            let is_victim_node = if is_backrun {
+                author_index < num_victim
+            } else if is_sandwich {
+                let front_count = num_attacker / 2;
+                author_index >= front_count && author_index < (front_count + num_victim)
+            } else {
+                author_index >= n - num_victim
+            };
+
+            if is_attacker_node {
                 attacker_positions.push((pos, *round));
-            } else if author_index >= n - num_victim {
+            } else if is_victim_node {
                 victim_positions.push((pos, *round));
             }
         }
@@ -158,9 +183,40 @@ use tracing::{info, warn};
             warn!("Missing attacker or victim blocks");
             return 0.0;
         }
+
+        // -- Sandwich Logic --
+        if is_sandwich {
+            let mut sandwiched_victims = 0;
+            let mut total_victim_opportunities = 0;
+
+            for (vic_pos, vic_round) in &victim_positions {
+                total_victim_opportunities += 1;
+                // Strict rule: Front and Back attackers must be within a gap of 3 positions (e.g. L1/L2 equivalent)
+                let has_front = attacker_positions.iter().any(|(att_pos, att_round)| {
+                    *att_round == *vic_round && *att_pos < *vic_pos && (*vic_pos - *att_pos) <= 3
+                });
+                let has_back = attacker_positions.iter().any(|(att_pos, att_round)| {
+                    *att_round == *vic_round && *att_pos > *vic_pos && (*att_pos - *vic_pos) <= 3
+                });
+                
+                if has_front && has_back {
+                    sandwiched_victims += 1;
+                }
+            }
+
+            let sesr = if total_victim_opportunities > 0 {
+                (sandwiched_victims as f64 / total_victim_opportunities as f64) * 100.0
+            } else {
+                0.0
+            };
+
+            info!("SeSR calculation: {}/{} victims sandwiched = {:.1}%", sandwiched_victims, total_victim_opportunities, sesr);
+            println!("FINAL_SANDWICH_STATS: {{\"sesr\": {:.2}}}", sesr);
+            info!("FINAL_ASR_RESULT: {}%", sesr);
+            return sesr;
+        }
         
-        // Count successful frontrunning (attacker before victim)
-        // This measures: Ba ≺C Bv (attacker block ordered before victim block)
+        // Count successful ordering pairs
         let mut successes = 0;
         let mut total_pairs = 0;
         
@@ -168,8 +224,13 @@ use tracing::{info, warn};
             for (vic_pos, _vic_round) in &victim_positions {
                 total_pairs += 1;
                 
-                // Success: attacker ordered before victim (Ba ≺C Bv)
-                if att_pos < vic_pos {
+                let success = if is_backrun {
+                    att_pos > vic_pos  // Backrun: attacker AFTER victim
+                } else {
+                    att_pos < vic_pos  // Frontrun: attacker BEFORE victim
+                };
+                
+                if success {
                     successes += 1;
                 }
             }
@@ -181,12 +242,41 @@ use tracing::{info, warn};
         }
         
         let asr = (successes as f64 / total_pairs as f64) * 100.0;
-        info!("📊 ASR Analysis (Block-Pair Ordering):");
+        info!("📊 ASR Analysis (Block-Pair Ordering, type={}):", attack_type);
         info!("  Total pairs: {}", total_pairs);
-        info!("  Successful frontrunning pairs: {} ({:.1}%)", successes, asr);
+        info!("  Successful pairs: {} ({:.1}%)", successes, asr);
         info!("  Attacker blocks: {}", attacker_positions.len());
         info!("  Victim blocks: {}", victim_positions.len());
         info!("  Expected attacker ratio (stake): ~{:.1}%", (num_attacker as f64 / n as f64) * 100.0);
+
+        // --- Detailed Backrun Metrics (histogram) ---
+        if is_backrun {
+            let mut gaps = Vec::new();
+            let mut l1_count = 0;
+            let mut l2_count = 0;
+
+            for (att_pos, _att_round) in &attacker_positions {
+                for (vic_pos, _vic_round) in &victim_positions {
+                    if att_pos > vic_pos {
+                        let gap = att_pos - vic_pos;
+                        gaps.push(gap);
+                        if gap == 1 {
+                            l1_count += 1;
+                        } else if gap == 2 || gap == 3 {
+                            l2_count += 1;
+                        }
+                    }
+                }
+            }
+
+            let l1_asr = (l1_count as f64 / total_pairs as f64) * 100.0;
+            let l2_asr = (l2_count as f64 / total_pairs as f64) * 100.0;
+
+            println!(
+                "FINAL_BACKRUN_STATS: {{\"l1_asr\": {:.2}, \"l2_asr\": {:.2}, \"histogram\": {:?}}}",
+                l1_asr, l2_asr, gaps
+            );
+        }
         
         info!("FINAL_ASR_RESULT: {}%", asr);
         asr

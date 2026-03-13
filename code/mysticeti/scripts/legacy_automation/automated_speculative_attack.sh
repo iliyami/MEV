@@ -131,6 +131,9 @@ echo "  cargo test --release --package mysticeti-core test_speculative_attack_as
 echo ""
 # Standardized output for sweeper
 echo "FINAL_ASR_RESULT: $ASR"
+# Forward backrun/sandwich stats for the experiment sweeper to capture
+sed 's/\x1b\[[0-9;]*m//g' "$TEST_OUTPUT" | grep "FINAL_BACKRUN_STATS:" | tail -1 || true
+sed 's/\x1b\[[0-9;]*m//g' "$TEST_OUTPUT" | grep "FINAL_SANDWICH_STATS:" | tail -1 || true
 
 # Clean up
 rm -f "$TEST_OUTPUT"

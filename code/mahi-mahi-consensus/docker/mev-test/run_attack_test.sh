@@ -39,6 +39,9 @@ case "${ATTACK_MODE}" in
     "sluggish"|"hybrid_sluggish")
         ./scripts/legacy_automation/automated_sluggish_attack.sh 2>&1 | tee /app/results/test_output.log || true
         ;;
+    "none")
+        ./scripts/baseline-13nodes.sh 2>&1 | tee /app/results/test_output.log || true
+        ;;
     *)
         echo "Unknown attack mode: $ATTACK_MODE"
         exit 1

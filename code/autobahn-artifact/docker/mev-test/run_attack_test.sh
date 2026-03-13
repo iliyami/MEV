@@ -160,4 +160,8 @@ fi
 echo "Extracted Success Rate: $SUCCESS_RATE%"
 echo "FINAL_ASR=$SUCCESS_RATE" > /app/results/asr_result.txt
 
+# Forward backrun/sandwich stats for the experiment sweeper to capture
+grep "FINAL_BACKRUN_STATS:" /app/results/asr_output.log || true
+grep "FINAL_SANDWICH_STATS:" /app/results/asr_output.log || true
+
 echo "Test completed. Results saved to /app/results/asr_result.txt"

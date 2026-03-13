@@ -311,11 +311,12 @@ def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_p
         config['environment']['EXCLUSION_PROBABILITY'] = str(config_override['EXCLUSION_PROBABILITY'])
     
     # Set correct test name based on attack mode
-    if config['protocol']['name'] in ['bullshark', 'narwhal']:
+    if config['protocol']['name'] in ['bullshark', 'narwhal', 'mevsui']:
         test_name_map = {
             "fissure": "test_fissure_attack_asr_dynamic",
             "speculative": "test_speculative_attack_asr_dynamic",
-            "sluggish": "test_sluggish_attack_asr_dynamic"
+            "sluggish": "test_sluggish_attack_asr_dynamic",
+            "none": "test_baseline_13_nodes_no_attack"
         }
         config['test']['test_name'] = test_name_map.get(attack_mode, config['test'].get('test_name'))
     elif config['protocol']['name'] == "mysticeti":
