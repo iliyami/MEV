@@ -208,9 +208,9 @@ impl Core {
             .and_then(|s| s.parse().ok())
             .unwrap_or_else(|| {
                 if attack_mode == "speculative" {
-                    panic!("Error: SPECULATIVE_P_MAX environment variable must be set for speculative attack mode");
+                    warn!("SPECULATIVE_P_MAX not provided, using default of 2 to avoid computation delays at scale");
                 }
-                50
+                2
             });
 
         let committee_size = context.committee.size();
