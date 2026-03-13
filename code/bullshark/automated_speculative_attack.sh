@@ -45,7 +45,7 @@ echo "   (This compiles and runs the consensus test harness)"
 rm -f "$ATTACK_OUTPUT_LOG"
 
 # Run test
-cargo test --release --package consensus-core test_speculative_attack_asr_13_nodes -- --nocapture 2>&1 | tee "$ATTACK_OUTPUT_LOG"
+cargo test --release --package consensus-core test_speculative_attack_asr_dynamic -- --nocapture 2>&1 | tee "$ATTACK_OUTPUT_LOG"
 
 # Extract Result
 echo ""

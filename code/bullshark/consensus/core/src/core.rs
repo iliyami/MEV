@@ -1451,7 +1451,7 @@ impl Core {
     ) -> (Vec<VerifiedBlock>, FissureAttackMetrics) {
         // Check if attack is enabled via environment variables
         let attack_mode = std::env::var("ATTACK_MODE").unwrap_or_default();
-        if attack_mode != "fissure" {
+        if attack_mode != "fissure" && attack_mode != "speculative" && attack_mode != "sluggish" {
             return (ancestors, FissureAttackMetrics::default());
         }
 

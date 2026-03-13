@@ -32,12 +32,12 @@ echo ""
 
 cd "$BS_DIR"
 
-echo "🚀 Running Test: test_sluggish_attack_asr_13_nodes..."
+echo "🚀 Running Test: test_sluggish_attack_asr_dynamic..."
 rm -f "$ATTACK_OUTPUT_LOG"
 
 # Run test
-# Note: Ensure test_sluggish_attack_asr_13_nodes is enabled in lib.rs
-cargo test --release --package consensus-core test_sluggish_attack_asr_13_nodes -- --nocapture 2>&1 | tee "$ATTACK_OUTPUT_LOG"
+# Note: Ensure test_sluggish_attack_asr_dynamic is enabled in lib.rs
+cargo test --release --package consensus-core test_sluggish_attack_asr_dynamic -- --nocapture 2>&1 | tee "$ATTACK_OUTPUT_LOG"
 
 # Extract Result
 echo ""
