@@ -183,7 +183,7 @@ async fn test_speculative_attack_asr_dynamic() {
     let collection_duration_secs: u64 = env::var("COLLECTION_DURATION")
         .ok()
         .and_then(|s| s.parse().ok())
-        .unwrap_or(35);
+        .unwrap_or(20 + (num_validators as u64) * 2);
     let collection_duration = Duration::from_secs(collection_duration_secs);
     
     let min_commits: usize = env::var("MIN_COMMITS")
