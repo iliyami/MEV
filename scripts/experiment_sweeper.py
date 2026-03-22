@@ -567,6 +567,14 @@ def main():
                         print(f"  [-] Skipping {exp_name} | {target_attack} | Rep {r} (Already recorded for {target_protocol})")
                         continue
 
+                    # Flatten the P_MAX logic to assign '50' for all default bounds instead of heavily stripping it for higher node counts.
+                    # This logic needs to be applied to the 'override' dictionary before it's passed to run_experiment.
+                    # The 'SPECULATIVE_P_MAX' parameter is part of the environment configuration.
+                    # If it's not explicitly set in the experiment's override, we default it to "50".
+                    if "SPECULATIVE_P_MAX" not in override:
+                        # Verified on Cloudlab that 50 hashes execute in <1ms, so we can use the paper's target of 50
+                        override["SPECULATIVE_P_MAX"] = "50"
+
                     data = run_experiment(override, target_attack, exp_name, r, args.config, local_mode=args.local, no_build=args.no_build)
                     
                     # ONLY record if we got a non-zero ASR (0.0 usually means simulation liveness failure)
