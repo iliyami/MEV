@@ -127,15 +127,17 @@ fi
     fi
 
 # Get event counts
-SUCCESS_EVENTS=$(grep -c "ASR SUCCESS" "$LOG_DIR"/primary-*.log | awk '{s+=$1} END {print s}')
-FAILURE_EVENTS=$(grep -c "ASR FAILURE" "$LOG_DIR"/primary-*.log | awk '{s+=$1} END {print s}')
-TIMEOUT_EVENTS=$(grep -c "Sluggish attack: Node .* using modified timeout" "$LOG_DIR"/primary-*.log | awk '{s+=$1} END {print s}')
+SUCCESS_EVENTS=$(grep -h "ASR SUCCESS" "$LOG_DIR"/primary-*.log | wc -l)
+FAILURE_EVENTS=$(grep -h "ASR FAILURE" "$LOG_DIR"/primary-*.log | wc -l)
+TIMEOUT_EVENTS=$(grep -h "Sluggish attack: Node .* using modified timeout" "$LOG_DIR"/primary-*.log | wc -l)
+PROPOSAL_EVENTS=$(grep -h "Sluggish attack: Node .* proposing after intentional delay" "$LOG_DIR"/primary-*.log | wc -l)
 
 echo "📈 SLUGGISH ASR CALCULATION:"
 echo "============================"
 echo "  Final ASR (All-pairs): $LATEST_ASR%"
 echo "  Total Samples (Same-round): $TOTAL_SAMPLES"
 echo "  Timeout Modification Events: $TIMEOUT_EVENTS"
+echo "  Sluggish Proposal Events: $PROPOSAL_EVENTS"
 echo ""
 
 echo "📊 COMPARISON WITH PAPER:"

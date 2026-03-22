@@ -28,7 +28,8 @@ environment:
   SLUGGISH_TIMEOUT_MULTIPLIER: "2.0"
   
   # NETWORK SIMULATION (For Fissure/Sluggish alignment)
-  LATENCY_JITTER: "100ms 20ms"
+  # LATENCY_JITTER removed to prevent single-machine loopback interface throttling
+
   
   # BENCHMARK CONFIG
   DURATION: "35"

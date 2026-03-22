@@ -58,7 +58,12 @@ pub struct Proposer {
     /// Speculative attack specific
     speculative_attempts: u64,
     speculative_successes: u64,
-    speculative_p_max: usize, // Maximum number of candidates to generate
+    speculative_p_max: usize,
+
+    /// Sluggish attack specific (Liveness-aware)
+    honest_round: Round,
+    sluggish_timeout_multiplier: f64,
+    proposed_this_round: bool,
 }
 
 impl Proposer {
@@ -84,12 +89,21 @@ impl Proposer {
         let committee_size = committee.authorities.len();
         let attacker_ratio: f64 = env::var("ATTACKER_RATIO").unwrap_or_default().parse().unwrap_or(0.33);
         let victim_ratio: f64 = env::var("VICTIM_RATIO").unwrap_or_default().parse().unwrap_or(0.22);
-        let speculative_p_max: usize = env::var("SPECULATIVE_P_MAX").unwrap_or_default().parse().unwrap_or(50);
+        let speculative_p_max: usize = env::var("SPECULATIVE_P_MAX").unwrap_or_default().parse().unwrap_or(200);
+        let sluggish_timeout_multiplier: f64 = env::var("SLUGGISH_TIMEOUT_MULTIPLIER").unwrap_or_else(|_| "2.0".to_string()).parse().unwrap_or(2.0);
         
         let is_attacker = (attack_mode == "fissure" || attack_mode == "speculative" || attack_mode == "sluggish") && Self::is_attacker_node(&name, committee, attacker_ratio);
         let attacker_nodes = Self::get_attacker_nodes(committee, attacker_ratio);
         let victim_nodes = Self::get_victim_nodes(committee, attacker_ratio, victim_ratio);
         let attack_active = attack_mode == "fissure" || attack_mode == "speculative" || attack_mode == "sluggish";
+
+        // Sluggish attack: increase max_header_delay to intentionally delay proposals
+        let mut delay = max_header_delay;
+        if attack_mode == "sluggish" && is_attacker {
+            delay = (max_header_delay as f64 * sluggish_timeout_multiplier) as u64;
+            info!("Sluggish attack: Node {} using modified timeout: {}ms (multiplier: {})", name, delay, sluggish_timeout_multiplier);
+        }
+        let max_header_delay = delay;
 
         tokio::spawn(async move {
             Self {
@@ -115,7 +129,10 @@ impl Proposer {
                 total_victim_blocks: 0,
                 speculative_attempts: 0,
                 speculative_successes: 0,
-                speculative_p_max, 
+                speculative_p_max,
+                honest_round: 0,
+                sluggish_timeout_multiplier,
+                proposed_this_round: false,
             }
             .run()
             .await;
@@ -393,7 +410,7 @@ impl Proposer {
         let original_parents_with_origins: Vec<(Digest, PublicKey)> = self.last_parents.drain(..).collect();
         
         // For fissure attack, exclude victims if possible. Speculative attack uses all parents.
-        let processed_parents: Vec<Digest> = if self.attack_active && self.is_attacker && self.attack_mode == "fissure" {
+        let processed_parents: Vec<Digest> = if self.attack_active && self.is_attacker && (self.attack_mode == "fissure" || self.attack_mode == "speculative") {
             self.preprocess_parents_with_origins(original_parents_with_origins)
         } else {
             // Non-attack or Speculative: just extract digests
@@ -432,6 +449,9 @@ impl Proposer {
             .await
             .expect("Failed to send header");
         info!("HEADER SENT: Successfully sent header to core for node {}", self.name);
+        
+        // Mark as proposed for this round
+        self.proposed_this_round = true;
     }
 
     // Main loop listening to incoming messages.
@@ -462,6 +482,9 @@ impl Proposer {
             };
 
             if should_propose {
+                if is_sluggish {
+                     info!("Sluggish attack: Node {} proposing after intentional delay of {}ms", self.name, self.max_header_delay);
+                }
                 // Make a new header.
                 self.make_header().await;
                 self.payload_size = 0;
@@ -473,8 +496,36 @@ impl Proposer {
 
             tokio::select! {
                 Some((parents, round)) = self.rx_core.recv() => {
+                    // Track the maximum round seen from cross-section of parents
+                    // This helps sluggish attackers know how far behind they are
+                    if round > self.honest_round {
+                        self.honest_round = round;
+                    }
+
                     if round < self.round {
                         continue;
+                    }
+
+                    // --- SLUGGISH ATTACK FIX: Force proposal before advancing if skipped ---
+                    let is_sluggish = self.attack_active && self.is_attacker && self.attack_mode == "sluggish";
+                    if is_sluggish {
+                        // SLUGGISH ATTACK: Liveness-aware lagging
+                        // Target: Stay exactly 1 round behind the honest majority
+                        let lag = (self.honest_round as i64) - (self.round as i64);
+                        if lag < 1 { // If we are not yet 1 round behind, delay to achieve it
+                            info!("SLUGGISH ATTACK: Delaying proposal to lag round (Current: {}, Honest: {})", self.round, self.honest_round);
+                            let delay = (self.max_header_delay as f64 * self.sluggish_timeout_multiplier) as u64;
+                            sleep(Duration::from_millis(delay)).await;
+                            info!("Sluggish Proposal Event: Node {} stayed in round {} (Honest was {})", self.name, self.round, self.honest_round);
+                        } else {
+                            debug!("SLUGGISH ATTACK: Already lagging enough (Round: {}, Honest: {}), proposing to maintain liveness", self.round, self.honest_round);
+                        }
+                    }
+
+                    if is_sluggish && !self.proposed_this_round && !self.last_parents.is_empty() {
+                        info!("Sluggish attack: Node {} forced proposal for round {} before advancing", self.name, self.round);
+                        self.make_header().await;
+                        self.payload_size = 0;
                     }
 
                     // Advance to the next round.
@@ -483,6 +534,7 @@ impl Proposer {
 
                     // Signal that we have enough parent certificates to propose a new header.
                     self.last_parents = parents;
+                    self.proposed_this_round = false;
                 }
                 Some((digest, worker_id)) = self.rx_workers.recv() => {
                     self.payload_size += digest.size();
@@ -502,9 +554,9 @@ impl Proposer {
         
         // Paper's parameters: p_max = 50
         let p_max_limit: usize = std::env::var("SPECULATIVE_P_MAX_LIMIT")
-            .unwrap_or_else(|_| "50".to_string())
+            .unwrap_or_else(|_| "500".to_string())
             .parse()
-            .unwrap_or(50);
+            .unwrap_or(500);
         let p_max = std::cmp::min(self.speculative_p_max, p_max_limit);
         
         let start_time = Instant::now();
@@ -524,10 +576,11 @@ impl Proposer {
         // Get all available digests from workers
         let all_digests: Vec<(Digest, u32)> = self.digests.drain(..).collect();
         // Quorum requirements for parent grinding
-        let f = (self.committee_size - 1) / 3;
-        let min_parents = 2 * f + 1;
+        // Match Committee::quorum_threshold() logic: 2*N/3 + 1
+        let min_parents = 2 * self.committee_size / 3 + 1;
         
-        // Generate candidates by sampling different combinations of worker batches AND parents
+        // Paper's methodology: Speculative attack chooses the largest digest among candidates.
+        // We ensure we ALWAYS have at least a quorum of parents.
         for i in 0..p_max {
             // Check timeout
             if i > 0 && start_time.elapsed() > timeout_duration {
@@ -536,23 +589,33 @@ impl Proposer {
                 break;
             }
             
-            // 1. Sample combinations of worker batches
+            // 1. Sample combinations of worker batches (primary source of entropy)
             let candidate_digests = self.sample_worker_batches(&all_digests, i);
             
-            // 2. Sample subsets of parents
+            // 2. Select parents - ALWAYS ensure we meet quorum threshold
             let mut candidate_parents = std::collections::BTreeSet::new();
             let total_avail = parents.len();
             
             if total_avail <= min_parents {
+                // Not enough or just enough parents: use all of them
                 candidate_parents = parents.iter().cloned().collect();
             } else {
-                let skip_idx = if i == 0 { None } else { Some((i - 1) % total_avail) };
-                for (idx, p) in parents.iter().enumerate() {
-                    if Some(idx) == skip_idx && total_avail > min_parents {
-                        continue;
-                    }
-                    candidate_parents.insert(p.clone());
+                // More than enough parents: we can sample if we want, but MUST keep >= min_parents
+                // Optimization: take a random subset of size min_parents to vary the digest
+                use rand::seq::SliceRandom;
+                let mut rng = rand::thread_rng();
+                let mut indices: Vec<_> = (0..total_avail).collect();
+                indices.shuffle(&mut rng);
+                
+                for &idx in indices.iter().take(min_parents) {
+                    candidate_parents.insert(parents[idx].clone());
                 }
+            }
+            
+            // LOGGING: Verify quorum validity
+            if candidate_parents.len() < min_parents {
+                 warn!("Speculative attack: Critical error! Built candidate with {} parents, but quorum requires {}. Total available: {}. Loop index: {}", 
+                       candidate_parents.len(), min_parents, total_avail, i);
             }
 
             // 3. Add Nonce-based grinding (DIVERSITY ENHANCEMENT)
