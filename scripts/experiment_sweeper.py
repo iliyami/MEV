@@ -574,6 +574,10 @@ def main():
                     if "SPECULATIVE_P_MAX" not in override:
                         # Verified on Cloudlab that 50 hashes execute in <1ms, so we can use the paper's target of 50
                         override["SPECULATIVE_P_MAX"] = "50"
+                        
+                    if "BATCH_SIZE" not in override:
+                        # CRITICAL: Fragment the payload batches to inject entropy so the mathematical 50 combination target actually has subset arrays to process
+                        override["BATCH_SIZE"] = "100"
 
                     data = run_experiment(override, target_attack, exp_name, r, args.config, local_mode=args.local, no_build=args.no_build)
                     
