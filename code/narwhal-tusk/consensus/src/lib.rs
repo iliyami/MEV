@@ -380,6 +380,13 @@ impl Consensus {
         // Ensure we do not commit garbage collected certificates.
         ordered.retain(|x| x.round() + self.gc_depth >= state.last_committed_round);
 
+        // Restore explicit LOP sorting logic: round ascending, digest descending
+        ordered.sort_by(|a, b| {
+            a.round().cmp(&b.round()).then_with(|| {
+                b.digest().as_ref().cmp(a.digest().as_ref())
+            })
+        });
+
         // ASR TRACKING: Track when attacker blocks are ordered before victim blocks
         self.track_asr(&ordered);
         
@@ -412,13 +419,13 @@ impl Consensus {
         }
         
         let attacker_ratio: f64 = std::env::var("ATTACKER_RATIO")
-            .unwrap_or_else(|_| "0.308".to_string())
+            .unwrap_or_else(|_| "0.33".to_string())
             .parse()
-            .unwrap_or(0.308);
+            .unwrap_or(0.33);
         let victim_ratio: f64 = std::env::var("VICTIM_RATIO")
-            .unwrap_or_else(|_| "0.231".to_string())
+            .unwrap_or_else(|_| "0.22".to_string())
             .parse()
-            .unwrap_or(0.231);
+            .unwrap_or(0.22);
         
         let committee_size = self.committee.size();
         let attacker_count = (committee_size as f64 * attacker_ratio) as usize;
@@ -522,31 +529,22 @@ impl Consensus {
             return;
         }
         
-        // Only calculate when we have enough blocks for meaningful statistics
-        if self.global_finalization.len() < 5 {
-            return;
-        }
+        let authority_keys = self.committee.authorities.keys();
+        let mut authority_keys: Vec<PublicKey> = authority_keys.cloned().collect();
+        authority_keys.sort(); // Lexicographical sort
         
         let attacker_ratio: f64 = std::env::var("ATTACKER_RATIO")
-            .unwrap_or_else(|_| "0.308".to_string())
+            .unwrap_or_else(|_| "0.33".to_string())
             .parse()
-            .unwrap_or(0.308);
+            .unwrap_or(0.33);
         let victim_ratio: f64 = std::env::var("VICTIM_RATIO")
-            .unwrap_or_else(|_| "0.231".to_string())
+            .unwrap_or_else(|_| "0.22".to_string())
             .parse()
-            .unwrap_or(0.231);
-        
+            .unwrap_or(0.22);
+            
         let committee_size = self.committee.size();
         let attacker_count = (committee_size as f64 * attacker_ratio) as usize;
         let victim_count = (committee_size as f64 * victim_ratio) as usize;
-        
-        // Identify attacker and victim nodes
-        let mut authority_keys: Vec<PublicKey> = self.committee
-            .authorities
-            .keys()
-            .cloned()
-            .collect();
-        authority_keys.sort();
         
         let attacker_nodes: HashSet<PublicKey> = authority_keys
             .iter()
@@ -574,79 +572,72 @@ impl Consensus {
             }
         }
         
-        // PAPER-ALIGNED ASR CALCULATION: Two metrics
-        // 1. All-pairs (paper methodology): att_round >= vic_round
-        // 2. Same-round (frontrunning metric): round_diff == 0
-        let mut successes_all_pairs = 0;
-        let mut total_pairs_all = 0;
-        let mut successes_same_round = 0;
-        let mut total_pairs_same = 0;
+        // PAPER-ALIGNED ASR CALCULATION
+        // ASR-A: All-pairs within a small round window
+        // ASR-B: Same-round pairs (direct competition)
+        let mut successes_a = 0;
+        let mut total_a = 0;
+        let mut successes_b = 0;
+        let mut total_b = 0;
         
+        let window: i64 = std::env::var("ASR_ROUND_WINDOW")
+            .unwrap_or_else(|_| "1".to_string()) // Default to 1 for more strict adjacency
+            .parse()
+            .unwrap_or(1);
+
         for (att_height, att_round) in &attacker_blocks {
             for (vic_height, vic_round) in &victim_blocks {
-                // PAPER FILTER: Depends on attack type
-                // Fissure/Speculative: att_round >= vic_round (Attacker frontruns victim)
-                // Sluggish: att_round <= vic_round (Attacker is older but delay causes ordering priority)
-                let is_sluggish = self.attack_mode == "sluggish";
-                let round_condition = if is_sluggish {
-                    *att_round <= *vic_round
-                } else {
-                    *att_round >= *vic_round
-                };
-
-                if round_condition {
-                    let window: i64 = std::env::var("ASR_ROUND_WINDOW")
-                        .unwrap_or_else(|_| "3".to_string())
-                        .parse()
-                        .unwrap_or(3);
-                        
-                    let round_diff = (*vic_round as i64 - *att_round as i64).abs();
-                    if round_diff <= window {
-                        total_pairs_all += 1;
-                        if *att_height < *vic_height {
-                            successes_all_pairs += 1;
-                        }
+                let diff = (*vic_round as i64 - *att_round as i64);
+                
+                // Same-round ASR (ASR-B)
+                if diff == 0 {
+                    total_b += 1;
+                    if *att_height < *vic_height {
+                        successes_b += 1;
                     }
                 }
                 
-                // SAME-ROUND FILTER: Direct frontrunning competition
-                if *att_round == *vic_round {
-                    total_pairs_same += 1;
-                    if *att_height < *vic_height {
-                        successes_same_round += 1;
+                // Trans-round / All-pairs ASR (ASR-A)
+                // Filter depends on attack mode
+                let in_window = diff.abs() <= window;
+                if in_window {
+                    let eligible = if self.attack_mode == "sluggish" {
+                        // Sluggish: Attacker stays older but wants to be included before vic
+                        diff >= 0 // att_round <= vic_round
+                    } else {
+                        // Speculative/Fissure: Attacker is same or newer
+                        diff <= 0 // att_round >= vic_round
+                    };
+                    
+                    if eligible {
+                        total_a += 1;
+                        if *att_height < *vic_height {
+                            successes_a += 1;
+                        }
                     }
                 }
             }
         }
         
         let log_frequency: usize = std::env::var("ASR_LOGGING_FREQUENCY")
-            .unwrap_or_else(|_| "5".to_string())
+            .unwrap_or_else(|_| "10".to_string())
             .parse()
-            .unwrap_or(5);
+            .unwrap_or(10);
             
-        // Log ASR frequently for local verification
-        if self.global_finalization.len() % log_frequency == 0 || self.global_finalization.len() >= 100 {
-            let total_blocks = self.global_finalization.len();
-            
-            if total_pairs_all > 0 {
-                let asr_all = (successes_all_pairs as f64 / total_pairs_all as f64) * 100.0;
-                let asr_same = if total_pairs_same > 0 {
-                    (successes_same_round as f64 / total_pairs_same as f64) * 100.0
-                } else {
-                    0.0
-                };
+        if self.global_finalization.len() % log_frequency == 0 {
+            if total_a > 0 || total_b > 0 {
+                let asr_a = if total_a > 0 { (successes_a as f64 / total_a as f64) * 100.0 } else { 0.0 };
+                let asr_b = if total_b > 0 { (successes_b as f64 / total_b as f64) * 100.0 } else { 0.0 };
                 
                 info!(
-                    "GLOBAL ASR: All-pairs: {}/{} = {:.2}% | Same-round: {}/{} = {:.2}% | Blocks: {} (att:{} vic:{})",
-                    successes_all_pairs, total_pairs_all, asr_all,
-                    successes_same_round, total_pairs_same, asr_same,
-                    total_blocks, attacker_blocks.len(), victim_blocks.len()
+                    "ASR REPORT ({}): ASR-A (All-Pairs): {:.2}% ({}/{}) | ASR-B (Same-Round): {:.2}% ({}/{}) | Blocks: {}",
+                    self.attack_mode,
+                    asr_a, successes_a, total_a,
+                    asr_b, successes_b, total_b,
+                    self.global_finalization.len()
                 );
-            } else {
-                info!(
-                    "GLOBAL ASR: No valid pairs yet | Total blocks: {} | Attacker: {} | Victim: {}",
-                    total_blocks, attacker_blocks.len(), victim_blocks.len()
-                );
+                // Print a marker for the test scripts to find
+                info!("FINAL_ASR_RESULT: {:.2}%", asr_a);
             }
         }
     }

@@ -89,7 +89,7 @@ impl Proposer {
         let committee_size = committee.authorities.len();
         let attacker_ratio: f64 = env::var("ATTACKER_RATIO").unwrap_or_default().parse().unwrap_or(0.33);
         let victim_ratio: f64 = env::var("VICTIM_RATIO").unwrap_or_default().parse().unwrap_or(0.22);
-        let speculative_p_max: usize = env::var("SPECULATIVE_P_MAX").unwrap_or_default().parse().unwrap_or(200);
+        let speculative_p_max: usize = env::var("SPECULATIVE_P_MAX").unwrap_or_default().parse().unwrap_or(10);
         let sluggish_timeout_multiplier: f64 = env::var("SLUGGISH_TIMEOUT_MULTIPLIER").unwrap_or_else(|_| "2.0".to_string()).parse().unwrap_or(2.0);
         
         let is_attacker = (attack_mode == "fissure" || attack_mode == "speculative" || attack_mode == "sluggish") && Self::is_attacker_node(&name, committee, attacker_ratio);
@@ -410,7 +410,7 @@ impl Proposer {
         let original_parents_with_origins: Vec<(Digest, PublicKey)> = self.last_parents.drain(..).collect();
         
         // For fissure attack, exclude victims if possible. Speculative attack uses all parents.
-        let processed_parents: Vec<Digest> = if self.attack_active && self.is_attacker && (self.attack_mode == "fissure" || self.attack_mode == "speculative") {
+        let processed_parents: Vec<Digest> = if self.attack_active && self.is_attacker && self.attack_mode == "fissure" {
             self.preprocess_parents_with_origins(original_parents_with_origins)
         } else {
             // Non-attack or Speculative: just extract digests
@@ -554,9 +554,9 @@ impl Proposer {
         
         // Paper's parameters: p_max = 50
         let p_max_limit: usize = std::env::var("SPECULATIVE_P_MAX_LIMIT")
-            .unwrap_or_else(|_| "500".to_string())
+            .unwrap_or_else(|_| "50".to_string())
             .parse()
-            .unwrap_or(500);
+            .unwrap_or(50);
         let p_max = std::cmp::min(self.speculative_p_max, p_max_limit);
         
         let start_time = Instant::now();
