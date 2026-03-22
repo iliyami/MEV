@@ -76,6 +76,7 @@ impl Primary {
         let (tx_certificates_loopback, rx_certificates_loopback) = channel(CHANNEL_CAPACITY);
         let (tx_primary_messages, rx_primary_messages) = channel(CHANNEL_CAPACITY);
         let (tx_cert_requests, rx_cert_requests) = channel(CHANNEL_CAPACITY);
+        let (tx_victim_round, rx_victim_round) = channel(CHANNEL_CAPACITY);
 
         // Write the parameters to the logs.
         parameters.log();
@@ -153,6 +154,7 @@ impl Primary {
             /* rx_proposer */ rx_headers,
             tx_consensus,
             /* tx_proposer */ tx_parents,
+            /* tx_victim_round */ tx_victim_round,
         );
 
         // Keeps track of the latest consensus round and allows other tasks to clean up their their internal state
@@ -184,37 +186,6 @@ impl Primary {
             /* tx_core */ tx_certificates_loopback,
         );
 
-        // SLUGGISH ATTACK: Modify timeout for attackers to lag round counter
-        let attack_mode = std::env::var("ATTACK_MODE").unwrap_or_default();
-        let attacker_ratio: f64 = std::env::var("ATTACKER_RATIO")
-            .unwrap_or_else(|_| "0.3".to_string())
-            .parse()
-            .unwrap_or(0.3);
-        let sluggish_timeout_multiplier: f64 = std::env::var("SLUGGISH_TIMEOUT_MULTIPLIER")
-            .unwrap_or_else(|_| "2.0".to_string())
-            .parse()
-            .unwrap_or(2.0);
-
-        // Determine if this node is an attacker
-        let total_nodes = committee.size();
-        let attacker_count = ((total_nodes as f64) * attacker_ratio).floor() as usize;
-        let mut node_names: Vec<_> = committee.authorities.keys().collect();
-        node_names.sort();
-        let position = node_names.iter().position(|&n| n == &name).unwrap_or(total_nodes);
-        let is_attacker = (attack_mode == "sluggish")
-            && position < attacker_count;
-
-        info!("ATTACK CONFIG: Mode={}, IsAttacker={}, Position={}, Count={}", 
-              attack_mode, is_attacker, position, attacker_count);
-
-        // Apply sluggish timeout multiplier for attackers
-        let mut max_header_delay = parameters.max_header_delay;
-        if is_attacker && attack_mode == "sluggish" {
-            max_header_delay = ((max_header_delay as f64) * sluggish_timeout_multiplier) as u64;
-            info!("Sluggish attack: Node {} using modified timeout {}ms (multiplier: {:.2})",
-                  name, max_header_delay, sluggish_timeout_multiplier);
-        }
-
         // When the `Core` collects enough parent certificates, the `Proposer` generates a new header with new batch
         // digests from our workers and it back to the `Core`.
         Proposer::spawn(
@@ -222,9 +193,10 @@ impl Primary {
             &committee,
             signature_service,
             parameters.header_size,
-            max_header_delay,
+            parameters.max_header_delay,
             /* rx_core */ rx_parents,
             /* rx_workers */ rx_our_digests,
+            /* rx_victim_round */ rx_victim_round,
             /* tx_core */ tx_headers,
         );
 

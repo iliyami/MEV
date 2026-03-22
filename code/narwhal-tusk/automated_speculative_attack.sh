@@ -18,6 +18,10 @@ export VICTIM_RATIO=${3:-${VICTIM_RATIO:-0.22}}
 export DURATION=${4:-${DURATION:-35}}
 export TEST_DURATION=$DURATION
 export ATTACK_MODE=${ATTACK_MODE:-speculative}
+export NUM_WORKERS=${NUM_WORKERS:-8}
+export VICTIM_COUNT=${VICTIM_COUNT:-1}
+export ASR_LOGGING_FREQUENCY=${ASR_LOGGING_FREQUENCY:-1}
+export ASR_REPORT_THRESHOLD=${ASR_REPORT_THRESHOLD:-1}
 
 PAPER_ASR_TARGET=86.3 # Paper's speculative attack ASR for Tusk
 
@@ -52,7 +56,9 @@ echo "⚙️  Step 2: Configuring speculative attack parameters..."
 echo "  Attack Mode: $ATTACK_MODE"
 echo "  Attacker Ratio: $ATTACKER_RATIO"
 echo "  Victim Ratio: $VICTIM_RATIO"
+echo "  Victim Count: $VICTIM_COUNT"
 echo "  Network Size: $NUM_NODES nodes"
+echo "  Workers per Node: $NUM_WORKERS"
 echo "  Duration: $DURATION seconds"
 echo ""
 
@@ -78,19 +84,33 @@ else
     echo "⚠️  No venv found, using system python/fab"
 fi
 
-# Run the local benchmark in the background and capture output
-# Using timeout to ensure it stops after TEST_DURATION + some buffer
-# Duration is 35s in fabfile.py, give 60s total for startup/shutdown
-timeout 90 fab local > "$ATTACK_OUTPUT_LOG" 2>&1 &
+# Run the local benchmark in the background and capture output.
+# The old fixed 90s timeout is too short once we move beyond ~15 nodes,
+# causing partial runs that get reported as synthetic 0.0% ASR.
+STARTUP_BUFFER=$((45 + NUM_NODES + (NUM_WORKERS * 2)))
+FAB_TIMEOUT=$((TEST_DURATION + STARTUP_BUFFER))
+echo "  Fabric timeout budget: ${FAB_TIMEOUT}s"
+timeout "${FAB_TIMEOUT}" fab local > "$ATTACK_OUTPUT_LOG" 2>&1 &
 FAB_PID=$!
 
 echo "  Monitoring attack progress (logs will appear in $LOG_DIR/)..."
 echo "  (This will run for approximately $TEST_DURATION seconds)"
 
 # Wait for the benchmark to finish or timeout
-wait $FAB_PID || true
+FAB_EXIT=0
+wait $FAB_PID || FAB_EXIT=$?
 
-echo "  ✅ Speculative attack completed successfully"
+if [ "$FAB_EXIT" -eq 124 ]; then
+    echo "  ❌ Speculative attack timed out after ${FAB_TIMEOUT}s"
+    echo "  Last 30 lines of fab output:"
+    tail -n 30 "$ATTACK_OUTPUT_LOG" || true
+elif [ "$FAB_EXIT" -ne 0 ]; then
+    echo "  ❌ Speculative attack exited with status $FAB_EXIT"
+    echo "  Last 30 lines of fab output:"
+    tail -n 30 "$ATTACK_OUTPUT_LOG" || true
+else
+    echo "  ✅ Speculative attack completed successfully"
+fi
 echo ""
 
 # --- Step 5: Analyze attack results ---
@@ -124,6 +144,13 @@ else
     TOTAL_SAMPLES=$(echo "$ASR_LINE" | sed -n 's/.*ASR-B (Same-Round): [0-9.]*% ([0-9]*\/\([0-9]*\)).*/\1/p')
     if [ -z "$TOTAL_SAMPLES" ]; then
         TOTAL_SAMPLES="0"
+    fi
+
+    if [ "$LATEST_ASR" = "0.0" ]; then
+        FALLBACK_ASR=$(grep "FINAL_ASR_RESULT:" "$LOG_DIR"/primary-*.log 2>/dev/null | tail -1 | sed -n 's/.*FINAL_ASR_RESULT: \([0-9.]*\)%.*/\1/p')
+        if [ ! -z "$FALLBACK_ASR" ]; then
+            LATEST_ASR="$FALLBACK_ASR"
+        fi
     fi
 fi
 

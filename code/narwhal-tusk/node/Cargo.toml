@@ -26,7 +26,10 @@ consensus = { path = "../consensus" }
 [features]
 benchmark = ["worker/benchmark", "primary/benchmark", "consensus/benchmark"]
 
+[[bin]]
+name = "node"
+path = "src/main.rs"
+
 [[bin]]         
 name = "benchmark_client"   
-path = "src/benchmark_client.rs" 
- 
+path = "src/benchmark_client.rs"

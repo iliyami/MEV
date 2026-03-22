@@ -89,6 +89,14 @@ pub struct Consensus {
 }
 
 impl Consensus {
+    fn resolve_victim_count(committee_size: usize, attacker_count: usize, victim_ratio: f64) -> usize {
+        std::env::var("VICTIM_COUNT")
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+            .unwrap_or_else(|| (committee_size as f64 * victim_ratio) as usize)
+            .min(committee_size.saturating_sub(attacker_count))
+    }
+
     pub fn spawn(
         committee: Committee,
         gc_depth: Round,
@@ -112,7 +120,7 @@ impl Consensus {
             
             let committee_size = committee.size();
             let attacker_count = (committee_size as f64 * attacker_ratio) as usize;
-            let victim_count = (committee_size as f64 * victim_ratio) as usize;
+            let victim_count = Self::resolve_victim_count(committee_size, attacker_count, victim_ratio);
             
             let mut authority_keys: Vec<PublicKey> = committee.authorities.keys().cloned().collect();
             authority_keys.sort();
@@ -429,7 +437,7 @@ impl Consensus {
         
         let committee_size = self.committee.size();
         let attacker_count = (committee_size as f64 * attacker_ratio) as usize;
-        let victim_count = (committee_size as f64 * victim_ratio) as usize;
+        let victim_count = Self::resolve_victim_count(committee_size, attacker_count, victim_ratio);
         
         info!("ASR TRACKING: Committee size: {}, Attacker count: {}, Victim count: {}", 
               committee_size, attacker_count, victim_count);
@@ -544,7 +552,7 @@ impl Consensus {
             
         let committee_size = self.committee.size();
         let attacker_count = (committee_size as f64 * attacker_ratio) as usize;
-        let victim_count = (committee_size as f64 * victim_ratio) as usize;
+        let victim_count = Self::resolve_victim_count(committee_size, attacker_count, victim_ratio);
         
         let attacker_nodes: HashSet<PublicKey> = authority_keys
             .iter()

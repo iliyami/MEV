@@ -30,6 +30,8 @@ pub struct Proposer {
     rx_core: Receiver<(Vec<(Digest, PublicKey)>, Round)>,
     /// Receives the batches' digests from our workers.
     rx_workers: Receiver<(Digest, WorkerId)>,
+    /// Receives notifications that a victim header was observed in this round.
+    rx_victim_round: Receiver<Round>,
     /// Sends newly created headers to the `Core`.
     tx_core: Sender<Header>,
 
@@ -64,6 +66,7 @@ pub struct Proposer {
     honest_round: Round,
     sluggish_timeout_multiplier: f64,
     proposed_this_round: bool,
+    victim_observed_round: Option<Round>,
 }
 
 impl Proposer {
@@ -76,6 +79,7 @@ impl Proposer {
         max_header_delay: u64,
         rx_core: Receiver<(Vec<(Digest, PublicKey)>, Round)>,
         rx_workers: Receiver<(Digest, WorkerId)>,
+        rx_victim_round: Receiver<Round>,
         tx_core: Sender<Header>,
     ) {
         // Genesis certificates - use dummy origin since these are special
@@ -113,6 +117,7 @@ impl Proposer {
                 max_header_delay,
                 rx_core,
                 rx_workers,
+                rx_victim_round,
                 tx_core,
                 round: 1,
                 last_parents: genesis,
@@ -133,6 +138,7 @@ impl Proposer {
                 honest_round: 0,
                 sluggish_timeout_multiplier,
                 proposed_this_round: false,
+                victim_observed_round: None,
             }
             .run()
             .await;
@@ -174,7 +180,11 @@ impl Proposer {
     fn get_victim_nodes(committee: &Committee, attacker_ratio: f64, victim_ratio: f64) -> HashSet<PublicKey> {
         let total_nodes = committee.authorities.len();
         let attacker_count = (total_nodes as f64 * attacker_ratio) as usize;
-        let victim_count = (total_nodes as f64 * victim_ratio) as usize;
+        let victim_count = env::var("VICTIM_COUNT")
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+            .unwrap_or_else(|| (total_nodes as f64 * victim_ratio) as usize)
+            .min(total_nodes.saturating_sub(attacker_count));
         
         let mut node_names: Vec<_> = committee.authorities.keys().collect();
         node_names.sort();
@@ -452,6 +462,7 @@ impl Proposer {
         
         // Mark as proposed for this round
         self.proposed_this_round = true;
+        self.victim_observed_round = None;
     }
 
     // Main loop listening to incoming messages.
@@ -474,9 +485,16 @@ impl Proposer {
             // If in sluggish mode, we WANT to be late. 
             // We should ONLY propose if timer_expired, ignoring enough_digests.
             let is_sluggish = self.attack_active && self.is_attacker && self.attack_mode == "sluggish";
+            let is_speculative = self.attack_active && self.is_attacker && self.attack_mode == "speculative";
+            let victim_triggered = is_speculative
+                && self.victim_observed_round == Some(self.round)
+                && enough_parents
+                && !self.digests.is_empty();
             
             let should_propose = if is_sluggish {
                 timer_expired && enough_parents
+            } else if victim_triggered {
+                true
             } else {
                 (timer_expired || enough_digests) && enough_parents
             };
@@ -535,10 +553,27 @@ impl Proposer {
                     // Signal that we have enough parent certificates to propose a new header.
                     self.last_parents = parents;
                     self.proposed_this_round = false;
+                    self.victim_observed_round = None;
                 }
                 Some((digest, worker_id)) = self.rx_workers.recv() => {
                     self.payload_size += digest.size();
                     self.digests.push((digest, worker_id));
+                }
+                Some(victim_round) = self.rx_victim_round.recv() => {
+                    if self.attack_active && self.is_attacker && self.attack_mode == "speculative" {
+                        self.victim_observed_round = Some(victim_round);
+                        if victim_round == self.round && !self.proposed_this_round && !self.last_parents.is_empty() && !self.digests.is_empty() {
+                            info!(
+                                "Speculative attack: victim observed in round {}, proposing immediately with {} queued digests",
+                                victim_round,
+                                self.digests.len()
+                            );
+                            self.make_header().await;
+                            self.payload_size = 0;
+                            let deadline = Instant::now() + Duration::from_millis(self.max_header_delay);
+                            timer.as_mut().reset(deadline);
+                        }
+                    }
                 }
                 () = &mut timer => {
                     // Nothing to do.

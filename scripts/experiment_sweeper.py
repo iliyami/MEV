@@ -48,7 +48,7 @@ FIELDNAMES = [
     "DAG_STATE_CACHED_ROUNDS", "SYNC_TIMEOUT_MS", "GC_DEPTH", "LATENCY_JITTER", "LATENCY_MS", "JITTER_MS",
     "HEADER_SIZE", "MAX_HEADER_DELAY", "BATCH_SIZE", "MAX_BATCH_DELAY", "NUM_WORKERS",
     "WAVE_LENGTH", "NUMBER_OF_LEADERS", "SPECULATIVE_STRATEGY", "EXCLUSION_PROBABILITY", "HYBRID_EXCLUSION", 
-    "SIMPLE_EXCLUSION_PROB", "VICTIM_RATIO", "ALEPH_ELECTION_LOOKAHEAD", "ALEPH_COORD_REQUEST_DELAY_MS", "ALEPH_HASH_SORT_SEED",
+    "SIMPLE_EXCLUSION_PROB", "VICTIM_RATIO", "VICTIM_COUNT", "ALEPH_ELECTION_LOOKAHEAD", "ALEPH_COORD_REQUEST_DELAY_MS", "ALEPH_HASH_SORT_SEED",
     "AUTOBAHN_K", "AUTOBAHN_FAST_PATH_TIMEOUT", "AUTOBAHN_USE_FAST_PATH"
 ]
 
@@ -282,6 +282,20 @@ def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_p
     
     if no_build:
         config['environment']['NO_BUILD'] = "1"
+
+    # Narwhal speculative runs need paper-aligned victim/worker defaults and
+    # longer observation windows once the committee reaches 25 nodes.
+    if config['protocol']['name'] == 'narwhal' and attack_mode == 'speculative':
+        if 'NUM_WORKERS' not in config_override:
+            config['environment']['NUM_WORKERS'] = "8"
+        if 'VICTIM_COUNT' not in config_override:
+            config['environment']['VICTIM_COUNT'] = "1"
+        config['environment']['ASR_LOGGING_FREQUENCY'] = "1"
+        config['environment']['ASR_REPORT_THRESHOLD'] = "1"
+
+        current_duration = int(config['environment'].get('DURATION', 120))
+        if num_nodes >= 25 and current_duration < 90:
+            config['environment']['DURATION'] = "90"
         
     # Ensure LATENCY_MS/JITTER_MS are explicitly passed if available in override
     # This prevents reliance on deprecated LATENCY_JITTER string parsing

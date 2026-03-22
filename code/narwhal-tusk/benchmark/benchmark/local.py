@@ -30,8 +30,10 @@ class LocalBench:
         # PROPAGATE ATTACK ENV VARS: Ensure local simulation respects attack config
         attack_vars = [
             'ATTACK_MODE', 'ATTACKER_RATIO', 'VICTIM_RATIO',
+            'VICTIM_COUNT', 'NUM_WORKERS',
             'SPECULATIVE_P_MAX', 'SLUGGISH_TIMEOUT_MULTIPLIER',
-            'SPECULATIVE_TIMEOUT_MS', 'ASR_ROUND_WINDOW'
+            'SPECULATIVE_TIMEOUT_MS', 'ASR_ROUND_WINDOW',
+            'ASR_LOGGING_FREQUENCY', 'ASR_REPORT_THRESHOLD'
         ]
         envs = ' '.join([f'{v}="{os.environ[v]}"' for v in attack_vars if v in os.environ])
         

@@ -49,6 +49,8 @@ pub struct Core {
     tx_consensus: Sender<Certificate>,
     /// Send valid a quorum of certificates' ids AND origins to the `Proposer` (along with their round).
     tx_proposer: Sender<(Vec<(Digest, PublicKey)>, Round)>,
+    /// Notify the proposer when a target victim header is observed in the current round.
+    tx_victim_round: Sender<Round>,
 
     /// The last garbage collected round.
     gc_round: Round,
@@ -79,6 +81,17 @@ pub struct Core {
 }
 
 impl Core {
+    fn resolve_victim_count(&self) -> usize {
+        let total_nodes = self.committee.size();
+        let attacker_count = ((total_nodes as f64) * self.attacker_ratio).floor() as usize;
+
+        std::env::var("VICTIM_COUNT")
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+            .unwrap_or_else(|| ((total_nodes as f64) * self.victim_ratio).floor() as usize)
+            .min(total_nodes.saturating_sub(attacker_count))
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn spawn(
         name: PublicKey,
@@ -94,6 +107,7 @@ impl Core {
         rx_proposer: Receiver<Header>,
         tx_consensus: Sender<Certificate>,
         tx_proposer: Sender<(Vec<(Digest, PublicKey)>, Round)>,
+        tx_victim_round: Sender<Round>,
     ) {
         // Initialize attack configuration
         let attack_mode = std::env::var("ATTACK_MODE").unwrap_or_default();
@@ -135,6 +149,7 @@ impl Core {
                 rx_proposer,
                 tx_consensus,
                 tx_proposer,
+                tx_victim_round,
                 gc_round: 0,
                 last_voted: HashMap::with_capacity(2 * gc_depth as usize),
                 processing: HashMap::with_capacity(2 * gc_depth as usize),
@@ -221,6 +236,17 @@ impl Core {
         // Store the header.
         let bytes = bincode::serialize(header).expect("Failed to serialize header");
         self.store.write(header.id.to_vec(), bytes).await;
+
+        if self.attack_active && self.is_attacker && self.attack_mode == "speculative" {
+            let victim_nodes = self.get_victim_nodes();
+            if header.author != self.name && victim_nodes.contains(&header.author) {
+                info!(
+                    "SPECULATIVE ATTACK: Observed victim header from {} in round {}, notifying proposer",
+                    header.author, header.round
+                );
+                let _ = self.tx_victim_round.send(header.round).await;
+            }
+        }
 
         // Check if we can vote for this header.
         if self
@@ -402,7 +428,7 @@ impl Core {
     fn get_victim_nodes(&self) -> HashSet<PublicKey> {
         let total_nodes = self.committee.size();
         let attacker_count = ((total_nodes as f64) * self.attacker_ratio).floor() as usize;
-        let victim_count = ((total_nodes as f64) * self.victim_ratio).floor() as usize;
+        let victim_count = self.resolve_victim_count();
         
         let mut node_names: Vec<_> = self.committee.authorities.keys().collect();
         node_names.sort();
