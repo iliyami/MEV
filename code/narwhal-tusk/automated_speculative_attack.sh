@@ -111,13 +111,18 @@ if [ -z "$(ls -A "$LOG_DIR" 2>/dev/null)" ]; then
     LATEST_ASR="0.0"
     TOTAL_SAMPLES="0"
 else
-    # Find the maximum ASR across all logs that have results and extract sample counts
-    ASR_LINE=$(grep "GLOBAL ASR" "$LOG_DIR"/primary-*.log 2>/dev/null | tail -1)
-    LATEST_ASR=$(echo "$ASR_LINE" | sed -n 's/.*Same-round: [0-9]*\/[0-9]* = \([0-9.]*\)%.*/\1/p')
-    TOTAL_SAMPLES=$(echo "$ASR_LINE" | sed -n 's/.*Same-round: [0-9]*\/\([0-9]*\).*/\1/p')
+    # Correctly parse the ASR REPORT log format from consensus/src/lib.rs
+    ASR_LINE=$(grep "ASR REPORT (" "$LOG_DIR"/primary-*.log 2>/dev/null | tail -1)
     
+    # Extract the Same-Round ASR-B percentage: e.g. "ASR-B (Same-Round): 85.50%"
+    LATEST_ASR=$(echo "$ASR_LINE" | sed -n 's/.*ASR-B (Same-Round): \([0-9.]*\)%.*/\1/p')
     if [ -z "$LATEST_ASR" ]; then
         LATEST_ASR="0.0"
+    fi
+    
+    # Extract the total events for ASR-B tracking
+    TOTAL_SAMPLES=$(echo "$ASR_LINE" | sed -n 's/.*ASR-B (Same-Round): [0-9.]*% ([0-9]*\/\([0-9]*\)).*/\1/p')
+    if [ -z "$TOTAL_SAMPLES" ]; then
         TOTAL_SAMPLES="0"
     fi
 fi
@@ -156,10 +161,16 @@ echo ""
 
 echo "🎯 SPECULATIVE ATTACK ANALYSIS:"
 echo "==============================="
+# Try to safely extract just the node integer if possible
+ATTACKER_NODE_ID=$(echo "$ATTACKER_NODE" | sed -n 's/.*primary-\([0-9]*\)\.log.*/\1/p')
+if [ -z "$ATTACKER_NODE_ID" ]; then
+    ATTACKER_NODE_ID="-1"
+fi
+
 echo "  Attacker Node: $ATTACKER_NODE ($SPECULATIVE_EVENTS events)"
 echo "  Victim Nodes:"
 for i in $(seq 0 $((NUM_NODES - 1))); do
-    if [ "$i" -ne "$(echo $ATTACKER_NODE | cut -d'-' -f2)" ]; then
+    if [ "$i" -ne "$ATTACKER_NODE_ID" ]; then
         echo "    - Primary-$i (0 events - victim)"
     fi
 done

@@ -113,10 +113,12 @@ if [ -z "$(ls -A "$LOG_DIR" 2>/dev/null)" ]; then
     FINAL_ASR="0%"
     TOTAL_SAMPLES="0"
 else
-    # Find the maximum ASR across all logs that have results and extract sample counts
-    ASR_LINE=$(grep "GLOBAL ASR" "$LOG_DIR"/primary-*.log 2>/dev/null | tail -n 1)
-    ASR_VAL=$(echo "$ASR_LINE" | sed -n 's/.*Same-round: [0-9]*\/[0-9]* = \([0-9.]*\)%.*/\1/p')
-    TOTAL_SAMPLES=$(echo "$ASR_LINE" | sed -n 's/.*Same-round: [0-9]*\/\([0-9]*\).*/\1/p')
+    # Correctly parse the ASR REPORT log format from consensus/src/lib.rs
+    ASR_LINE=$(grep "ASR REPORT (" "$LOG_DIR"/primary-*.log 2>/dev/null | tail -1)
+    
+    # Extract the Same-Round ASR-B percentage: e.g. "ASR-B (Same-Round): 85.50%"
+    ASR_VAL=$(echo "$ASR_LINE" | sed -n 's/.*ASR-B (Same-Round): \([0-9.]*\)%.*/\1/p')
+    TOTAL_SAMPLES=$(echo "$ASR_LINE" | sed -n 's/.*ASR-B (Same-Round): [0-9.]*% ([0-9]*\/\([0-9]*\)).*/\1/p')
     
     if [ ! -z "$ASR_VAL" ]; then
         FINAL_ASR="${ASR_VAL}%"

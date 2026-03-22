@@ -114,10 +114,14 @@ if [ ! "$(ls -A "$LOG_DIR" 2>/dev/null)" ]; then
     tail -n 20 "$ATTACK_OUTPUT_LOG" || echo "Attack output log is empty or missing."
 fi
 
-    # Find the maximum ASR across all logs that have results and extract sample counts
-    ASR_LINE=$(grep "GLOBAL ASR" "$LOG_DIR"/primary-*.log 2>/dev/null | tail -n 1)
-    ASR_VAL=$(echo "$ASR_LINE" | sed -n 's/.*Same-round: [0-9]*\/[0-9]* = \([0-9.]*\)%.*/\1/p')
-    TOTAL_SAMPLES=$(echo "$ASR_LINE" | sed -n 's/.*Same-round: [0-9]*\/\([0-9]*\).*/\1/p')
+    # Correctly parse the ASR REPORT log format from consensus/src/lib.rs
+    ASR_LINE=$(grep "ASR REPORT (" "$LOG_DIR"/primary-*.log 2>/dev/null | tail -1)
+    
+    # Extract the Trans-round ASR-A percentage: e.g. "ASR-A (All-Pairs): 82.40%"
+    ASR_VAL=$(echo "$ASR_LINE" | sed -n 's/.*ASR-A (All-Pairs): \([0-9.]*\)%.*/\1/p')
+    
+    # Extract total pairs for ASR-A tracking
+    TOTAL_SAMPLES=$(echo "$ASR_LINE" | sed -n 's/.*ASR-A (All-Pairs): [0-9.]*% ([0-9]*\/\([0-9]*\)).*/\1/p')
     
     if [ ! -z "$ASR_VAL" ]; then
         LATEST_ASR="${ASR_VAL}"
