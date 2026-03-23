@@ -72,19 +72,20 @@ def build_docker_image(config: dict) -> bool:
     print(f"  Protocol: {protocol}")
     print(f"  Context: {protocol_path}")
     
+    env = os.environ.copy()
+    # Allow environment to override, default to 0 for maximum compatibility on CloudLab
+    env["DOCKER_BUILDKIT"] = os.environ.get("DOCKER_BUILDKIT", "1")
+    
     cmd = [
         "docker", "build",
         "-t", tag,
         "-f", str(dockerfile_path),
-        "--progress=plain",
-        str(protocol_path)
     ]
+    if env["DOCKER_BUILDKIT"] != "0":
+        cmd.append("--progress=plain")
+    cmd.append(str(protocol_path))
     
     print(f"  Command: {' '.join(cmd)}")
-    
-    env = os.environ.copy()
-    # Allow environment to override, default to 0 for maximum compatibility on CloudLab
-    env["DOCKER_BUILDKIT"] = os.environ.get("DOCKER_BUILDKIT", "1")
     
     result = subprocess.run(cmd, env=env, capture_output=False)
     return result.returncode == 0

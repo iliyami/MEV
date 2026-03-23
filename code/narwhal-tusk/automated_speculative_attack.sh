@@ -22,6 +22,7 @@ export NUM_WORKERS=${NUM_WORKERS:-8}
 export VICTIM_COUNT=${VICTIM_COUNT:-1}
 export ASR_LOGGING_FREQUENCY=${ASR_LOGGING_FREQUENCY:-1}
 export ASR_REPORT_THRESHOLD=${ASR_REPORT_THRESHOLD:-1}
+export RUST_LOG=${ATTACK_RUST_LOG:-info}
 
 PAPER_ASR_TARGET=86.3 # Paper's speculative attack ASR for Tusk
 
@@ -60,6 +61,7 @@ echo "  Victim Count: $VICTIM_COUNT"
 echo "  Network Size: $NUM_NODES nodes"
 echo "  Workers per Node: $NUM_WORKERS"
 echo "  Duration: $DURATION seconds"
+echo "  RUST_LOG: $RUST_LOG"
 echo ""
 
 # --- Step 3: Clean previous results ---
@@ -70,9 +72,9 @@ echo "  ✅ Previous logs cleaned"
 echo ""
 
 # --- Step 4: Run 4-node network with speculative attack ---
-echo "🚀 Step 4: Running 15-node network with speculative attack..."
-echo "  Duration: 35 seconds"
-echo "  Network: $NUM_NODES nodes (5 attackers, 3 victims, 7 honest)"
+echo "🚀 Step 4: Running ${NUM_NODES}-node network with speculative attack..."
+echo "  Duration: $DURATION seconds"
+echo "  Network: $NUM_NODES nodes"
 echo "  Expected ASR: ~80-90%"
 echo ""
 echo "  Starting speculative attack..."
@@ -129,28 +131,87 @@ LATEST_PRIMARY_LOG=$(ls -t "$LOG_DIR"/primary-*.log 2>/dev/null | head -1)
 
 if [ -z "$(ls -A "$LOG_DIR" 2>/dev/null)" ]; then
     LATEST_ASR="0.0"
+    LATEST_ASR_A="0.0"
     TOTAL_SAMPLES="0"
+    CHOSEN_BLOCKS="0"
+    CHOSEN_LOG="N/A"
 else
-    # Correctly parse the ASR REPORT log format from consensus/src/lib.rs
-    ASR_LINE=$(grep "ASR REPORT (" "$LOG_DIR"/primary-*.log 2>/dev/null | tail -1)
-    
-    # Extract the Same-Round ASR-B percentage: e.g. "ASR-B (Same-Round): 85.50%"
-    LATEST_ASR=$(echo "$ASR_LINE" | sed -n 's/.*ASR-B (Same-Round): \([0-9.]*\)%.*/\1/p')
+    # Parse the latest ASR report from every primary and choose the most complete
+    # cluster view: max committed blocks, then max same-round sample count. This
+    # avoids arbitrary "tail -1" selection from one lagging primary.
+    ASR_PARSE=$(
+        python3 - "$LOG_DIR" <<'PY'
+import glob
+import os
+import re
+import statistics
+import sys
+
+log_dir = sys.argv[1]
+pattern = re.compile(
+    r'ASR REPORT \((?P<mode>[^)]+)\): '
+    r'ASR-A \(All-Pairs\): (?P<asr_a>[0-9.]+)% \((?P<succ_a>\d+)/(?P<total_a>\d+)\) \| '
+    r'ASR-B \(Same-Round\): (?P<asr_b>[0-9.]+)% \((?P<succ_b>\d+)/(?P<total_b>\d+)\) \| '
+    r'Blocks: (?P<blocks>\d+)'
+)
+
+reports = []
+for path in glob.glob(os.path.join(log_dir, "primary-*.log")):
+    latest = None
+    with open(path, "r", errors="ignore") as f:
+        for line in f:
+            m = pattern.search(line)
+            if m:
+                latest = {
+                    "path": os.path.basename(path),
+                    "line": line.strip(),
+                    "asr_a": float(m.group("asr_a")),
+                    "asr_b": float(m.group("asr_b")),
+                    "total_a": int(m.group("total_a")),
+                    "total_b": int(m.group("total_b")),
+                    "blocks": int(m.group("blocks")),
+                }
+    if latest:
+        reports.append(latest)
+
+if not reports:
+    print("0.0\t0.0\t0\t0\tN/A\tNONE\t0.0\t0\t0")
+    raise SystemExit(0)
+
+max_blocks = max(r["blocks"] for r in reports)
+top = [r for r in reports if r["blocks"] == max_blocks]
+max_same_total = max(r["total_b"] for r in top)
+top = [r for r in top if r["total_b"] == max_same_total]
+
+# Use the median ASR among the most-complete views to avoid one outlier node.
+median_b = statistics.median(r["asr_b"] for r in top)
+median_a = statistics.median(r["asr_a"] for r in top)
+chosen = min(top, key=lambda r: (abs(r["asr_b"] - median_b), r["path"]))
+
+spread_b = max(r["asr_b"] for r in reports) - min(r["asr_b"] for r in reports)
+print(
+    f'{chosen["asr_b"]:.2f}\t{chosen["asr_a"]:.2f}\t{chosen["total_b"]}\t{chosen["blocks"]}\t'
+    f'{chosen["path"]}\t{chosen["line"]}\t{spread_b:.2f}\t{len(reports)}\t{max_blocks}'
+)
+PY
+    )
+
+    IFS=$'\t' read -r LATEST_ASR LATEST_ASR_A TOTAL_SAMPLES CHOSEN_BLOCKS CHOSEN_LOG ASR_LINE ASR_SPREAD REPORT_COUNT MAX_BLOCKS <<< "$ASR_PARSE"
+
     if [ -z "$LATEST_ASR" ]; then
         LATEST_ASR="0.0"
     fi
-    
-    # Extract the total events for ASR-B tracking
-    TOTAL_SAMPLES=$(echo "$ASR_LINE" | sed -n 's/.*ASR-B (Same-Round): [0-9.]*% ([0-9]*\/\([0-9]*\)).*/\1/p')
+    if [ -z "$LATEST_ASR_A" ]; then
+        LATEST_ASR_A="0.0"
+    fi
     if [ -z "$TOTAL_SAMPLES" ]; then
         TOTAL_SAMPLES="0"
     fi
-
-    if [ "$LATEST_ASR" = "0.0" ]; then
-        FALLBACK_ASR=$(grep "FINAL_ASR_RESULT:" "$LOG_DIR"/primary-*.log 2>/dev/null | tail -1 | sed -n 's/.*FINAL_ASR_RESULT: \([0-9.]*\)%.*/\1/p')
-        if [ ! -z "$FALLBACK_ASR" ]; then
-            LATEST_ASR="$FALLBACK_ASR"
-        fi
+    if [ -z "$CHOSEN_BLOCKS" ]; then
+        CHOSEN_BLOCKS="0"
+    fi
+    if [ -z "$CHOSEN_LOG" ]; then
+        CHOSEN_LOG="N/A"
     fi
 fi
 
@@ -180,10 +241,16 @@ fi
 
 echo "📈 SPECULATIVE ASR CALCULATION:"
 echo "==============================="
-echo "  Final ASR: $LATEST_ASR%"
+echo "  Final ASR (Same-Round / ASR-B): $LATEST_ASR%"
+echo "  Final ASR (All-Pairs / ASR-A): $LATEST_ASR_A%"
 echo "  ASR Success Events: $TOTAL_SUCCESS"
 echo "  ASR Failure Events: $TOTAL_FAILURE"
 echo "  Speculative Events: $SPECULATIVE_EVENTS"
+echo "  Chosen Primary Log: $CHOSEN_LOG"
+echo "  Chosen Report Blocks: $CHOSEN_BLOCKS"
+if [ ! -z "$ASR_SPREAD" ]; then
+    echo "  Cross-Primary ASR Spread: $ASR_SPREAD points"
+fi
 echo ""
 
 echo "🎯 SPECULATIVE ATTACK ANALYSIS:"

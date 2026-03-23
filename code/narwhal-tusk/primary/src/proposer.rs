@@ -67,6 +67,10 @@ pub struct Proposer {
     sluggish_timeout_multiplier: f64,
     proposed_this_round: bool,
     victim_observed_round: Option<Round>,
+    victim_observed_at: Option<Instant>,
+    speculative_grace_ms: u64,
+    speculative_refresh_parents: bool,
+    speculative_require_victim: bool,
 }
 
 impl Proposer {
@@ -94,6 +98,16 @@ impl Proposer {
         let attacker_ratio: f64 = env::var("ATTACKER_RATIO").unwrap_or_default().parse().unwrap_or(0.33);
         let victim_ratio: f64 = env::var("VICTIM_RATIO").unwrap_or_default().parse().unwrap_or(0.22);
         let speculative_p_max: usize = env::var("SPECULATIVE_P_MAX").unwrap_or_default().parse().unwrap_or(10);
+        let speculative_grace_ms: u64 = env::var("SPECULATIVE_GRACE_MS")
+            .unwrap_or_else(|_| "15".to_string())
+            .parse()
+            .unwrap_or(15);
+        let speculative_refresh_parents = env::var("SPECULATIVE_REFRESH_PARENTS")
+            .map(|value| matches!(value.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"))
+            .unwrap_or(false);
+        let speculative_require_victim = env::var("SPECULATIVE_REQUIRE_VICTIM")
+            .map(|value| matches!(value.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"))
+            .unwrap_or(committee_size >= 25);
         let sluggish_timeout_multiplier: f64 = env::var("SLUGGISH_TIMEOUT_MULTIPLIER").unwrap_or_else(|_| "2.0".to_string()).parse().unwrap_or(2.0);
         
         let is_attacker = (attack_mode == "fissure" || attack_mode == "speculative" || attack_mode == "sluggish") && Self::is_attacker_node(&name, committee, attacker_ratio);
@@ -139,6 +153,10 @@ impl Proposer {
                 sluggish_timeout_multiplier,
                 proposed_this_round: false,
                 victim_observed_round: None,
+                victim_observed_at: None,
+                speculative_grace_ms,
+                speculative_refresh_parents,
+                speculative_require_victim,
             }
             .run()
             .await;
@@ -463,6 +481,7 @@ impl Proposer {
         // Mark as proposed for this round
         self.proposed_this_round = true;
         self.victim_observed_round = None;
+        self.victim_observed_at = None;
     }
 
     // Main loop listening to incoming messages.
@@ -486,14 +505,31 @@ impl Proposer {
             // We should ONLY propose if timer_expired, ignoring enough_digests.
             let is_sluggish = self.attack_active && self.is_attacker && self.attack_mode == "sluggish";
             let is_speculative = self.attack_active && self.is_attacker && self.attack_mode == "speculative";
-            let victim_triggered = is_speculative
+            let speculative_victim_seen = is_speculative
+                && self.victim_observed_round == Some(self.round);
+            let victim_triggered = speculative_victim_seen
                 && self.victim_observed_round == Some(self.round)
                 && enough_parents
                 && !self.digests.is_empty();
+            let victim_grace_elapsed = self
+                .victim_observed_at
+                .map(|at| at.elapsed() >= Duration::from_millis(self.speculative_grace_ms))
+                .unwrap_or(false);
+            let victim_ready = victim_triggered
+                && (
+                    timer_expired
+                    || (
+                        victim_grace_elapsed
+                            && enough_digests
+                    )
+                    || victim_grace_elapsed
+                );
             
             let should_propose = if is_sluggish {
                 timer_expired && enough_parents
-            } else if victim_triggered {
+            } else if is_speculative && self.speculative_require_victim {
+                victim_ready
+            } else if victim_ready {
                 true
             } else {
                 (timer_expired || enough_digests) && enough_parents
@@ -514,6 +550,22 @@ impl Proposer {
 
             tokio::select! {
                 Some((parents, round)) = self.rx_core.recv() => {
+                    if is_speculative
+                        && self.speculative_refresh_parents
+                        && round + 1 == self.round
+                        && !self.proposed_this_round
+                        && parents.len() > self.last_parents.len()
+                    {
+                        info!(
+                            "Speculative attack: refreshing parent set for round {} from {} to {} certificates",
+                            self.round,
+                            self.last_parents.len(),
+                            parents.len()
+                        );
+                        self.last_parents = parents;
+                        continue;
+                    }
+
                     // Track the maximum round seen from cross-section of parents
                     // This helps sluggish attackers know how far behind they are
                     if round > self.honest_round {
@@ -546,6 +598,22 @@ impl Proposer {
                         self.payload_size = 0;
                     }
 
+                    if is_speculative
+                        && !self.proposed_this_round
+                        && !self.last_parents.is_empty()
+                        && !self.digests.is_empty()
+                        && (!self.speculative_require_victim || speculative_victim_seen)
+                    {
+                        info!(
+                            "Speculative attack: Node {} forced proposal for round {} before advancing with {} queued digests",
+                            self.name,
+                            self.round,
+                            self.digests.len()
+                        );
+                        self.make_header().await;
+                        self.payload_size = 0;
+                    }
+
                     // Advance to the next round.
                     self.round = round + 1;
                     debug!("Dag moved to round {}", self.round);
@@ -554,6 +622,7 @@ impl Proposer {
                     self.last_parents = parents;
                     self.proposed_this_round = false;
                     self.victim_observed_round = None;
+                    self.victim_observed_at = None;
                 }
                 Some((digest, worker_id)) = self.rx_workers.recv() => {
                     self.payload_size += digest.size();
@@ -562,17 +631,14 @@ impl Proposer {
                 Some(victim_round) = self.rx_victim_round.recv() => {
                     if self.attack_active && self.is_attacker && self.attack_mode == "speculative" {
                         self.victim_observed_round = Some(victim_round);
-                        if victim_round == self.round && !self.proposed_this_round && !self.last_parents.is_empty() && !self.digests.is_empty() {
-                            info!(
-                                "Speculative attack: victim observed in round {}, proposing immediately with {} queued digests",
-                                victim_round,
-                                self.digests.len()
-                            );
-                            self.make_header().await;
-                            self.payload_size = 0;
-                            let deadline = Instant::now() + Duration::from_millis(self.max_header_delay);
-                            timer.as_mut().reset(deadline);
-                        }
+                        self.victim_observed_at = Some(Instant::now());
+                        info!(
+                            "Speculative attack: victim observed in round {}, arming proposal with {} queued digests and {} parents (grace {}ms)",
+                            victim_round,
+                            self.digests.len(),
+                            self.last_parents.len(),
+                            self.speculative_grace_ms
+                        );
                     }
                 }
                 () = &mut timer => {
@@ -606,13 +672,15 @@ impl Proposer {
         let mut best_candidate_digests: Option<Vec<(Digest, u32)>> = None;
         let mut best_parents: Option<std::collections::BTreeSet<Digest>> = None;
         
-        info!("Speculative attack: Generating {} candidate blocks with parent-subset grinding (timeout: {}ms)", p_max, timeout_duration.as_millis());
+        info!(
+            "Speculative attack: Generating {} candidate blocks with payload grinding (timeout: {}ms)",
+            p_max,
+            timeout_duration.as_millis()
+        );
         
         // Get all available digests from workers
         let all_digests: Vec<(Digest, u32)> = self.digests.drain(..).collect();
-        // Quorum requirements for parent grinding
-        // Match Committee::quorum_threshold() logic: 2*N/3 + 1
-        let min_parents = 2 * self.committee_size / 3 + 1;
+        let fixed_parents: std::collections::BTreeSet<Digest> = parents.iter().cloned().collect();
         
         // Paper's methodology: Speculative attack chooses the largest digest among candidates.
         // We ensure we ALWAYS have at least a quorum of parents.
@@ -627,31 +695,9 @@ impl Proposer {
             // 1. Sample combinations of worker batches (primary source of entropy)
             let candidate_digests = self.sample_worker_batches(&all_digests, i);
             
-            // 2. Select parents - ALWAYS ensure we meet quorum threshold
-            let mut candidate_parents = std::collections::BTreeSet::new();
-            let total_avail = parents.len();
-            
-            if total_avail <= min_parents {
-                // Not enough or just enough parents: use all of them
-                candidate_parents = parents.iter().cloned().collect();
-            } else {
-                // More than enough parents: we can sample if we want, but MUST keep >= min_parents
-                // Optimization: take a random subset of size min_parents to vary the digest
-                use rand::seq::SliceRandom;
-                let mut rng = rand::thread_rng();
-                let mut indices: Vec<_> = (0..total_avail).collect();
-                indices.shuffle(&mut rng);
-                
-                for &idx in indices.iter().take(min_parents) {
-                    candidate_parents.insert(parents[idx].clone());
-                }
-            }
-            
-            // LOGGING: Verify quorum validity
-            if candidate_parents.len() < min_parents {
-                 warn!("Speculative attack: Critical error! Built candidate with {} parents, but quorum requires {}. Total available: {}. Loop index: {}", 
-                       candidate_parents.len(), min_parents, total_avail, i);
-            }
+            // Paper-aligned speculative attack varies transaction-batch samples and
+            // keeps the parent set fixed for the round.
+            let candidate_parents = fixed_parents.clone();
 
             // 3. Add Nonce-based grinding (DIVERSITY ENHANCEMENT)
             // Even if payloads and parents are the same, we want unique digests.
@@ -709,18 +755,15 @@ impl Proposer {
     /// Sample different combinations of worker batches for speculative attack
     /// This implements the paper's methodology of sampling different transaction batches
     fn sample_worker_batches(&self, all_digests: &[(Digest, u32)], candidate_index: usize) -> Vec<(Digest, u32)> {
-        // Enhanced sampling strategy for better digest variation
-        // This creates more diverse candidate blocks for better ASR
-        
+        // Derive an independent deterministic selector per worker so p_max=50
+        // still explores combinations across all workers. The old mixed-radix
+        // pattern only varied the first few workers when NUM_WORKERS was large.
         let mut sampled = Vec::new();
         let num_workers: usize = std::env::var("NUM_WORKERS")
             .unwrap_or_else(|_| "4".to_string())
             .parse()
             .unwrap_or(4);
-        
-        // Use more sophisticated sampling based on candidate index
-        let base_seed = candidate_index * 13 + self.round as usize; // Prime multiplier for better spread
-        
+
         for worker_id in 0..num_workers {
             // Find digests from this worker
             let worker_digests: Vec<_> = all_digests
@@ -729,36 +772,85 @@ impl Proposer {
                 .collect();
             
             if !worker_digests.is_empty() {
-                // Strategy: Include or exclude batches to maximize entropy
-                let variant = (base_seed + worker_id) % 3;
+                let worker_seed = self.speculative_worker_seed(candidate_index, worker_id);
+                let variant = (worker_seed % 6) as u8;
+                let latest_window = usize::min(4, worker_digests.len());
+                let recent_start = worker_digests.len().saturating_sub(latest_window);
+                let recent_slice = &worker_digests[recent_start..];
+                let alt_idx = recent_start + ((worker_seed as usize / 7) % latest_window);
+                let alt_idx_2 = recent_start + ((worker_seed as usize / 17) % latest_window);
                 
                 match variant {
                     0 => {
-                        // Include the "latest" batch
+                        // Include the latest batch only.
                         if let Some((digest, wid)) = worker_digests.last() {
                             sampled.push(((*digest).clone(), *wid));
                         }
                     },
                     1 => {
-                        // Include a "middle" batch
-                        let idx = (base_seed + worker_id) % worker_digests.len();
-                        if let Some((digest, wid)) = worker_digests.get(idx) {
+                        // Include a short recent window to exploit queued batches.
+                        for (digest, wid) in recent_slice.iter().rev().take(2) {
+                            sampled.push(((*digest).clone(), *wid));
+                        }
+                    },
+                    2 => {
+                        // Include a deterministic alternate batch, plus the latest one
+                        // when they differ, to widen the candidate space.
+                        if let Some((digest, wid)) = worker_digests.get(alt_idx) {
+                            sampled.push(((*digest).clone(), *wid));
+                        }
+                        if let Some((digest, wid)) = worker_digests.last() {
+                            sampled.push(((*digest).clone(), *wid));
+                        }
+                    },
+                    3 => {
+                        // Include the full recent window for this worker.
+                        for (digest, wid) in recent_slice {
+                            sampled.push(((*digest).clone(), *wid));
+                        }
+                    },
+                    4 => {
+                        // Include two deterministic alternates from the recent window.
+                        if let Some((digest, wid)) = worker_digests.get(alt_idx) {
+                            sampled.push(((*digest).clone(), *wid));
+                        }
+                        if let Some((digest, wid)) = worker_digests.get(alt_idx_2) {
                             sampled.push(((*digest).clone(), *wid));
                         }
                     },
                     _ => {
-                        // Exclude this worker's batches for this candidate to vary digest
+                        // Exclude this worker's batches for this candidate.
                     }
                 }
             }
         }
+
+        // Deduplicate while preserving the first-seen order.
+        let mut unique = Vec::with_capacity(sampled.len());
+        let mut seen = HashSet::with_capacity(sampled.len());
+        for entry in sampled {
+            if seen.insert(entry.0.clone()) {
+                unique.push(entry);
+            }
+        }
         
         // If no worker batches available, use all available digests
-        if sampled.is_empty() {
+        if unique.is_empty() {
             all_digests.to_vec()
         } else {
-            sampled
+            unique
         }
+    }
+
+    fn speculative_worker_seed(&self, candidate_index: usize, worker_id: usize) -> u64 {
+        // SplitMix64-style mixer to decorrelate per-worker candidate choices while
+        // remaining deterministic for a given round and candidate index.
+        let mut seed = (self.round as u64).wrapping_shl(32)
+            ^ candidate_index as u64
+            ^ ((worker_id as u64 + 1).wrapping_mul(0x9E37_79B9_7F4A_7C15));
+        seed = (seed ^ (seed >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        seed = (seed ^ (seed >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        seed ^ (seed >> 31)
     }
     
     /// Compute header digest for speculative attack comparison

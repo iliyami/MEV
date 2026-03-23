@@ -54,6 +54,7 @@ pub struct CertificatesAggregator {
     weight: Stake,
     certificates: Vec<(Digest, PublicKey)>, // Store digest AND origin
     used: HashSet<PublicKey>,
+    quorum_reached: bool,
     // Attack configuration
     attack_active: bool,
     is_attacker: bool,
@@ -68,6 +69,7 @@ impl CertificatesAggregator {
             weight: 0,
             certificates: Vec::new(),
             used: HashSet::new(),
+            quorum_reached: false,
             attack_active: false,
             is_attacker: false,
             victim_nodes: HashSet::new(),
@@ -90,6 +92,7 @@ impl CertificatesAggregator {
             weight: 0,
             certificates: Vec::new(),
             used: HashSet::new(),
+            quorum_reached: false,
             attack_active,
             is_attacker,
             victim_nodes,
@@ -115,6 +118,20 @@ impl CertificatesAggregator {
         // to maintain consensus safety (2f+1) while maximizing ASR
         self.certificates.push((certificate.digest(), origin));
         self.weight += committee.stake(&origin);
+
+        let speculative_parent_updates = self.attack_active
+            && self.is_attacker
+            && env::var("ATTACK_MODE").unwrap_or_default() == "speculative";
+        if speculative_parent_updates {
+            if !self.quorum_reached && self.weight >= committee.quorum_threshold() {
+                self.quorum_reached = true;
+            }
+
+            if self.quorum_reached {
+                return Ok(Some(self.certificates.clone()));
+            }
+            return Ok(None);
+        }
 
         if self.weight >= committee.quorum_threshold() {
             self.weight = 0; // Ensures quorum is only reached once.

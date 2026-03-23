@@ -33,7 +33,8 @@ class LocalBench:
             'VICTIM_COUNT', 'NUM_WORKERS',
             'SPECULATIVE_P_MAX', 'SLUGGISH_TIMEOUT_MULTIPLIER',
             'SPECULATIVE_TIMEOUT_MS', 'ASR_ROUND_WINDOW',
-            'ASR_LOGGING_FREQUENCY', 'ASR_REPORT_THRESHOLD'
+            'ASR_LOGGING_FREQUENCY', 'ASR_REPORT_THRESHOLD',
+            'RUST_LOG'
         ]
         envs = ' '.join([f'{v}="{os.environ[v]}"' for v in attack_vars if v in os.environ])
         

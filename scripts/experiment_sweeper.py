@@ -290,13 +290,17 @@ def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_p
             config['environment']['NUM_WORKERS'] = "8"
         if 'VICTIM_COUNT' not in config_override:
             config['environment']['VICTIM_COUNT'] = "1"
+        if 'SPECULATIVE_GRACE_MS' not in config_override:
+            config['environment']['SPECULATIVE_GRACE_MS'] = "15"
+        if 'SPECULATIVE_REFRESH_PARENTS' not in config_override:
+            config['environment']['SPECULATIVE_REFRESH_PARENTS'] = "0"
+        if 'SPECULATIVE_REQUIRE_VICTIM' not in config_override:
+            config['environment']['SPECULATIVE_REQUIRE_VICTIM'] = "1" if num_nodes >= 25 else "0"
+        if 'SPECULATIVE_P_MAX_LIMIT' not in config_override and num_nodes >= 25:
+            config['environment']['SPECULATIVE_P_MAX_LIMIT'] = "100"
         config['environment']['ASR_LOGGING_FREQUENCY'] = "1"
         config['environment']['ASR_REPORT_THRESHOLD'] = "1"
 
-        current_duration = int(config['environment'].get('DURATION', 120))
-        if num_nodes >= 25 and current_duration < 90:
-            config['environment']['DURATION'] = "90"
-        
     # Ensure LATENCY_MS/JITTER_MS are explicitly passed if available in override
     # This prevents reliance on deprecated LATENCY_JITTER string parsing
     if 'LATENCY_MS' in config_override:
@@ -586,13 +590,12 @@ def main():
                     # The 'SPECULATIVE_P_MAX' parameter is part of the environment configuration.
                     # If it's not explicitly set in the experiment's override, we default it to "50".
                     if "SPECULATIVE_P_MAX" not in override:
-                        # Verified on Cloudlab that 50 hashes execute in <1ms, so we can use the paper's target of 50
-                        override["SPECULATIVE_P_MAX"] = "50"
+                        if target_protocol == "narwhal" and target_attack == "speculative" and num_nodes >= 25:
+                            override["SPECULATIVE_P_MAX"] = "100"
+                        else:
+                            # Verified on Cloudlab that 50 hashes execute in <1ms, so we can use the paper's target of 50
+                            override["SPECULATIVE_P_MAX"] = "50"
                         
-                    if "BATCH_SIZE" not in override:
-                        # CRITICAL: Fragment the payload batches to inject entropy so the mathematical 50 combination target actually has subset arrays to process
-                        override["BATCH_SIZE"] = "100"
-
                     data = run_experiment(override, target_attack, exp_name, r, args.config, local_mode=args.local, no_build=args.no_build)
                     
                     # ONLY record if we got a non-zero ASR (0.0 usually means simulation liveness failure)
