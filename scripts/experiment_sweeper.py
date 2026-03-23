@@ -386,7 +386,7 @@ def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_p
     # longer observation windows once the committee reaches 25 nodes.
     if config['protocol']['name'] == 'narwhal' and attack_mode == 'speculative':
         if 'NUM_WORKERS' not in config_override:
-            config['environment']['NUM_WORKERS'] = "4" if num_nodes >= 100 else "8"
+            config['environment']['NUM_WORKERS'] = "2" if num_nodes >= 100 else "8"
         if 'VICTIM_COUNT' not in config_override:
             config['environment']['VICTIM_COUNT'] = "1"
         if 'SPECULATIVE_GRACE_MS' not in config_override:

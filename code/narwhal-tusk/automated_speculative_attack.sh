@@ -25,7 +25,7 @@ export ASR_REPORT_THRESHOLD=${ASR_REPORT_THRESHOLD:-1}
 export RUST_LOG=${ATTACK_RUST_LOG:-info}
 if [ -z "${TMUX_LAUNCH_BATCH_SIZE:-}" ]; then
     if [ "$NUM_NODES" -ge 100 ]; then
-        export TMUX_LAUNCH_BATCH_SIZE=4
+        export TMUX_LAUNCH_BATCH_SIZE=2
     elif [ "$NUM_NODES" -ge 50 ]; then
         export TMUX_LAUNCH_BATCH_SIZE=8
     else

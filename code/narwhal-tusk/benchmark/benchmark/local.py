@@ -68,7 +68,7 @@ class LocalBench:
         # benchmark even begins.
         nodes = self.nodes[0]
         if nodes >= 100:
-            return min(self.TMUX_LAUNCH_BATCH_SIZE, 4)
+            return min(self.TMUX_LAUNCH_BATCH_SIZE, 2)
         if nodes >= 50:
             return min(self.TMUX_LAUNCH_BATCH_SIZE, 8)
         if nodes >= 25 and command_count >= 100:
