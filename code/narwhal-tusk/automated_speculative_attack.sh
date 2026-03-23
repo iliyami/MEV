@@ -89,10 +89,19 @@ fi
 # Run the local benchmark in the background and capture output.
 # The old fixed 90s timeout is too short once we move beyond ~15 nodes,
 # causing partial runs that get reported as synthetic 0.0% ASR.
+PROCESS_COUNT=$((NUM_NODES * (2 * NUM_WORKERS + 1)))
 STARTUP_BUFFER=$((45 + NUM_NODES + (NUM_WORKERS * 2)))
-FAB_TIMEOUT=$((TEST_DURATION + STARTUP_BUFFER))
+SCALE_BUFFER=0
+if [ "$NUM_NODES" -ge 100 ]; then
+    SCALE_BUFFER=$((PROCESS_COUNT + 480))
+elif [ "$NUM_NODES" -ge 50 ]; then
+    SCALE_BUFFER=$((PROCESS_COUNT + 240))
+elif [ "$NUM_NODES" -ge 25 ]; then
+    SCALE_BUFFER=$((PROCESS_COUNT / 3 + 120))
+fi
+FAB_TIMEOUT=$((TEST_DURATION + STARTUP_BUFFER + SCALE_BUFFER))
 echo "  Fabric timeout budget: ${FAB_TIMEOUT}s"
-timeout "${FAB_TIMEOUT}" fab local > "$ATTACK_OUTPUT_LOG" 2>&1 &
+timeout --signal=INT --kill-after=30s "${FAB_TIMEOUT}" stdbuf -oL -eL fab local > "$ATTACK_OUTPUT_LOG" 2>&1 &
 FAB_PID=$!
 
 echo "  Monitoring attack progress (logs will appear in $LOG_DIR/)..."
@@ -106,10 +115,21 @@ if [ "$FAB_EXIT" -eq 124 ]; then
     echo "  ❌ Speculative attack timed out after ${FAB_TIMEOUT}s"
     echo "  Last 30 lines of fab output:"
     tail -n 30 "$ATTACK_OUTPUT_LOG" || true
+    mkdir -p /app/results/logs
+    cp "$LOG_DIR"/*.log /app/results/logs/ 2>/dev/null || true
+    echo "  Active tmux sessions at timeout:"
+    tmux ls || echo "No tmux sessions found."
+    mkdir -p /app/results/tmux_snapshots
+    tmux ls -F '#S' 2>/dev/null | head -n 12 | while read -r session_name; do
+        [ -z "$session_name" ] && continue
+        tmux capture-pane -pt "$session_name" -S -200 > "/app/results/tmux_snapshots/${session_name}.log" 2>/dev/null || true
+    done
 elif [ "$FAB_EXIT" -ne 0 ]; then
     echo "  ❌ Speculative attack exited with status $FAB_EXIT"
     echo "  Last 30 lines of fab output:"
     tail -n 30 "$ATTACK_OUTPUT_LOG" || true
+    mkdir -p /app/results/logs
+    cp "$LOG_DIR"/*.log /app/results/logs/ 2>/dev/null || true
 else
     echo "  ✅ Speculative attack completed successfully"
 fi
@@ -117,6 +137,8 @@ echo ""
 
 # --- Step 5: Analyze attack results ---
 echo "📊 Step 5: Analyzing speculative attack results..."
+
+cp "$ATTACK_OUTPUT_LOG" /app/results/speculative_attack_output.log 2>/dev/null || true
 
 if [ ! "$(ls -A "$LOG_DIR" 2>/dev/null)" ]; then
     echo "⚠️ Warning: No logs found in $LOG_DIR!"

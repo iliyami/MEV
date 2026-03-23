@@ -135,6 +135,10 @@ def run_attack_test(config: dict) -> dict:
     else:
         # Default mounts for Mysticeti/Mahi-Mahi
         script_mounts = [
+            ("automated_fissure_attack.sh", "/app/automated_fissure_attack.sh"),
+            ("automated_speculative_attack.sh", "/app/automated_speculative_attack.sh"),
+            ("automated_sluggish_attack.sh", "/app/automated_sluggish_attack.sh"),
+            ("benchmark/benchmark/local.py", "/app/benchmark/benchmark/local.py"),
             ("scripts/legacy_automation/automated_fissure_attack.sh", "/app/scripts/legacy_automation/automated_fissure_attack.sh"),
             ("scripts/legacy_automation/automated_speculative_attack.sh", "/app/scripts/legacy_automation/automated_speculative_attack.sh"),
             ("scripts/legacy_automation/automated_sluggish_attack.sh", "/app/scripts/legacy_automation/automated_sluggish_attack.sh"),

@@ -1,0 +1,42 @@
+experiment:
+  name: "narwhal_tusk_experiment"
+  description: "Targeted 100-node Narwhal speculative attack validation"
+
+protocol:
+  name: "narwhal"
+  path: "narwhal-tusk"
+
+docker:
+  tag: "mev-narwhal:latest"
+  cpus: "32.0"
+  memory: "100g"
+
+test:
+  test_name: "test_speculative_attack_asr_dynamic"
+  REPETITIONS: 1
+
+environment:
+  NUM_NODES: "100"
+  ATTACK_MODE: "speculative"
+  ATTACKER_RATIO: "0.33"
+  VICTIM_RATIO: "0.22"
+  VICTIM_COUNT: "1"
+  NUM_WORKERS: "8"
+  SPECULATIVE_P_MAX: "100"
+  SPECULATIVE_P_MAX_LIMIT: "100"
+  SPECULATIVE_GRACE_MS: "15"
+  SPECULATIVE_REFRESH_PARENTS: "0"
+  SPECULATIVE_REQUIRE_VICTIM: "1"
+  DURATION: "600"
+  LEADER_TIMEOUT: "10000"
+  RATE: "50000"
+  TX_SIZE: "512"
+  GC_DEPTH: "50"
+  SYNC_TIMEOUT_MS: "10000"
+  DAG_STATE_CACHED_ROUNDS: "5"
+  ASR_LOGGING_FREQUENCY: "1"
+  ASR_REPORT_THRESHOLD: "1"
+
+output:
+  expected_asr: 50.0
+  tolerance_percent: 100.0

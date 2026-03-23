@@ -13,6 +13,7 @@ from benchmark.utils import Print, BenchError, PathMaker
 
 class LocalBench:
     BASE_PORT = 3000
+    TMUX_LAUNCH_BATCH_SIZE = max(1, int(os.environ.get('TMUX_LAUNCH_BATCH_SIZE', '32')))
 
     def __init__(self, bench_parameters_dict, node_parameters_dict):
         try:
@@ -24,9 +25,9 @@ class LocalBench:
     def __getattr__(self, attr):
         return getattr(self.bench_parameters, attr)
 
-    def _background_run(self, command, log_file):
+    def _background_command(self, command, log_file):
         name = splitext(basename(log_file))[0]
-        
+
         # PROPAGATE ATTACK ENV VARS: Ensure local simulation respects attack config
         attack_vars = [
             'ATTACK_MODE', 'ATTACKER_RATIO', 'VICTIM_RATIO',
@@ -37,9 +38,28 @@ class LocalBench:
             'RUST_LOG'
         ]
         envs = ' '.join([f'{v}="{os.environ[v]}"' for v in attack_vars if v in os.environ])
-        
-        cmd = f'{envs} {command} 2> {log_file}'
-        subprocess.run(['tmux', 'new', '-d', '-s', name, cmd], check=True)
+        prefix = f'{envs} ' if envs else ''
+        cmd = f'{prefix}{command} 2> {log_file}'
+        return ['tmux', 'new', '-d', '-s', name, cmd]
+
+    def _background_run(self, command, log_file):
+        subprocess.run(self._background_command(command, log_file), check=True)
+
+    def _background_run_many(self, commands):
+        pending = []
+        for command, log_file in commands:
+            pending.append(subprocess.Popen(self._background_command(command, log_file)))
+            if len(pending) >= self.TMUX_LAUNCH_BATCH_SIZE:
+                self._wait_for_pending(pending)
+                pending.clear()
+        self._wait_for_pending(pending)
+
+    @staticmethod
+    def _wait_for_pending(processes):
+        for process in processes:
+            code = process.wait()
+            if code != 0:
+                raise subprocess.CalledProcessError(code, process.args)
 
     def _kill_nodes(self):
         try:
@@ -89,6 +109,7 @@ class LocalBench:
             # Run the clients (they will wait for the nodes to be ready).
             workers_addresses = committee.workers_addresses(self.faults)
             rate_share = ceil(rate / committee.workers())
+            clients = []
             for i, addresses in enumerate(workers_addresses):
                 for (id, address) in addresses:
                     cmd = CommandMaker.run_client(
@@ -98,9 +119,12 @@ class LocalBench:
                         [x for y in workers_addresses for _, x in y]
                     )
                     log_file = PathMaker.client_log_file(i, id)
-                    self._background_run(cmd, log_file)
+                    clients += [(cmd, log_file)]
+            Print.info(f'Launching {len(clients)} clients...')
+            self._background_run_many(clients)
 
             # Run the primaries (except the faulty ones).
+            primaries = []
             for i, address in enumerate(committee.primary_addresses(self.faults)):
                 cmd = CommandMaker.run_primary(
                     PathMaker.key_file(i),
@@ -110,9 +134,12 @@ class LocalBench:
                     debug=debug
                 )
                 log_file = PathMaker.primary_log_file(i)
-                self._background_run(cmd, log_file)
+                primaries += [(cmd, log_file)]
+            Print.info(f'Launching {len(primaries)} primaries...')
+            self._background_run_many(primaries)
 
             # Run the workers (except the faulty ones).
+            workers = []
             for i, addresses in enumerate(workers_addresses):
                 for (id, address) in addresses:
                     cmd = CommandMaker.run_worker(
@@ -124,7 +151,9 @@ class LocalBench:
                         debug=debug
                     )
                     log_file = PathMaker.worker_log_file(i, id)
-                    self._background_run(cmd, log_file)
+                    workers += [(cmd, log_file)]
+            Print.info(f'Launching {len(workers)} workers...')
+            self._background_run_many(workers)
 
             # Wait for all transactions to be processed.
             Print.info(f'Running benchmark ({self.duration} sec)...')
