@@ -56,6 +56,8 @@ FIELDNAMES = [
 # Excludes metadata like timestamp, asr, etc.
 PARAM_KEYS = [k for k in FIELDNAMES if k not in ["timestamp", "protocol", "experiment", "attack_mode", "rep", "asr", "duration", "exit_code"]]
 
+INVALID_ASR_VALUES = {"", "N/A", "0.0", "0.00", "0", "0%"}
+
 # Define the Experiment Matrix
 # Each key acts as a "dimension" we can sweep over independently.
 # When sweeping one dimension, others stay at their default (index 0).
@@ -251,6 +253,103 @@ def load_base_config(config_path):
     with open(config_path, 'r') as f:
         return yaml.safe_load(f)
 
+
+def normalize_param_value(value):
+    if value is None or value == "None":
+        return ""
+    return str(value)
+
+
+def is_valid_asr(asr):
+    if asr is None:
+        return False
+    return normalize_param_value(asr) not in INVALID_ASR_VALUES
+
+
+def build_result_key(protocol, experiment, attack_mode, rep, params):
+    param_vals = tuple(normalize_param_value(params.get(pk, "")) for pk in PARAM_KEYS)
+    return (protocol, experiment, attack_mode, str(rep), param_vals)
+
+
+def materialize_sweep_override(base_config, override, target_protocol, target_attack):
+    realized = {k: normalize_param_value(v) for k, v in override.items()}
+    base_env = base_config.get('environment', {})
+    num_nodes = int(realized.get('NUM_NODES', base_env.get('NUM_NODES', 13)))
+
+    if target_attack == "speculative" and "SPECULATIVE_P_MAX" not in realized:
+        if target_protocol == "narwhal" and num_nodes >= 25:
+            realized["SPECULATIVE_P_MAX"] = "100"
+        else:
+            # Verified on CloudLab that 50 hashes execute in <1ms, so this is
+            # a safe default for the untuned speculative baseline.
+            realized["SPECULATIVE_P_MAX"] = "50"
+
+    return realized
+
+
+def compute_outer_timeout(config, attack_mode, local_mode):
+    num_nodes = int(config['environment'].get('NUM_NODES', 0))
+    num_workers = int(config['environment'].get('NUM_WORKERS', 1))
+    duration = int(config['environment'].get('DURATION', 120))
+
+    if local_mode:
+        return 10000 if (attack_mode == "sluggish" and num_nodes >= 50) else 7200
+
+    if config['protocol']['name'] == 'narwhal' and num_nodes >= 25:
+        process_count = num_nodes * (2 * num_workers + 1)
+        startup_buffer = 45 + num_nodes + (num_workers * 2)
+        scale_buffer = 0
+        if num_nodes >= 100:
+            scale_buffer = process_count + 480
+        elif num_nodes >= 50:
+            scale_buffer = process_count + 240
+        else:
+            scale_buffer = (process_count // 3) + 120
+        fab_timeout = duration + startup_buffer + scale_buffer
+        return fab_timeout + 300
+
+    return 10000 if (attack_mode == "sluggish" and num_nodes >= 50) else 7200
+
+
+def decode_timeout_stream(stream):
+    if not stream:
+        return ""
+    if isinstance(stream, bytes):
+        return stream.decode()
+    return stream
+
+
+def cleanup_protocol_containers(config, reason=None):
+    tag = config.get('docker', {}).get('tag')
+    if not tag:
+        return
+
+    container_ids = []
+    queries = [
+        ["docker", "ps", "-aq", "--filter", "label=mev.runner=test_runner", "--filter", f"ancestor={tag}"],
+        ["docker", "ps", "-aq", "--filter", f"ancestor={tag}"],
+    ]
+    for query in queries:
+        try:
+            listed = subprocess.run(query, capture_output=True, text=True, check=False)
+        except (FileNotFoundError, subprocess.SubprocessError):
+            return
+        container_ids = [line.strip() for line in listed.stdout.splitlines() if line.strip()]
+        if container_ids:
+            break
+
+    if not container_ids:
+        return
+
+    detail = f" ({reason})" if reason else ""
+    print(f"  [Sweeper] Removing {len(container_ids)} stale {tag} container(s){detail}...")
+    subprocess.run(
+        ["docker", "rm", "-f", *container_ids],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+
 def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_path, local_mode=False, no_build=False):
     # 0. Create logs directory in /tmp where we have permissions
     log_dir = "/tmp/mev_logs"
@@ -342,18 +441,23 @@ def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_p
         cmd.append("--local")
     
     start_time = time.time()
+    num_nodes = int(config['environment'].get('NUM_NODES', 0))
+    if not local_mode and num_nodes >= 50:
+        cleanup_protocol_containers(config, reason="pre-run cleanup")
+        time.sleep(5)
+
     try:
-        # 100 Nodes Sluggish can take > 60 minutes
-        num_nodes = int(config['environment'].get('NUM_NODES', 0))
-        timeout = 10000 if (attack_mode == "sluggish" and num_nodes >= 50) else 7200
+        timeout = compute_outer_timeout(config, attack_mode, local_mode)
         
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         output = result.stdout + result.stderr
         exit_code = result.returncode
     except subprocess.TimeoutExpired as e:
         print(f"  !!! TIMEOUT after {e.timeout}s !!!")
-        output = (e.stdout.decode() if e.stdout else "") + (e.stderr.decode() if e.stderr else "")
+        output = decode_timeout_stream(e.stdout) + decode_timeout_stream(e.stderr)
         exit_code = -124 # Standard timeout exit code
+        if not local_mode:
+            cleanup_protocol_containers(config, reason="post-timeout cleanup")
     duration = time.time() - start_time
 
     # 3. Parse ASR
@@ -400,19 +504,10 @@ def load_existing_results(results_file):
     with open(results_file, 'r') as f:
         reader = csv.DictReader(f)
         for row in reader:
-            # Create a unique key for each run: (protocol, experiment, attack_mode, rep, params)
-            # Standardize param values to strings and handle empty/missing columns
-            param_vals = []
-            for pk in PARAM_KEYS:
-                val = row.get(pk, "")
-                if val is None or val == "None": val = ""
-                param_vals.append(str(val))
-            param_vals = tuple(param_vals)
-
             # ONLY skip if we actually got a valid ASR result (0.0 is often a simulation failure)
             asr_val = row.get('asr', "N/A")
-            if asr_val not in [None, "N/A", "", "0.0", "0.00", "0%"]:
-                key = (row['protocol'], row['experiment'], row['attack_mode'], str(row['rep']), param_vals)
+            if is_valid_asr(asr_val):
+                key = build_result_key(row['protocol'], row['experiment'], row['attack_mode'], row['rep'], row)
                 results.add(key)
     return results
 
@@ -431,22 +526,14 @@ def deduplicate_results(results_file):
              return # Let main handle migration or new header
              
         for row in reader:
-            # Standardize param values
-            param_vals = []
-            for pk in PARAM_KEYS:
-                val = row.get(pk, "")
-                if val is None or val == "None": val = ""
-                param_vals.append(str(val))
-            param_vals = tuple(param_vals)
-            
-            key = (row['protocol'], row['experiment'], row['attack_mode'], str(row['rep']), param_vals)
+            key = build_result_key(row['protocol'], row['experiment'], row['attack_mode'], row['rep'], row)
             
             # Keep the latest entry, but prioritize successful ones over N/A/0.0
             asr_val = row.get('asr', "N/A")
-            is_valid = asr_val not in [None, "N/A", "", "0.0", "0.00", "0%"]
+            is_valid = is_valid_asr(asr_val)
             
             if is_valid:
-                if key not in unique_results or unique_results[key].get('asr') in [None, "N/A", "", "0.0", "0.00", "0%"]:
+                if key not in unique_results or not is_valid_asr(unique_results[key].get('asr')):
                     unique_results[key] = row
             # If not valid, only keep if we don't have anything better (allows seeing failure but won't block re-runs)
             elif key not in unique_results:
@@ -556,7 +643,7 @@ def main():
 
                 # Skip 100 nodes for mahimahi protocol to avoid consensus stalls
                 # Other protocols (Bullshark/Narwhal) handle 100 nodes fine
-                num_nodes = int(override.get("NUM_NODES", 0))
+                num_nodes = int(override.get("NUM_NODES", config.get('environment', {}).get('NUM_NODES', 0)))
                 if num_nodes > 50:
                     if target_protocol == "mahimahi" or target_protocol == "mysticeti":
                         print(f"  [-] Skipping {exp_name} | {target_protocol} | {num_nodes} nodes (Scaling Limit)")
@@ -567,43 +654,39 @@ def main():
 
                 # Run Repetitions
                 for r in range(1, repetitions + 1):
-                    # Check if already done
-                    
-                    # Construct full parameter state (MATCHING CSV FORMAT)
-                    # We only include the override values because non-overridden values are written as empty strings to the CSV
-                    current_vals = []
-                    for pk in PARAM_KEYS:
-                        # Only use the override. If not in override, it will be an empty string in the CSV.
-                        val = override.get(pk, "")
-                        if val is None or val == "None": val = ""
-                        current_vals.append(str(val))
-                    current_vals = tuple(current_vals)
-                    
-                    key = (target_protocol, exp_name, target_attack, str(r), current_vals)
+                    effective_override = materialize_sweep_override(config, override, target_protocol, target_attack)
+                    key = build_result_key(target_protocol, exp_name, target_attack, r, effective_override)
                     
                     if key in existing_results:
                         print(f"  [-] Skipping {exp_name} | {target_attack} | Rep {r} (Already recorded for {target_protocol})")
                         continue
 
-                    # Flatten the P_MAX logic to assign '50' for all default bounds instead of heavily stripping it for higher node counts.
-                    # This logic needs to be applied to the 'override' dictionary before it's passed to run_experiment.
-                    # The 'SPECULATIVE_P_MAX' parameter is part of the environment configuration.
-                    # If it's not explicitly set in the experiment's override, we default it to "50".
-                    if "SPECULATIVE_P_MAX" not in override:
-                        if target_protocol == "narwhal" and target_attack == "speculative" and num_nodes >= 25:
-                            override["SPECULATIVE_P_MAX"] = "100"
-                        else:
-                            # Verified on Cloudlab that 50 hashes execute in <1ms, so we can use the paper's target of 50
-                            override["SPECULATIVE_P_MAX"] = "50"
-                        
-                    data = run_experiment(override, target_attack, exp_name, r, args.config, local_mode=args.local, no_build=args.no_build)
+                    attempts = 2 if (not args.local and num_nodes >= 50) else 1
+                    for attempt in range(1, attempts + 1):
+                        if attempt > 1:
+                            print(f"  [Sweeper] Retrying {exp_name} | {target_attack} | Rep {r} after timeout...")
+                            cleanup_protocol_containers(config, reason="pre-retry cleanup")
+                            time.sleep(20)
+
+                        data = run_experiment(
+                            effective_override,
+                            target_attack,
+                            exp_name,
+                            r,
+                            args.config,
+                            local_mode=args.local,
+                            no_build=args.no_build,
+                        )
+                        if data.get('exit_code') != -124:
+                            break
                     
                     # ONLY record if we got a non-zero ASR (0.0 usually means simulation liveness failure)
                     asr_result = str(data.get('asr', '0.0'))
-                    if asr_result not in ["N/A", "0.0", "0.00", "0", "0%"]:
+                    if is_valid_asr(asr_result):
                         writer.writerow(data)
                         csvfile.flush() # CRITICAL: Write to disk immediately
                         os.fsync(csvfile.fileno()) # Force OS to flush buffers
+                        existing_results.add(build_result_key(target_protocol, exp_name, target_attack, r, data))
                     else:
                         print(f"  [!] Not recording result with ASR={asr_result}% (Likely simulation failure)")
 
@@ -616,6 +699,10 @@ def main():
                         except Exception:
                             pass
                         time.sleep(10)
+                    elif not args.local and num_nodes >= 50:
+                        cleanup_protocol_containers(config, reason="post-run cooldown")
+                        print("  [Sweeper] Cooling down 20s for large-scale Docker cleanup...")
+                        time.sleep(20)
                     else:
                         # Local mode needs time for sockets to enter TIME_WAIT and clear
                         time.sleep(5)

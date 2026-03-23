@@ -118,6 +118,9 @@ def run_attack_test(config: dict) -> dict:
         "--cap-add=NET_ADMIN", # Enable Traffic Control (tc)
         "-v", f"{results_mount}:/app/results",
         "-e", f"TEST_NAME={test_name}",
+        "--label", "mev.runner=test_runner",
+        "--label", f"mev.protocol={config['protocol']['name']}",
+        "--label", f"mev.experiment={config['experiment']['name']}",
     ]
 
     # Mount local fixed scripts over the container's scripts to avoid rebuilds
