@@ -319,6 +319,13 @@ def decode_timeout_stream(stream):
     return stream
 
 
+def extract_final_asr(output):
+    matches = [line.split("FINAL_ASR_RESULT:", 1)[1].strip() for line in output.splitlines() if "FINAL_ASR_RESULT:" in line]
+    if not matches:
+        return "N/A"
+    return matches[-1].rstrip("%").strip()
+
+
 def cleanup_protocol_containers(config, reason=None):
     tag = config.get('docker', {}).get('tag')
     if not tag:
@@ -461,12 +468,7 @@ def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_p
     duration = time.time() - start_time
 
     # 3. Parse ASR
-    asr = "N/A"
-    if "FINAL_ASR_RESULT:" in output:
-        for line in output.splitlines():
-            if "FINAL_ASR_RESULT:" in line:
-                asr = line.split("FINAL_ASR_RESULT:")[1].strip().replace("%", "")
-                break
+    asr = extract_final_asr(output)
     
     # Save log for debugging
     with open(log_file, "w") as f:

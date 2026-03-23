@@ -22,6 +22,13 @@ export NUM_WORKERS=${NUM_WORKERS:-8}
 export VICTIM_COUNT=${VICTIM_COUNT:-1}
 export ASR_LOGGING_FREQUENCY=${ASR_LOGGING_FREQUENCY:-1}
 export ASR_REPORT_THRESHOLD=${ASR_REPORT_THRESHOLD:-1}
+if [ -z "${MIN_SAME_ROUND_SAMPLES:-}" ]; then
+    if [ "$NUM_NODES" -ge 100 ]; then
+        export MIN_SAME_ROUND_SAMPLES=5
+    else
+        export MIN_SAME_ROUND_SAMPLES=1
+    fi
+fi
 export RUST_LOG=${ATTACK_RUST_LOG:-info}
 if [ -z "${TMUX_LAUNCH_BATCH_SIZE:-}" ]; then
     if [ "$NUM_NODES" -ge 100 ]; then
@@ -71,6 +78,7 @@ echo "  Network Size: $NUM_NODES nodes"
 echo "  Workers per Node: $NUM_WORKERS"
 echo "  tmux Launch Batch Size: $TMUX_LAUNCH_BATCH_SIZE"
 echo "  Duration: $DURATION seconds"
+echo "  Minimum Same-Round Samples: $MIN_SAME_ROUND_SAMPLES"
 echo "  RUST_LOG: $RUST_LOG"
 echo ""
 
@@ -247,6 +255,14 @@ PY
     fi
 fi
 
+# Reject low-sample ASRs so the sweeper does not record statistically empty wins.
+FINAL_REPORTED_ASR="$LATEST_ASR"
+RESULT_STATUS="VALID"
+if [ "$TOTAL_SAMPLES" -lt "$MIN_SAME_ROUND_SAMPLES" ]; then
+    FINAL_REPORTED_ASR="N/A"
+    RESULT_STATUS="INSUFFICIENT_SAME_ROUND_SAMPLES"
+fi
+
 # Get total ASR success events
 TOTAL_SUCCESS=$(grep -c "ASR SUCCESS" "$LOG_DIR"/primary-*.log | awk -F':' '{sum+=$2} END {print sum}')
 if [ -z "$TOTAL_SUCCESS" ]; then
@@ -273,11 +289,15 @@ fi
 
 echo "📈 SPECULATIVE ASR CALCULATION:"
 echo "==============================="
-echo "  Final ASR (Same-Round / ASR-B): $LATEST_ASR%"
+echo "  Raw Same-Round ASR (ASR-B): $LATEST_ASR%"
 echo "  Final ASR (All-Pairs / ASR-A): $LATEST_ASR_A%"
+echo "  Reported ASR Result: $FINAL_REPORTED_ASR"
 echo "  ASR Success Events: $TOTAL_SUCCESS"
 echo "  ASR Failure Events: $TOTAL_FAILURE"
 echo "  Speculative Events: $SPECULATIVE_EVENTS"
+echo "  Same-Round Samples: $TOTAL_SAMPLES"
+echo "  Same-Round Sample Threshold: $MIN_SAME_ROUND_SAMPLES"
+echo "  Result Status: $RESULT_STATUS"
 echo "  Chosen Primary Log: $CHOSEN_LOG"
 echo "  Chosen Report Blocks: $CHOSEN_BLOCKS"
 if [ ! -z "$ASR_SPREAD" ]; then
@@ -294,25 +314,28 @@ if [ -z "$ATTACKER_NODE_ID" ]; then
 fi
 
 echo "  Attacker Node: $ATTACKER_NODE ($SPECULATIVE_EVENTS events)"
-echo "  Victim Nodes:"
-for i in $(seq 0 $((NUM_NODES - 1))); do
-    if [ "$i" -ne "$ATTACKER_NODE_ID" ]; then
-        echo "    - Primary-$i (0 events - victim)"
-    fi
-done
+echo "  Configured Victim Count: $VICTIM_COUNT"
+echo "  Victim identity is committee-order based and is not reconstructed here."
 echo ""
 
 echo "📊 COMPARISON WITH PAPER:"
 echo "========================="
 echo "  Paper's Target: $PAPER_ASR_TARGET%"
-echo "  Our ASR: $LATEST_ASR%"
-echo "FINAL_ASR_RESULT: $LATEST_ASR%"
-DIFFERENCE=$(echo "$LATEST_ASR - $PAPER_ASR_TARGET" | bc)
-echo "  Difference: $DIFFERENCE%"
-if (( $(echo "$DIFFERENCE >= -5.0 && $DIFFERENCE <= 5.0" | bc -l) )); then
-    echo "  Status: ✅ SUCCESS - ASR within acceptable range!"
+echo "  Raw Same-Round ASR: $LATEST_ASR%"
+if [ "$FINAL_REPORTED_ASR" = "N/A" ]; then
+    echo "  Reported ASR: N/A (insufficient same-round samples)"
+    echo "FINAL_ASR_RESULT: N/A"
+    echo "  Status: ⚠️ INVALID - insufficient same-round samples for a trustworthy ASR."
 else
-    echo "  Status: ❌ FAILURE - ASR outside acceptable range!"
+    echo "  Reported ASR: $FINAL_REPORTED_ASR%"
+    echo "FINAL_ASR_RESULT: $FINAL_REPORTED_ASR%"
+    DIFFERENCE=$(echo "$FINAL_REPORTED_ASR - $PAPER_ASR_TARGET" | bc)
+    echo "  Difference: $DIFFERENCE%"
+    if (( $(echo "$DIFFERENCE >= -5.0 && $DIFFERENCE <= 5.0" | bc -l) )); then
+        echo "  Status: ✅ SUCCESS - ASR within acceptable range!"
+    else
+        echo "  Status: ❌ FAILURE - ASR outside acceptable range!"
+    fi
 fi
 echo ""
 
@@ -330,7 +353,8 @@ echo "  ✅ Logs saved to /results/logs/"
 echo ""
 echo "🎉 AUTOMATED SPECULATIVE ATTACK COMPLETED!"
 echo "=========================================="
-echo "  Final ASR: $LATEST_ASR%"
+echo "  Reported ASR: $FINAL_REPORTED_ASR"
+echo "  Raw Same-Round ASR: $LATEST_ASR%"
 echo "  Total Samples (Same-round): $TOTAL_SAMPLES"
 echo "  Logs: /app/results/logs/"
 echo ""

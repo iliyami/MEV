@@ -73,22 +73,24 @@ echo ""
 echo "========================================"
 echo "Results Summary"
 echo "========================================"
-# Final grep to ensure the sweeper can find the result even if it's buried in logs
-grep "FINAL_ASR_RESULT:" /app/results/test_output.log || echo "FINAL_ASR_RESULT: 0.0% (No result found)"
+# Emit only the last marker so outer parsers do not accidentally consume a stale
+# or intermediate ASR line.
+FINAL_ASR_LINE=$(grep "FINAL_ASR_RESULT:" /app/results/test_output.log | tail -1 || true)
+if [ -z "$FINAL_ASR_LINE" ]; then
+    FINAL_ASR_LINE="FINAL_ASR_RESULT: UNKNOWN"
+fi
+echo "$FINAL_ASR_LINE"
 
 # Output final line for parsing by test_runner.py
-FINAL_ASR=$(grep "FINAL_ASR_RESULT:" /app/results/test_output.log | tail -1 | sed -n 's/.*FINAL_ASR_RESULT: \([0-9.]*\)%.*/\1/p')
-if [ ! -z "$FINAL_ASR" ]; then
+FINAL_ASR=$(echo "$FINAL_ASR_LINE" | sed -n 's/.*FINAL_ASR_RESULT:[[:space:]]*//p' | tr -d '\r' | sed 's/%$//')
+if [ -n "$FINAL_ASR" ]; then
     echo "FINAL_ASR=$FINAL_ASR" > /app/results/asr_result.txt
-    echo "Final ASR: $FINAL_ASR%"
-else
-    # Fallback to general ASR if FINAL_ASR_RESULT is missing
-    ALT_ASR=$(grep -E "(ASR|Attack Success Rate)" /app/results/test_output.log | tail -1 | grep -o '[0-9.]\+%' | sed 's/%//')
-    if [ ! -z "$ALT_ASR" ]; then
-        echo "FINAL_ASR=$ALT_ASR" > /app/results/asr_result.txt
-        echo "Final ASR (fallback): $ALT_ASR%"
+    if [ "$FINAL_ASR" = "UNKNOWN" ] || [ "$FINAL_ASR" = "N/A" ]; then
+        echo "Final ASR: $FINAL_ASR"
     else
-        echo "FINAL_ASR=UNKNOWN" > /app/results/asr_result.txt
-        echo "ERROR: Could not parse ASR from output"
+        echo "Final ASR: $FINAL_ASR%"
     fi
+else
+    echo "FINAL_ASR=UNKNOWN" > /app/results/asr_result.txt
+    echo "ERROR: Could not parse ASR from output"
 fi

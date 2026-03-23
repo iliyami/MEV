@@ -194,6 +194,20 @@ def run_attack_test(config: dict) -> dict:
     return {"asr": "UNKNOWN", "success": False}
 
 
+def extract_final_asr(output: str) -> str:
+    matches = [line.split("FINAL_ASR_RESULT:", 1)[1].strip() for line in output.splitlines() if "FINAL_ASR_RESULT:" in line]
+    if matches:
+        return matches[-1].rstrip("%").strip()
+
+    for line in output.splitlines():
+        if "Attack Success Rate (ASR):" in line:
+            try:
+                return line.split("SR):", 1)[1].strip().rstrip("%")
+            except (IndexError, AttributeError):
+                continue
+    return "N/A"
+
+
 def run_local_test(config: dict) -> dict:
     """Run the attack test locally with cargo test."""
     test_name = config['test']['test_name']
@@ -252,25 +266,8 @@ def run_local_test(config: dict) -> dict:
     # Run from the protocol directory
     result = subprocess.run(cmd, cwd=str(protocol_path), capture_output=True, text=True, env=current_env)
     
-    asr = "N/A"
     output = result.stdout + result.stderr
-    
-    # Handle standardized ASR output from scripts
-    if "FINAL_ASR_RESULT:" in output:
-        for line in output.splitlines():
-            if "FINAL_ASR_RESULT:" in line:
-                asr = line.split("FINAL_ASR_RESULT:")[1].strip().replace("%", "")
-                break
-    elif "Attack Success Rate (ASR):" in output:
-        # Format used by AlephBFT
-        for line in output.splitlines():
-            if "Attack Success Rate (ASR):" in line:
-                # Extract XX.XX from "Attack Success Rate (ASR): XX.XX%"
-                try:
-                    asr = line.split("SR):")[1].strip().replace("%", "")
-                except (IndexError, AttributeError):
-                    pass
-                break
+    asr = extract_final_asr(output)
     
     return {
         "asr": asr, 
