@@ -23,6 +23,15 @@ export VICTIM_COUNT=${VICTIM_COUNT:-1}
 export ASR_LOGGING_FREQUENCY=${ASR_LOGGING_FREQUENCY:-1}
 export ASR_REPORT_THRESHOLD=${ASR_REPORT_THRESHOLD:-1}
 export RUST_LOG=${ATTACK_RUST_LOG:-info}
+if [ -z "${TMUX_LAUNCH_BATCH_SIZE:-}" ]; then
+    if [ "$NUM_NODES" -ge 100 ]; then
+        export TMUX_LAUNCH_BATCH_SIZE=4
+    elif [ "$NUM_NODES" -ge 50 ]; then
+        export TMUX_LAUNCH_BATCH_SIZE=8
+    else
+        export TMUX_LAUNCH_BATCH_SIZE=32
+    fi
+fi
 
 PAPER_ASR_TARGET=86.3 # Paper's speculative attack ASR for Tusk
 
@@ -60,6 +69,7 @@ echo "  Victim Ratio: $VICTIM_RATIO"
 echo "  Victim Count: $VICTIM_COUNT"
 echo "  Network Size: $NUM_NODES nodes"
 echo "  Workers per Node: $NUM_WORKERS"
+echo "  tmux Launch Batch Size: $TMUX_LAUNCH_BATCH_SIZE"
 echo "  Duration: $DURATION seconds"
 echo "  RUST_LOG: $RUST_LOG"
 echo ""

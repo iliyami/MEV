@@ -47,9 +47,10 @@ class LocalBench:
 
     def _background_run_many(self, commands):
         pending = []
+        batch_size = self._tmux_batch_size(len(commands))
         for command, log_file in commands:
             pending.append(subprocess.Popen(self._background_command(command, log_file)))
-            if len(pending) >= self.TMUX_LAUNCH_BATCH_SIZE:
+            if len(pending) >= batch_size:
                 self._wait_for_pending(pending)
                 pending.clear()
         self._wait_for_pending(pending)
@@ -60,6 +61,19 @@ class LocalBench:
             code = process.wait()
             if code != 0:
                 raise subprocess.CalledProcessError(code, process.args)
+
+    def _tmux_batch_size(self, command_count):
+        # Large 50+/100-node runs create hundreds of tmux sessions. Starting
+        # them too aggressively can starve the later node phases before the
+        # benchmark even begins.
+        nodes = self.nodes[0]
+        if nodes >= 100:
+            return min(self.TMUX_LAUNCH_BATCH_SIZE, 4)
+        if nodes >= 50:
+            return min(self.TMUX_LAUNCH_BATCH_SIZE, 8)
+        if nodes >= 25 and command_count >= 100:
+            return min(self.TMUX_LAUNCH_BATCH_SIZE, 16)
+        return self.TMUX_LAUNCH_BATCH_SIZE
 
     def _kill_nodes(self):
         try:
@@ -106,22 +120,8 @@ class LocalBench:
 
             self.node_parameters.print(PathMaker.parameters_file())
 
-            # Run the clients (they will wait for the nodes to be ready).
             workers_addresses = committee.workers_addresses(self.faults)
             rate_share = ceil(rate / committee.workers())
-            clients = []
-            for i, addresses in enumerate(workers_addresses):
-                for (id, address) in addresses:
-                    cmd = CommandMaker.run_client(
-                        address,
-                        self.tx_size,
-                        rate_share,
-                        [x for y in workers_addresses for _, x in y]
-                    )
-                    log_file = PathMaker.client_log_file(i, id)
-                    clients += [(cmd, log_file)]
-            Print.info(f'Launching {len(clients)} clients...')
-            self._background_run_many(clients)
 
             # Run the primaries (except the faulty ones).
             primaries = []
@@ -154,6 +154,27 @@ class LocalBench:
                     workers += [(cmd, log_file)]
             Print.info(f'Launching {len(workers)} workers...')
             self._background_run_many(workers)
+
+            if nodes >= 25:
+                settle_secs = 5 if nodes >= 50 else 2
+                Print.info(f'Allowing nodes to settle for {settle_secs} sec...')
+                sleep(settle_secs)
+
+            # Run the clients after nodes are online. Launching all clients
+            # first at 50+ nodes causes startup thrash and delays worker bring-up.
+            clients = []
+            for i, addresses in enumerate(workers_addresses):
+                for (id, address) in addresses:
+                    cmd = CommandMaker.run_client(
+                        address,
+                        self.tx_size,
+                        rate_share,
+                        [x for y in workers_addresses for _, x in y]
+                    )
+                    log_file = PathMaker.client_log_file(i, id)
+                    clients += [(cmd, log_file)]
+            Print.info(f'Launching {len(clients)} clients...')
+            self._background_run_many(clients)
 
             # Wait for all transactions to be processed.
             Print.info(f'Running benchmark ({self.duration} sec)...')
