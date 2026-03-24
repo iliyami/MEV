@@ -610,8 +610,9 @@ impl Consensus {
                 let in_window = diff.abs() <= window;
                 if in_window {
                     let eligible = if self.attack_mode == "sluggish" {
-                        // Sluggish: Attacker stays older but wants to be included before vic
-                        diff >= 0 // att_round <= vic_round
+                        // Sluggish is a cross-round attack: the attacker wins by keeping
+                        // its block in a strictly smaller round than the victim.
+                        diff > 0 // att_round < vic_round
                     } else {
                         // Speculative/Fissure: Attacker is same or newer
                         diff <= 0 // att_round >= vic_round
