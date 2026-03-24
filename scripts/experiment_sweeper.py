@@ -408,9 +408,13 @@ def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_p
         config['environment']['ASR_REPORT_THRESHOLD'] = "1"
     elif config['protocol']['name'] == 'narwhal' and attack_mode == 'sluggish':
         if 'NUM_WORKERS' not in config_override:
-            config['environment']['NUM_WORKERS'] = "2" if num_nodes >= 100 else "8"
+            config['environment']['NUM_WORKERS'] = "1"
+        if 'ATTACKER_RATIO' not in config_override:
+            config['environment']['ATTACKER_RATIO'] = "0.5"
         if 'VICTIM_COUNT' not in config_override:
             config['environment']['VICTIM_COUNT'] = "1"
+        if 'MIN_ALL_PAIR_SAMPLES' not in config_override:
+            config['environment']['MIN_ALL_PAIR_SAMPLES'] = "5" if num_nodes >= 100 else "3"
         config['environment']['ASR_LOGGING_FREQUENCY'] = "1"
         config['environment']['ASR_REPORT_THRESHOLD'] = "1"
 

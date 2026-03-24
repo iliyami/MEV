@@ -16,21 +16,21 @@ BUILD_LOG="$NARWHAL_TUSK_DIR/build.log"
 ATTACK_OUTPUT_LOG="$NARWHAL_TUSK_DIR/sluggish_attack_output.log"
 
 export NUM_NODES=${1:-${NUM_NODES:-15}}
-export ATTACKER_RATIO=${2:-${ATTACKER_RATIO:-0.33}}
+export ATTACKER_RATIO=${2:-${ATTACKER_RATIO:-0.5}}
 export VICTIM_RATIO=${3:-${VICTIM_RATIO:-0.22}}
 export DURATION=${4:-${DURATION:-35}}
 export TEST_DURATION=$DURATION
 export ATTACK_MODE=${ATTACK_MODE:-sluggish}
 export SLUGGISH_TIMEOUT_MULTIPLIER=${SLUGGISH_TIMEOUT_MULTIPLIER:-2.0}
-export NUM_WORKERS=${NUM_WORKERS:-8}
+export NUM_WORKERS=${NUM_WORKERS:-1}
 export VICTIM_COUNT=${VICTIM_COUNT:-1}
 export ASR_LOGGING_FREQUENCY=${ASR_LOGGING_FREQUENCY:-1}
 export ASR_REPORT_THRESHOLD=${ASR_REPORT_THRESHOLD:-1}
-if [ -z "${MIN_SAME_ROUND_SAMPLES:-}" ]; then
+if [ -z "${MIN_ALL_PAIR_SAMPLES:-}" ]; then
     if [ "$NUM_NODES" -ge 100 ]; then
-        export MIN_SAME_ROUND_SAMPLES=5
+        export MIN_ALL_PAIR_SAMPLES=5
     else
-        export MIN_SAME_ROUND_SAMPLES=1
+        export MIN_ALL_PAIR_SAMPLES=3
     fi
 fi
 export RUST_LOG=${ATTACK_RUST_LOG:-info}
@@ -67,7 +67,7 @@ echo "  Timeout Multiplier: $SLUGGISH_TIMEOUT_MULTIPLIER"
 echo "  Network Size: $NUM_NODES nodes"
 echo "  Workers per Node: $NUM_WORKERS"
 echo "  Duration: $DURATION seconds"
-echo "  Minimum Same-Round Samples: $MIN_SAME_ROUND_SAMPLES"
+echo "  Minimum All-Pairs Samples: $MIN_ALL_PAIR_SAMPLES"
 echo "  RUST_LOG: $RUST_LOG"
 echo ""
 
@@ -80,7 +80,7 @@ echo ""
 echo "🚀 Step 4: Running $NUM_NODES-node network with sluggish attack..."
 echo "  Duration: $DURATION seconds"
 echo "  Network: $NUM_NODES nodes"
-echo "  Expected Same-Round ASR: ~$PAPER_TARGET%"
+echo "  Expected Sluggish ASR: ~$PAPER_TARGET%"
 echo ""
 echo "  Starting sluggish attack..."
 
@@ -183,16 +183,16 @@ if not reports:
 
 max_blocks = max(r["blocks"] for r in reports)
 top = [r for r in reports if r["blocks"] == max_blocks]
-max_same_total = max(r["total_b"] for r in top)
-top = [r for r in top if r["total_b"] == max_same_total]
+max_all_pairs_total = max(r["total_a"] for r in top)
+top = [r for r in top if r["total_a"] == max_all_pairs_total]
 
-median_b = statistics.median(r["asr_b"] for r in top)
-chosen = min(top, key=lambda r: (abs(r["asr_b"] - median_b), r["path"]))
-spread_b = max(r["asr_b"] for r in reports) - min(r["asr_b"] for r in reports)
+median_a = statistics.median(r["asr_a"] for r in top)
+chosen = min(top, key=lambda r: (abs(r["asr_a"] - median_a), r["path"]))
+spread_a = max(r["asr_a"] for r in reports) - min(r["asr_a"] for r in reports)
 
 print(
     f'{chosen["asr_b"]:.2f}\t{chosen["asr_a"]:.2f}\t{chosen["total_b"]}\t{chosen["total_a"]}\t'
-    f'{chosen["blocks"]}\t{chosen["succ_b"]}\t{chosen["path"]}\t{len(reports)}\t{spread_b:.2f}'
+    f'{chosen["blocks"]}\t{chosen["succ_b"]}\t{chosen["path"]}\t{len(reports)}\t{spread_a:.2f}'
 )
 PY
 )
@@ -208,11 +208,11 @@ CHOSEN_LOG=${CHOSEN_LOG:-N/A}
 REPORT_COUNT=${REPORT_COUNT:-0}
 ASR_SPREAD=${ASR_SPREAD:-0.0}
 
-FINAL_REPORTED_ASR="$LATEST_ASR_B"
+FINAL_REPORTED_ASR="$LATEST_ASR_A"
 RESULT_STATUS="VALID"
-if [ "$TOTAL_SAMPLES_B" -lt "$MIN_SAME_ROUND_SAMPLES" ]; then
+if [ "$TOTAL_SAMPLES_A" -lt "$MIN_ALL_PAIR_SAMPLES" ]; then
     FINAL_REPORTED_ASR="N/A"
-    RESULT_STATUS="INSUFFICIENT_SAME_ROUND_SAMPLES"
+    RESULT_STATUS="INSUFFICIENT_ALL_PAIR_SAMPLES"
 fi
 
 TOTAL_FAILURE=$(grep -c "ASR FAILURE" "$LOG_DIR"/primary-*.log | awk -F':' '{sum+=$2} END {print sum}')
@@ -242,7 +242,7 @@ echo "  Raw All-Pairs ASR (ASR-A): $LATEST_ASR_A%"
 echo "  Reported ASR Result: $FINAL_REPORTED_ASR"
 echo "  Same-Round Samples: $TOTAL_SAMPLES_B"
 echo "  All-Pairs Samples: $TOTAL_SAMPLES_A"
-echo "  Same-Round Sample Threshold: $MIN_SAME_ROUND_SAMPLES"
+echo "  All-Pairs Sample Threshold: $MIN_ALL_PAIR_SAMPLES"
 echo "  Result Status: $RESULT_STATUS"
 echo "  Timeout Modification Events: $TIMEOUT_EVENTS"
 echo "  Sluggish Proposal Events: $PROPOSAL_EVENTS"
@@ -254,12 +254,12 @@ echo ""
 
 echo "📊 COMPARISON WITH PAPER:"
 echo "========================="
-echo "  Paper's Target (Same-Round): $PAPER_TARGET%"
-echo "  Raw Same-Round ASR: $LATEST_ASR_B%"
+echo "  Paper's Target (Sluggish ASR): $PAPER_TARGET%"
+echo "  Raw All-Pairs ASR: $LATEST_ASR_A%"
 if [ "$FINAL_REPORTED_ASR" = "N/A" ]; then
-    echo "  Reported ASR: N/A (insufficient same-round samples)"
+    echo "  Reported ASR: N/A (insufficient all-pairs samples)"
     echo "FINAL_ASR_RESULT: N/A"
-    echo "  Status: ⚠️ INVALID - insufficient same-round samples for a trustworthy ASR."
+    echo "  Status: ⚠️ INVALID - insufficient all-pairs samples for a trustworthy sluggish ASR."
 else
     echo "  Reported ASR: $FINAL_REPORTED_ASR%"
     echo "FINAL_ASR_RESULT: $FINAL_REPORTED_ASR%"
@@ -287,6 +287,6 @@ echo ""
 echo "🎉 AUTOMATED SLUGGISH ATTACK COMPLETED!"
 echo "======================================="
 echo "  Reported ASR: $FINAL_REPORTED_ASR"
-echo "  Raw Same-Round ASR: $LATEST_ASR_B%"
-echo "  Total Samples (Same-round): $TOTAL_SAMPLES_B"
+echo "  Raw All-Pairs ASR: $LATEST_ASR_A%"
+echo "  Total Samples (All-pairs): $TOTAL_SAMPLES_A"
 echo "  Logs: /app/results/logs/"

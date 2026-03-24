@@ -37,11 +37,35 @@ tmux start-server || echo "⚠️ tmux start-server skipped"
 # -----------------------------------------------------
 # Network Simulation (Geo-Distribution / Jitter)
 # -----------------------------------------------------
-if [ ! -z "$LATENCY_JITTER" ]; then
-    echo "🌍 Applying Network Simulation: ${LATENCY_JITTER} delay"
-    tc qdisc add dev lo root netem delay $LATENCY_JITTER distribution normal || echo "⚠️ Failed to apply TC (check --cap-add=NET_ADMIN)"
+apply_netem_delay() {
+    local latency="$1"
+    local jitter="${2:-}"
+
+    tc qdisc del dev lo root 2>/dev/null || true
+
+    if [ -n "$jitter" ] && [ "$jitter" != "0" ] && [ "$jitter" != "0ms" ]; then
+        tc qdisc add dev lo root netem delay "$latency" "$jitter" distribution normal || return 1
+    else
+        tc qdisc add dev lo root netem delay "$latency" || return 1
+    fi
+    return 0
+}
+
+if [ -n "$LATENCY_MS" ]; then
+    if [ -n "$JITTER_MS" ]; then
+        echo "🌍 Applying Network Simulation: ${LATENCY_MS}ms ${JITTER_MS}ms delay"
+        apply_netem_delay "${LATENCY_MS}ms" "${JITTER_MS}ms" || echo "⚠️ Failed to apply TC (check --cap-add=NET_ADMIN)"
+    else
+        echo "🌍 Applying Network Simulation: ${LATENCY_MS}ms delay"
+        apply_netem_delay "${LATENCY_MS}ms" || echo "⚠️ Failed to apply TC (check --cap-add=NET_ADMIN)"
+    fi
     tc qdisc show dev lo
-else 
+elif [ -n "$LATENCY_JITTER" ]; then
+    read -r LATENCY_ONLY JITTER_ONLY _ <<< "$LATENCY_JITTER"
+    echo "🌍 Applying Network Simulation: ${LATENCY_JITTER} delay"
+    apply_netem_delay "$LATENCY_ONLY" "$JITTER_ONLY" || echo "⚠️ Failed to apply TC (check --cap-add=NET_ADMIN)"
+    tc qdisc show dev lo
+else
     echo "🌍 Network Simulation: Disabled (Localhost Speed)"
 fi
 

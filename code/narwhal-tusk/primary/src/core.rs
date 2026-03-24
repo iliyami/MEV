@@ -237,12 +237,17 @@ impl Core {
         let bytes = bincode::serialize(header).expect("Failed to serialize header");
         self.store.write(header.id.to_vec(), bytes).await;
 
-        if self.attack_active && self.is_attacker && self.attack_mode == "speculative" {
+        if self.attack_active
+            && self.is_attacker
+            && (self.attack_mode == "speculative" || self.attack_mode == "sluggish")
+        {
             let victim_nodes = self.get_victim_nodes();
             if header.author != self.name && victim_nodes.contains(&header.author) {
                 info!(
-                    "SPECULATIVE ATTACK: Observed victim header from {} in round {}, notifying proposer",
-                    header.author, header.round
+                    "{} ATTACK: Observed victim header from {} in round {}, notifying proposer",
+                    self.attack_mode.to_uppercase(),
+                    header.author,
+                    header.round
                 );
                 let _ = self.tx_victim_round.send(header.round).await;
             }

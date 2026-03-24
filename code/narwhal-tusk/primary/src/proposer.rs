@@ -505,6 +505,11 @@ impl Proposer {
             // We should ONLY propose if timer_expired, ignoring enough_digests.
             let is_sluggish = self.attack_active && self.is_attacker && self.attack_mode == "sluggish";
             let is_speculative = self.attack_active && self.is_attacker && self.attack_mode == "speculative";
+            let sluggish_victim_ahead = is_sluggish
+                && self
+                    .victim_observed_round
+                    .map(|victim_round| victim_round > self.round)
+                    .unwrap_or(false);
             let speculative_victim_seen = is_speculative
                 && self.victim_observed_round == Some(self.round);
             let victim_triggered = speculative_victim_seen
@@ -526,7 +531,7 @@ impl Proposer {
                 );
             
             let should_propose = if is_sluggish {
-                timer_expired && enough_parents
+                enough_parents && (sluggish_victim_ahead || timer_expired)
             } else if is_speculative && self.speculative_require_victim {
                 victim_ready
             } else if victim_ready {
@@ -642,6 +647,27 @@ impl Proposer {
                             self.last_parents.len(),
                             self.speculative_grace_ms
                         );
+                    } else if self.attack_active && self.is_attacker && self.attack_mode == "sluggish" {
+                        self.victim_observed_round = Some(victim_round);
+                        info!(
+                            "Sluggish attack: victim observed in round {}, attacker still in round {} with {} parents",
+                            victim_round,
+                            self.round,
+                            self.last_parents.len()
+                        );
+
+                        if victim_round > self.round && !self.proposed_this_round && !self.last_parents.is_empty() {
+                            info!(
+                                "Sluggish attack: proposing immediately in lower round {} after observing victim round {}",
+                                self.round,
+                                victim_round
+                            );
+                            self.make_header().await;
+                            self.payload_size = 0;
+
+                            let deadline = Instant::now() + Duration::from_millis(self.max_header_delay);
+                            timer.as_mut().reset(deadline);
+                        }
                     }
                 }
                 () = &mut timer => {
