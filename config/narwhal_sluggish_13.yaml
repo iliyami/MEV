@@ -1,0 +1,39 @@
+experiment:
+  name: "narwhal_tusk_sluggish_check"
+  description: "Paper-aligned 13-node sluggish attack sanity check"
+
+protocol:
+  name: "narwhal"
+  path: "narwhal-tusk"
+
+docker:
+  tag: "mev-narwhal:latest"
+  cpus: "32.0"
+  memory: "100g"
+
+test:
+  test_name: "test_sluggish_attack_asr_dynamic"
+  REPETITIONS: 1
+
+environment:
+  NUM_NODES: "13"
+  ATTACK_MODE: "sluggish"
+  ATTACKER_RATIO: "0.5"
+  VICTIM_RATIO: "0.22"
+  VICTIM_COUNT: "1"
+  NUM_WORKERS: "1"
+  SLUGGISH_TIMEOUT_MULTIPLIER: "2.0"
+  MIN_ALL_PAIR_SAMPLES: "3"
+  LATENCY_JITTER: "15ms"
+  DURATION: "35"
+  RATE: "50000"
+  TX_SIZE: "512"
+  GC_DEPTH: "50"
+  SYNC_TIMEOUT_MS: "10000"
+  DAG_STATE_CACHED_ROUNDS: "5"
+  ASR_LOGGING_FREQUENCY: "1"
+  ASR_REPORT_THRESHOLD: "1"
+
+output:
+  expected_asr: 82.4
+  tolerance_percent: 100.0
