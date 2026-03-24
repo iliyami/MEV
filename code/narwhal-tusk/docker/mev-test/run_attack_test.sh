@@ -51,6 +51,7 @@ cd /app
 
 # Ensure we have a results directory
 mkdir -p /app/results
+rm -f /app/results/test_output.log /app/results/asr_result.txt
 
 # Run the automated attack script based on attack mode
 case "${ATTACK_MODE}" in

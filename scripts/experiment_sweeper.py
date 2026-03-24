@@ -406,6 +406,13 @@ def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_p
             config['environment']['SPECULATIVE_P_MAX_LIMIT'] = "100"
         config['environment']['ASR_LOGGING_FREQUENCY'] = "1"
         config['environment']['ASR_REPORT_THRESHOLD'] = "1"
+    elif config['protocol']['name'] == 'narwhal' and attack_mode == 'sluggish':
+        if 'NUM_WORKERS' not in config_override:
+            config['environment']['NUM_WORKERS'] = "2" if num_nodes >= 100 else "8"
+        if 'VICTIM_COUNT' not in config_override:
+            config['environment']['VICTIM_COUNT'] = "1"
+        config['environment']['ASR_LOGGING_FREQUENCY'] = "1"
+        config['environment']['ASR_REPORT_THRESHOLD'] = "1"
 
     # Ensure LATENCY_MS/JITTER_MS are explicitly passed if available in override
     # This prevents reliance on deprecated LATENCY_JITTER string parsing

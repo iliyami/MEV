@@ -584,7 +584,10 @@ impl Proposer {
                         let lag = (self.honest_round as i64) - (self.round as i64);
                         if lag < 1 { // If we are not yet 1 round behind, delay to achieve it
                             info!("SLUGGISH ATTACK: Delaying proposal to lag round (Current: {}, Honest: {})", self.round, self.honest_round);
-                            let delay = (self.max_header_delay as f64 * self.sluggish_timeout_multiplier) as u64;
+                            // `max_header_delay` is already attacker-adjusted at spawn time.
+                            // Multiplying again here makes sluggish attackers much slower than
+                            // intended and turns a one-round lag into an arbitrary stall.
+                            let delay = self.max_header_delay;
                             sleep(Duration::from_millis(delay)).await;
                             info!("Sluggish Proposal Event: Node {} stayed in round {} (Honest was {})", self.name, self.round, self.honest_round);
                         } else {
