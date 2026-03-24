@@ -49,3 +49,5 @@ build/
 code/*/.git/
 
 *.csv.backup
+paper.txt
+paper.pdf
