@@ -11,6 +11,7 @@ Usage:
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -49,6 +50,60 @@ yaml = _get_working_yaml()
 BASE_DIR = Path(__file__).parent.parent
 CODE_DIR = BASE_DIR / "code"
 RESULTS_DIR = BASE_DIR / "results"
+
+
+def get_docker_resource_limits() -> tuple[float | None, int | None]:
+    """Best-effort discovery of Docker daemon CPU/memory limits."""
+    try:
+        result = subprocess.run(
+            ["docker", "info", "--format", "{{.NCPU}} {{.MemTotal}}"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return None, None
+
+    if result.returncode != 0:
+        return None, None
+
+    parts = result.stdout.strip().split()
+    if len(parts) != 2:
+        return None, None
+
+    try:
+        cpus = float(parts[0])
+    except ValueError:
+        cpus = None
+
+    try:
+        memory_bytes = int(parts[1])
+    except ValueError:
+        memory_bytes = None
+
+    return cpus, memory_bytes
+
+
+def parse_memory_limit(value: str) -> int | None:
+    match = re.fullmatch(r"\s*([0-9]+(?:\.[0-9]+)?)\s*([bkmgBKMG]?)\s*", value)
+    if not match:
+        return None
+
+    amount = float(match.group(1))
+    unit = match.group(2).lower()
+    multiplier = {
+        "": 1,
+        "b": 1,
+        "k": 1024,
+        "m": 1024 ** 2,
+        "g": 1024 ** 3,
+    }[unit]
+    return int(amount * multiplier)
+
+
+def format_memory_limit(memory_bytes: int) -> str:
+    mebibytes = max(1, memory_bytes // (1024 ** 2))
+    return f"{mebibytes}m"
 
 
 def load_config(config_path: str) -> dict:
@@ -105,6 +160,8 @@ def run_attack_test(config: dict) -> dict:
     print(f"\nRunning attack test: {test_name}")
     print(f"  Image: {tag}")
     print(f"  Attack Mode: {env_vars.get('ATTACK_MODE', 'unknown')}")
+
+    available_cpus, available_memory = get_docker_resource_limits()
     
     # Delete stale result file if it exists
     asr_file = results_mount / "asr_result.txt"
@@ -141,6 +198,7 @@ def run_attack_test(config: dict) -> dict:
             ("automated_fissure_attack.sh", "/app/automated_fissure_attack.sh"),
             ("automated_speculative_attack.sh", "/app/automated_speculative_attack.sh"),
             ("automated_sluggish_attack.sh", "/app/automated_sluggish_attack.sh"),
+            ("automated_baseline.sh", "/app/automated_baseline.sh"),
             ("benchmark/benchmark/local.py", "/app/benchmark/benchmark/local.py"),
             ("scripts/legacy_automation/automated_fissure_attack.sh", "/app/scripts/legacy_automation/automated_fissure_attack.sh"),
             ("scripts/legacy_automation/automated_speculative_attack.sh", "/app/scripts/legacy_automation/automated_speculative_attack.sh"),
@@ -164,9 +222,29 @@ def run_attack_test(config: dict) -> dict:
     
     # Add resource limits
     if 'cpus' in config['docker']:
-        cmd.extend(["--cpus", config['docker']['cpus']])
+        requested_cpus = float(config['docker']['cpus'])
+        effective_cpus = requested_cpus
+        if available_cpus is not None and requested_cpus > available_cpus:
+            effective_cpus = available_cpus
+            print(f"  Capping CPUs from {requested_cpus:g} to {effective_cpus:g} (Docker limit)")
+        cmd.extend(["--cpus", f"{effective_cpus:g}"])
     if 'memory' in config['docker']:
-        cmd.extend(["--memory", config['docker']['memory']])
+        requested_memory = parse_memory_limit(str(config['docker']['memory']))
+        effective_memory = requested_memory
+        if (
+            requested_memory is not None
+            and available_memory is not None
+            and requested_memory > available_memory
+        ):
+            effective_memory = available_memory
+            print(
+                f"  Capping memory from {config['docker']['memory']} to {format_memory_limit(effective_memory)} (Docker limit)"
+            )
+
+        if effective_memory is not None:
+            cmd.extend(["--memory", format_memory_limit(effective_memory)])
+        else:
+            cmd.extend(["--memory", str(config['docker']['memory'])])
     
     cmd.append(tag)
     

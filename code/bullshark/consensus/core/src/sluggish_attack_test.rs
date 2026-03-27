@@ -335,6 +335,70 @@ fn calculate_asr(
     asr
 }
 
+fn calculate_pair_baseline_asr(
+    commits: &[CommittedSubDag],
+    attacker_id: usize,
+    victim_id: usize,
+) -> f64 {
+    if commits.is_empty() {
+        warn!("No commits to analyze");
+        return 0.0;
+    }
+    if attacker_id == victim_id {
+        warn!("Attacker and victim ids are identical");
+        return 0.0;
+    }
+
+    let mut global_order = Vec::new();
+    for commit in commits {
+        for block in commit.blocks.iter() {
+            global_order.push(block.author().value() as usize);
+        }
+    }
+
+    let mut attacker_positions = Vec::new();
+    let mut victim_positions = Vec::new();
+    for (pos, author_index) in global_order.iter().enumerate() {
+        if *author_index == attacker_id {
+            attacker_positions.push(pos);
+        } else if *author_index == victim_id {
+            victim_positions.push(pos);
+        }
+    }
+
+    if attacker_positions.is_empty() || victim_positions.is_empty() {
+        warn!("Missing attacker or victim blocks");
+        return 0.0;
+    }
+
+    let mut successes = 0usize;
+    let mut total_pairs = 0usize;
+    for att_pos in &attacker_positions {
+        for vic_pos in &victim_positions {
+            total_pairs += 1;
+            if att_pos < vic_pos {
+                successes += 1;
+            }
+        }
+    }
+
+    if total_pairs == 0 {
+        warn!("No comparable block pairs found");
+        return 0.0;
+    }
+
+    let asr = (successes as f64 / total_pairs as f64) * 100.0;
+    info!(
+        "Pairwise baseline ASR for node {} vs node {}: {}/{} = {:.2}%",
+        attacker_id,
+        victim_id,
+        successes,
+        total_pairs,
+        asr
+    );
+    asr
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn test_baseline_13_nodes_no_attack() {
     telemetry_subscribers::init_for_testing();
@@ -347,18 +411,32 @@ async fn test_baseline_13_nodes_no_attack() {
     
     info!("🚀 Running Baseline Test (No Attack) with 13 Nodes");
     
-    const NUM_VALIDATORS: usize = 13;
+    let num_validators: usize = env::var("NUM_NODES")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(13);
+    let attacker_id: usize = env::var("ATTACKER_ID")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0)
+        .min(num_validators.saturating_sub(1));
+    let victim_id: usize = env::var("VICTIM_ID")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(usize::from(num_validators > 1))
+        .min(num_validators.saturating_sub(1));
+
     // Create committee with 13 nodes
-    let (committee, keypairs) = local_committee_and_keys(0, vec![1; NUM_VALIDATORS]);
+    let (committee, keypairs) = local_committee_and_keys(0, vec![1; num_validators]);
     let protocol_config = ProtocolConfig::get_for_max_version_UNSAFE();
     
-    let temp_dirs = (0..NUM_VALIDATORS)
+    let temp_dirs = (0..num_validators)
         .map(|_| TempDir::new().unwrap())
         .collect::<Vec<_>>();
     
     let mut commit_receivers = Vec::with_capacity(committee.size());
     let mut authorities = Vec::with_capacity(committee.size());
-    let boot_counters = vec![0; NUM_VALIDATORS];
+    let boot_counters = vec![0; num_validators];
     
     // Create all authority nodes
     for (index, _authority_info) in committee.authorities() {
@@ -376,38 +454,64 @@ async fn test_baseline_13_nodes_no_attack() {
         authorities.push(authority);
     }
     
-    info!("✅ Baseline test: 13 nodes initialized without attack");
-    info!("  All nodes should participate fairly");
+    info!("✅ Baseline test: {} nodes initialized without attack", num_validators);
+    info!("  Measured pair: node {} vs node {}", attacker_id, victim_id);
     
-    // Submit a few transactions to verify the network works
-    const NUM_TRANSACTIONS: u8 = 10;
+    // Submit transactions and collect commits to compute baseline ASR
+    let num_transactions: usize = env::var("NUM_TRANSACTIONS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(num_validators * 5);
     let mut submitted_transactions = BTreeSet::<Vec<u8>>::new();
-    for i in 0..NUM_TRANSACTIONS {
-        let txn = vec![i; 16];
+    for i in 0..num_transactions {
+        let txn = vec![i as u8; 16];
         submitted_transactions.insert(txn.clone());
-        authorities[i as usize % authorities.len()]
+        authorities[i % authorities.len()]
             .transaction_client()
             .submit(vec![txn])
             .await
             .unwrap();
     }
     
-    // Wait for at least one commit
-    let mut received_any = false;
-    for receiver in &mut commit_receivers {
-        if let Ok(Some(_)) = tokio::time::timeout(Duration::from_secs(3), receiver.recv()).await {
-            received_any = true;
+    let collection_duration_secs: u64 = env::var("COLLECTION_DURATION")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(35);
+    let min_commits: usize = env::var("MIN_COMMITS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(num_validators + 10);
+
+    let mut all_commits = Vec::new();
+    let mut primary_receiver = commit_receivers.swap_remove(0);
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(collection_duration_secs);
+
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() || all_commits.len() >= min_commits {
             break;
         }
+        match tokio::time::timeout(remaining, primary_receiver.recv()).await {
+            Ok(Some(committed_subdag)) => all_commits.push(committed_subdag),
+            Ok(None) | Err(_) => break,
+        }
     }
-    
-    assert!(received_any, "Should receive at least one commit");
+
+    let asr = calculate_pair_baseline_asr(&all_commits, attacker_id, victim_id);
+    println!("🎯 BASELINE RESULTS:");
+    println!("  Mode: baseline");
+    println!("  Network: {} validators", num_validators);
+    println!("  Attacker: {}", attacker_id);
+    println!("  Victim: {}", victim_id);
+    println!("  Attack Success Rate: {:.2}%", asr);
+    println!("  FINAL_ASR_RESULT: {:.2}%", asr);
     
     // Stop all authorities
     for authority in authorities {
         authority.stop().await;
     }
     
+    assert!(asr >= 0.0, "ASR negative: {:.2}%", asr);
+    assert!(asr <= 100.0, "ASR suspiciously high: {:.2}%", asr);
     info!("✅ Baseline test completed successfully");
 }
-

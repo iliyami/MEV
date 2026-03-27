@@ -55,6 +55,64 @@ impl UnitFinalizationHandler for OrderedUnitCollector {
     }
 }
 
+fn calculate_pair_baseline_asr(
+    finalized_units: &[OrderedUnit<Data, Hasher64>],
+    attacker_id: usize,
+    victim_id: usize,
+) -> f64 {
+    if finalized_units.is_empty() {
+        log::warn!("No finalized units to calculate ASR");
+        return 0.0;
+    }
+    if attacker_id == victim_id {
+        log::warn!("Attacker and victim ids are identical");
+        return 0.0;
+    }
+
+    let mut attacker_positions = Vec::new();
+    let mut victim_positions = Vec::new();
+    for (height, unit) in finalized_units.iter().enumerate() {
+        let creator = unit.creator.0;
+        if creator == attacker_id {
+            attacker_positions.push(height);
+        } else if creator == victim_id {
+            victim_positions.push(height);
+        }
+    }
+
+    if attacker_positions.is_empty() || victim_positions.is_empty() {
+        log::warn!("Missing attacker or victim blocks");
+        return 0.0;
+    }
+
+    let mut successes = 0usize;
+    let mut total_pairs = 0usize;
+    for att_pos in &attacker_positions {
+        for vic_pos in &victim_positions {
+            total_pairs += 1;
+            if att_pos < vic_pos {
+                successes += 1;
+            }
+        }
+    }
+
+    if total_pairs == 0 {
+        log::warn!("No comparable block pairs found");
+        return 0.0;
+    }
+
+    let asr = (successes as f64 / total_pairs as f64) * 100.0;
+    log::info!(
+        "📊 Pairwise baseline ASR (node {} vs node {}): {}/{} = {:.2}%",
+        attacker_id,
+        victim_id,
+        successes,
+        total_pairs,
+        asr
+    );
+    asr / 100.0
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fissure_attack_asr_13_nodes() {
     init_log();
@@ -172,16 +230,30 @@ async fn test_baseline_asr_13_nodes_no_attack() {
     
     // Clear attack environment variables to ensure no attack
     env::remove_var("ATTACK_MODE");
-    env::remove_var("ATTACKER_RATIO");
-    env::remove_var("VICTIM_RATIO");
     
     // Read configuration from environment variables
-    let (num_nodes, num_attackers, num_victims, num_honest, duration_seconds) = get_config();
+    let num_nodes: usize = env::var("NETWORK_SIZE")
+        .unwrap_or_else(|_| "13".to_string())
+        .parse()
+        .unwrap_or(13);
+    let duration_seconds: u64 = env::var("TEST_DURATION_SECONDS")
+        .unwrap_or_else(|_| "35".to_string())
+        .parse()
+        .unwrap_or(35);
+    let attacker_id: usize = env::var("ATTACKER_ID")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0)
+        .min(num_nodes.saturating_sub(1));
+    let victim_id: usize = env::var("VICTIM_ID")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(usize::from(num_nodes > 1))
+        .min(num_nodes.saturating_sub(1));
     
     log::info!("🚀 Starting Baseline Test (No Attack)");
     log::info!("  Network Size: {} nodes", num_nodes);
-    log::info!("  Attackers: {} nodes (indices 0-{})", num_attackers, num_attackers - 1);
-    log::info!("  Victims: {} nodes (indices {}-{})", num_victims, num_nodes - num_victims, num_nodes - 1);
+    log::info!("  Measured pair: node {} vs node {}", attacker_id, victim_id);
     log::info!("  Expected Baseline ASR: ~50% (random ordering in fair system)");
     log::info!("  Test Duration: {} seconds", duration_seconds);
 
@@ -262,9 +334,10 @@ async fn test_baseline_asr_13_nodes_no_attack() {
     }
     log::info!("📊 Units by creator: {:?}", units_by_creator);
     
-    let asr = calculate_asr_paper_aligned(&finalized_units_guard, num_nodes, num_attackers, num_victims);
+    let asr = calculate_pair_baseline_asr(&finalized_units_guard, attacker_id, victim_id);
     let asr_percent = asr * 100.0;
     log::info!("📊 Baseline Attack Success Rate (ASR): {:.2}%", asr_percent);
+    log::info!("📊 FINAL_ASR_RESULT: {:.2}%", asr_percent);
     log::info!("📊 Expected: ~50% (random ordering in fair system)");
     
     drop(finalized_units_guard);
@@ -291,4 +364,3 @@ async fn test_baseline_asr_13_nodes_no_attack() {
     
     assert!(asr >= 0.0 && asr <= 1.0, "ASR should be between 0 and 1");
 }
-

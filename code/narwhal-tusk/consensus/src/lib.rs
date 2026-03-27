@@ -89,11 +89,19 @@ pub struct Consensus {
 }
 
 impl Consensus {
+    fn resolve_ratio_count(committee_size: usize, ratio: f64) -> usize {
+        if ratio <= 0.0 {
+            0
+        } else {
+            ((committee_size as f64) * ratio).round() as usize
+        }
+    }
+
     fn resolve_victim_count(committee_size: usize, attacker_count: usize, victim_ratio: f64) -> usize {
         std::env::var("VICTIM_COUNT")
             .ok()
             .and_then(|value| value.parse::<usize>().ok())
-            .unwrap_or_else(|| (committee_size as f64 * victim_ratio) as usize)
+            .unwrap_or_else(|| Self::resolve_ratio_count(committee_size, victim_ratio))
             .min(committee_size.saturating_sub(attacker_count))
     }
 
@@ -107,8 +115,9 @@ impl Consensus {
         // FISSURE ATTACK: Initialize attack configuration
         let attack_mode = std::env::var("ATTACK_MODE").unwrap_or_default();
         let attack_active = attack_mode == "fissure" || attack_mode == "speculative" || attack_mode == "sluggish";
-        
-        let (attacker_nodes, victim_nodes) = if attack_active {
+        let measure_active = attack_active || attack_mode == "baseline";
+
+        let (attacker_nodes, victim_nodes) = if measure_active {
             let attacker_ratio: f64 = std::env::var("ATTACKER_RATIO")
                 .unwrap_or_else(|_| "0.308".to_string())
                 .parse()
@@ -119,7 +128,7 @@ impl Consensus {
                 .unwrap_or(0.231);
             
             let committee_size = committee.size();
-            let attacker_count = (committee_size as f64 * attacker_ratio) as usize;
+            let attacker_count = Self::resolve_ratio_count(committee_size, attacker_ratio);
             let victim_count = Self::resolve_victim_count(committee_size, attacker_count, victim_ratio);
             
             let mut authority_keys: Vec<PublicKey> = committee.authorities.keys().cloned().collect();
@@ -410,7 +419,11 @@ impl Consensus {
     fn track_asr(&self, ordered: &[Certificate]) {
         // Check if attack tracking is enabled
         let attack_mode = std::env::var("ATTACK_MODE").unwrap_or_default();
-        if attack_mode != "speculative" && attack_mode != "fissure" && attack_mode != "sluggish" {
+        if attack_mode != "speculative"
+            && attack_mode != "fissure"
+            && attack_mode != "sluggish"
+            && attack_mode != "baseline"
+        {
             return;
         }
         
@@ -436,7 +449,7 @@ impl Consensus {
             .unwrap_or(0.22);
         
         let committee_size = self.committee.size();
-        let attacker_count = (committee_size as f64 * attacker_ratio) as usize;
+        let attacker_count = Self::resolve_ratio_count(committee_size, attacker_ratio);
         let victim_count = Self::resolve_victim_count(committee_size, attacker_count, victim_ratio);
         
         info!("ASR TRACKING: Committee size: {}, Attacker count: {}, Victim count: {}", 
@@ -533,7 +546,11 @@ impl Consensus {
     fn calculate_global_asr(&self) {
         // Check if attack tracking is enabled
         let attack_mode = std::env::var("ATTACK_MODE").unwrap_or_default();
-        if attack_mode != "speculative" && attack_mode != "fissure" && attack_mode != "sluggish" {
+        if attack_mode != "speculative"
+            && attack_mode != "fissure"
+            && attack_mode != "sluggish"
+            && attack_mode != "baseline"
+        {
             return;
         }
         
@@ -551,7 +568,7 @@ impl Consensus {
             .unwrap_or(0.22);
             
         let committee_size = self.committee.size();
-        let attacker_count = (committee_size as f64 * attacker_ratio) as usize;
+        let attacker_count = Self::resolve_ratio_count(committee_size, attacker_ratio);
         let victim_count = Self::resolve_victim_count(committee_size, attacker_count, victim_ratio);
         
         let attacker_nodes: HashSet<PublicKey> = authority_keys
@@ -596,7 +613,17 @@ impl Consensus {
         for (att_height, att_round) in &attacker_blocks {
             for (vic_height, vic_round) in &victim_blocks {
                 let diff = (*vic_round as i64 - *att_round as i64);
-                
+
+                if self.attack_mode == "baseline" {
+                    // Pure baseline: measure the natural ordering between one labeled
+                    // attacker node and one labeled victim node without any round filter.
+                    total_a += 1;
+                    if *att_height < *vic_height {
+                        successes_a += 1;
+                    }
+                    continue;
+                }
+
                 // Same-round ASR (ASR-B)
                 if diff == 0 {
                     total_b += 1;

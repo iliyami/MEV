@@ -97,7 +97,7 @@ for i in $(seq 0 $(($NUM_NODES - 1))); do
     CMD="$NODE_BIN -vv run --keys .node-$i.json --committee .committee.json --store .db-primary-$i --parameters .parameters.json primary"
     
     # Add attack environment variables if node is attacker
-    if [ "$i" -eq "$ATTACKER_ID" ]; then
+    if [ "$ATTACK_MODE" != "baseline" ] && [ "$i" -eq "$ATTACKER_ID" ]; then
         echo "🔧 Starting attacker node $i"
         ATTACK_MODE=$ATTACK_MODE \
         ATTACKER_ID=$ATTACKER_ID \

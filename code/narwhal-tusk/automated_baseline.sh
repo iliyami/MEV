@@ -1,0 +1,178 @@
+#!/bin/bash
+
+echo "📊 Automated Baseline Measurement for Narwhal-Tusk"
+echo "================================================="
+echo "This script will:"
+echo "  1. Build or reuse the node binary"
+echo "  2. Run the network with attacker/victim labels but no attack logic"
+echo "  3. Compute the measured baseline ASR"
+echo ""
+
+NARWHAL_TUSK_DIR=$(pwd)
+BENCHMARK_DIR="$NARWHAL_TUSK_DIR/benchmark"
+LOG_DIR="$BENCHMARK_DIR/logs"
+ATTACK_OUTPUT_LOG="$NARWHAL_TUSK_DIR/baseline_output.log"
+
+export NUM_NODES=${1:-${NUM_NODES:-13}}
+export ATTACKER_RATIO=${2:-${ATTACKER_RATIO:-0.33}}
+export VICTIM_RATIO=${3:-${VICTIM_RATIO:-0.22}}
+export DURATION=${4:-${DURATION:-35}}
+export TEST_DURATION=$DURATION
+export ATTACK_MODE=${ATTACK_MODE:-baseline}
+export VICTIM_COUNT=${VICTIM_COUNT:-1}
+export ASR_LOGGING_FREQUENCY=${ASR_LOGGING_FREQUENCY:-1}
+export ASR_REPORT_THRESHOLD=${ASR_REPORT_THRESHOLD:-1}
+export RUST_LOG=${ATTACK_RUST_LOG:-info}
+if [ -z "${MIN_BASELINE_SAMPLES:-}" ]; then
+    export MIN_BASELINE_SAMPLES=3
+fi
+
+if [ "$PWD" == "/app" ]; then
+    echo "⚠️ Running in /app, continuing..."
+elif [ ! -d "$NARWHAL_TUSK_DIR" ]; then
+    echo "❌ Error: Directory $NARWHAL_TUSK_DIR not found."
+    exit 1
+fi
+
+if [ -f "target/release/node" ] || [ -f "node" ]; then
+    echo "🔨 Step 1: Skipping build (binary already exists)"
+    if [ ! -f "target/release/node" ] && [ -f "node" ]; then
+        mkdir -p target/release
+        cp node target/release/node
+    fi
+else
+    echo "🔨 Step 1: Building project..."
+    cargo build --release
+    echo "  ✅ Build successful"
+fi
+echo ""
+
+echo "⚙️  Step 2: Configuring baseline parameters..."
+echo "  Attack Mode: $ATTACK_MODE"
+echo "  Attacker Ratio: $ATTACKER_RATIO"
+echo "  Victim Ratio: $VICTIM_RATIO"
+echo "  Victim Count: $VICTIM_COUNT"
+echo "  Network Size: $NUM_NODES nodes"
+echo "  Duration: $DURATION seconds"
+echo "  Minimum Samples: $MIN_BASELINE_SAMPLES"
+echo ""
+
+echo "🧹 Step 3: Cleaning previous results..."
+rm -rf "$LOG_DIR"/* "$ATTACK_OUTPUT_LOG" /app/results/logs/* > /dev/null 2>&1 || true
+mkdir -p "$LOG_DIR" /app/results/logs
+echo "  ✅ Previous logs cleaned"
+echo ""
+
+echo "🚀 Step 4: Running baseline network..."
+cd "$BENCHMARK_DIR"
+if [ -d "../venv" ]; then
+    source ../venv/bin/activate
+else
+    echo "⚠️  No venv found, using system python/fab"
+fi
+
+PROCESS_COUNT=$((NUM_NODES * 3))
+STARTUP_BUFFER=$((45 + NUM_NODES))
+FAB_TIMEOUT=$((TEST_DURATION + STARTUP_BUFFER + PROCESS_COUNT))
+echo "  Fabric timeout budget: ${FAB_TIMEOUT}s"
+timeout --signal=INT --kill-after=30s "${FAB_TIMEOUT}" stdbuf -oL -eL fab local > "$ATTACK_OUTPUT_LOG" 2>&1 &
+FAB_PID=$!
+
+FAB_EXIT=0
+wait $FAB_PID || FAB_EXIT=$?
+
+if [ "$FAB_EXIT" -eq 124 ]; then
+    echo "  ❌ Baseline run timed out after ${FAB_TIMEOUT}s"
+    tail -n 30 "$ATTACK_OUTPUT_LOG" || true
+elif [ "$FAB_EXIT" -ne 0 ]; then
+    echo "  ❌ Baseline run exited with status $FAB_EXIT"
+    tail -n 30 "$ATTACK_OUTPUT_LOG" || true
+else
+    echo "  ✅ Baseline run completed successfully"
+fi
+echo ""
+
+echo "📊 Step 5: Analyzing baseline results..."
+cp "$ATTACK_OUTPUT_LOG" /app/results/baseline_output.log 2>/dev/null || true
+
+ASR_PARSE=$(
+    python3 - "$LOG_DIR" <<'PY'
+import glob
+import os
+import re
+import statistics
+import sys
+
+log_dir = sys.argv[1]
+pattern = re.compile(
+    r'ASR REPORT \((?P<mode>[^)]+)\): '
+    r'ASR-A \(All-Pairs\): (?P<asr_a>[0-9.]+)% \((?P<succ_a>\d+)/(?P<total_a>\d+)\) \| '
+    r'ASR-B \(Same-Round\): (?P<asr_b>[0-9.]+)% \((?P<succ_b>\d+)/(?P<total_b>\d+)\) \| '
+    r'Blocks: (?P<blocks>\d+)'
+)
+
+reports = []
+for path in glob.glob(os.path.join(log_dir, "primary-*.log")):
+    latest = None
+    with open(path, "r", errors="ignore") as f:
+        for line in f:
+            m = pattern.search(line)
+            if m and m.group("mode") == "baseline":
+                latest = {
+                    "path": os.path.basename(path),
+                    "asr_a": float(m.group("asr_a")),
+                    "asr_b": float(m.group("asr_b")),
+                    "total_a": int(m.group("total_a")),
+                    "total_b": int(m.group("total_b")),
+                    "blocks": int(m.group("blocks")),
+                }
+    if latest:
+        reports.append(latest)
+
+if not reports:
+    print("0.0\t0\tN/A\t0.0")
+    raise SystemExit(0)
+
+max_blocks = max(r["blocks"] for r in reports)
+top = [r for r in reports if r["blocks"] == max_blocks]
+max_total_a = max(r["total_a"] for r in top)
+top = [r for r in top if r["total_a"] == max_total_a]
+median_a = statistics.median(r["asr_a"] for r in top)
+chosen = min(top, key=lambda r: (abs(r["asr_a"] - median_a), r["path"]))
+spread_a = max(r["asr_a"] for r in reports) - min(r["asr_a"] for r in reports)
+
+print(f'{chosen["asr_a"]:.2f}\t{chosen["total_a"]}\t{chosen["path"]}\t{spread_a:.2f}')
+PY
+)
+
+IFS=$'\t' read -r LATEST_ASR_A TOTAL_SAMPLES_A CHOSEN_LOG ASR_SPREAD <<< "$ASR_PARSE"
+LATEST_ASR_A=${LATEST_ASR_A:-0.0}
+TOTAL_SAMPLES_A=${TOTAL_SAMPLES_A:-0}
+CHOSEN_LOG=${CHOSEN_LOG:-N/A}
+ASR_SPREAD=${ASR_SPREAD:-0.0}
+
+FINAL_REPORTED_ASR="$LATEST_ASR_A"
+RESULT_STATUS="VALID"
+if [ "$TOTAL_SAMPLES_A" -lt "$MIN_BASELINE_SAMPLES" ]; then
+    FINAL_REPORTED_ASR="N/A"
+    RESULT_STATUS="INSUFFICIENT_SAMPLES"
+fi
+
+echo "📈 BASELINE ASR CALCULATION:"
+echo "============================"
+echo "  Raw All-Pairs ASR (ASR-A): $LATEST_ASR_A%"
+echo "  Samples: $TOTAL_SAMPLES_A"
+echo "  Sample Threshold: $MIN_BASELINE_SAMPLES"
+echo "  Result Status: $RESULT_STATUS"
+echo "  Chosen Primary Log: $CHOSEN_LOG"
+echo "  Cross-Primary ASR Spread: $ASR_SPREAD points"
+echo ""
+
+if [ "$FINAL_REPORTED_ASR" = "N/A" ]; then
+    echo "FINAL_ASR_RESULT: N/A"
+else
+    echo "FINAL_ASR_RESULT: $FINAL_REPORTED_ASR%"
+fi
+
+mkdir -p /app/results/logs
+cp "$LOG_DIR"/primary-*.log /app/results/logs/ 2>/dev/null || true

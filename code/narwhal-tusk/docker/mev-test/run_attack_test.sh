@@ -88,6 +88,9 @@ case "${ATTACK_MODE}" in
     "sluggish")
         ./automated_sluggish_attack.sh 2>&1 | tee /app/results/test_output.log
         ;;
+    "baseline")
+        ./automated_baseline.sh 2>&1 | tee /app/results/test_output.log
+        ;;
     *)
         echo "Unknown attack mode: $ATTACK_MODE"
         exit 1

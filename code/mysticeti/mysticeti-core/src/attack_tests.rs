@@ -192,6 +192,78 @@ use tracing::{info, warn};
         asr
     }
 
+    fn get_pair_ids(n: usize) -> (usize, usize) {
+        let attacker_id = env::var("ATTACKER_ID")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
+        let victim_id = env::var("VICTIM_ID")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(usize::from(n > 1));
+        (
+            attacker_id.min(n.saturating_sub(1)),
+            victim_id.min(n.saturating_sub(1)),
+        )
+    }
+
+    fn calculate_pair_baseline_asr(commits: &[CommittedSubDag], attacker_id: usize, victim_id: usize) -> f64 {
+        if commits.is_empty() {
+            warn!("No commits to analyze");
+            return 0.0;
+        }
+        if attacker_id == victim_id {
+            warn!("Attacker and victim ids are identical");
+            return 0.0;
+        }
+
+        let mut global_order = Vec::new();
+        for commit in commits {
+            for block in commit.blocks.iter() {
+                global_order.push(block.author() as usize);
+            }
+        }
+
+        let mut attacker_positions = Vec::new();
+        let mut victim_positions = Vec::new();
+        for (pos, author_index) in global_order.iter().enumerate() {
+            if *author_index == attacker_id {
+                attacker_positions.push(pos);
+            } else if *author_index == victim_id {
+                victim_positions.push(pos);
+            }
+        }
+
+        if attacker_positions.is_empty() || victim_positions.is_empty() {
+            warn!("Missing attacker or victim blocks");
+            return 0.0;
+        }
+
+        let mut successes = 0usize;
+        let mut total_pairs = 0usize;
+        for att_pos in &attacker_positions {
+            for vic_pos in &victim_positions {
+                total_pairs += 1;
+                if att_pos < vic_pos {
+                    successes += 1;
+                }
+            }
+        }
+
+        if total_pairs == 0 {
+            warn!("No comparable block pairs found");
+            return 0.0;
+        }
+
+        let asr = (successes as f64 / total_pairs as f64) * 100.0;
+        info!("📊 Pairwise baseline ASR Analysis:");
+        info!("  Measured pair: node {} vs node {}", attacker_id, victim_id);
+        info!("  Total pairs: {}", total_pairs);
+        info!("  Successful ordered pairs: {} ({:.2}%)", successes, asr);
+        info!("FINAL_ASR_RESULT: {:.2}%", asr);
+        asr
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_fissure_attack_asr_13_nodes() {
         let _ = tracing_subscriber::fmt::try_init();
@@ -471,13 +543,24 @@ use tracing::{info, warn};
     async fn test_baseline_asr_13_nodes() {
         let _ = tracing_subscriber::fmt::try_init();
 
-        let (n, num_attacker, num_victim) = get_counts();
-        let _num_honest = n.saturating_sub(num_attacker).saturating_sub(num_victim);
+        env::remove_var("ATTACK_MODE");
+        env::remove_var("EXCLUSION_PROBABILITY");
+        env::remove_var("VICTIM_DELAY_MS");
+        env::remove_var("SPECULATIVE_P_MAX");
+        env::remove_var("SLUGGISH_TIMEOUT_MULTIPLIER");
+        env::remove_var("AUTOBAHN_K");
+        env::remove_var("HYBRID_EXCLUSION");
+        env::remove_var("SIMPLE_EXCLUSION_PROB");
+
+        let n = env::var("NUM_NODES")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(DEFAULT_NUM_VALIDATORS);
+        let (attacker_id, victim_id) = get_pair_ids(n);
 
         info!("🔬 Starting Baseline ASR Test (No Attack) with {} Nodes", n);
         info!("  Nodes: {} total", n);
-        info!("  Attackers: {} nodes", num_attacker);
-        info!("  Victims: {} nodes", num_victim);
+        info!("  Measured pair: node {} vs node {}", attacker_id, victim_id);
 
         // Create network syncers with commit channel
         let (network_syncers, mut commit_receiver) = create_network_syncers_with_commits(n, 10000).await;
@@ -513,13 +596,14 @@ use tracing::{info, warn};
 
         // Calculate baseline ASR
         info!("📊 Calculating Baseline Attack Success Rate (ASR)...");
-        let asr = calculate_asr(&all_commits, n, num_attacker, num_victim);
+        let asr = calculate_pair_baseline_asr(&all_commits, attacker_id, victim_id);
 
         info!("🎯 BASELINE ASR RESULTS (No Attack):");
         info!("  Network: {} validators", n);
-        info!("  Attackers (measured): {}", num_attacker);
+        info!("  Attacker (measured): {}", attacker_id);
+        info!("  Victim (measured): {}", victim_id);
         info!("  ASR (Block-Pair Ordering): {:.1}%", asr);
-        info!("  Theoretical ASR (Attacker Ratio): {:.1}%", (num_attacker as f64 / n as f64) * 100.0);
+        info!("  FINAL_ASR_RESULT: {:.2}%", asr);
 
         // Shutdown network syncers
         for network_syncer in network_syncers {
@@ -527,7 +611,7 @@ use tracing::{info, warn};
         }
 
         // Validation
-        let expected_asr = (num_attacker as f64 / n as f64) * 100.0;
+        let expected_asr = 50.0;
         info!("✅ Baseline validation: ASR ({:.1}%) should be ≈ {:.1}%", asr, expected_asr);
         
         if asr > expected_asr + 20.0 || asr < expected_asr - 20.0 {

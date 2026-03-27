@@ -242,6 +242,128 @@ async fn test_fissure_attack_asr_dynamic() {
     info!("✅ Test completed successfully!");
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_baseline_asr_dynamic() {
+    telemetry_subscribers::init_for_testing();
+
+    let num_validators: usize = env::var("NUM_NODES")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(16);
+    let attacker_id: usize = env::var("ATTACKER_ID")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0)
+        .min(num_validators.saturating_sub(1));
+    let victim_id: usize = env::var("VICTIM_ID")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(usize::from(num_validators > 1))
+        .min(num_validators.saturating_sub(1));
+
+    env::remove_var("ATTACK_MODE");
+
+    info!("🚀 Starting Baseline Test with {} Nodes", num_validators);
+    info!("  Measured pair: node {} vs node {}", attacker_id, victim_id);
+
+    let (committee, keypairs) = local_committee_and_keys(0, vec![1; num_validators]);
+    let mut protocol_config = ProtocolConfig::get_for_max_version_UNSAFE();
+
+    let gc_depth: u64 = env::var("GC_DEPTH")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(10);
+    protocol_config.set_consensus_gc_depth_for_testing(gc_depth as u32);
+
+    let temp_dirs = (0..num_validators)
+        .map(|_| TempDir::new().unwrap())
+        .collect::<Vec<_>>();
+
+    let mut commit_receivers = Vec::with_capacity(committee.size());
+    let mut authorities = Vec::with_capacity(committee.size());
+    let boot_counters = vec![0; num_validators];
+
+    for (index, _authority_info) in committee.authorities() {
+        let (authority, commit_receiver, _block_receiver) = make_authority(
+            index,
+            &temp_dirs[index.value()],
+            committee.clone(),
+            keypairs.clone(),
+            sui_protocol_config::ConsensusNetwork::Tonic,
+            boot_counters[index],
+            protocol_config.clone(),
+        )
+        .await;
+        commit_receivers.push(commit_receiver);
+        authorities.push(authority);
+    }
+
+    info!("✅ All {} nodes initialized and started", num_validators);
+
+    let num_transactions: usize = env::var("NUM_TRANSACTIONS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(num_validators * 5);
+
+    let mut submitted_transactions = BTreeSet::<Vec<u8>>::new();
+    for i in 0..num_transactions {
+        let txn = vec![vec![i as u8; 32]];
+        submitted_transactions.insert(txn[0].clone());
+        authorities[i % authorities.len()]
+            .transaction_client()
+            .submit(txn)
+            .await
+            .unwrap();
+    }
+
+    let mut all_commits = Vec::new();
+    let collection_duration_secs: u64 = env::var("COLLECTION_DURATION")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(35);
+    let collection_duration = Duration::from_secs(collection_duration_secs);
+
+    let min_commits: usize = env::var("MIN_COMMITS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(num_validators + 10);
+
+    let mut primary_receiver = commit_receivers.swap_remove(0);
+    let deadline = tokio::time::Instant::now() + collection_duration;
+
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() || all_commits.len() >= min_commits {
+            break;
+        }
+        match tokio::time::timeout(remaining, primary_receiver.recv()).await {
+            Ok(Some(committed_subdag)) => {
+                all_commits.push(committed_subdag);
+            }
+            Ok(None) | Err(_) => {
+                break;
+            }
+        }
+    }
+
+    let asr = calculate_baseline_asr(&all_commits, attacker_id, victim_id);
+
+    println!("🎯 BASELINE RESULTS:");
+    println!("  Mode: baseline");
+    println!("  Network: {} validators", num_validators);
+    println!("  Attacker: {}", attacker_id);
+    println!("  Victim: {}", victim_id);
+    println!("  Attack Success Rate: {:.1}%", asr);
+    println!("  FINAL_ASR_RESULT: {:.1}%", asr);
+
+    for authority in authorities {
+        authority.stop().await;
+    }
+
+    assert!(asr >= 0.0, "ASR negative: {:.1}%", asr);
+    assert!(asr <= 100.0, "ASR suspiciously high: {:.1}%", asr);
+}
+
 fn calculate_asr(commits: &[CommittedSubDag], num_validators: usize, num_attacker: usize, num_victim: usize) -> f64 {
     if commits.is_empty() {
         warn!("No commits to analyze");
@@ -337,3 +459,61 @@ fn calculate_asr(commits: &[CommittedSubDag], num_validators: usize, num_attacke
     asr
 }
 
+fn calculate_baseline_asr(commits: &[CommittedSubDag], attacker_id: usize, victim_id: usize) -> f64 {
+    if commits.is_empty() {
+        warn!("No commits to analyze");
+        return 0.0;
+    }
+
+    let mut global_order = Vec::new();
+    for commit in commits {
+        for block in commit.blocks.iter() {
+            global_order.push((block.author(), block.round(), block.reference()));
+        }
+    }
+
+    let mut attacker_positions = Vec::new();
+    let mut victim_positions = Vec::new();
+
+    for (pos, (author, _round, _block_ref)) in global_order.iter().enumerate() {
+        let author_index = author.value() as usize;
+        if author_index == attacker_id {
+            attacker_positions.push(pos);
+        } else if author_index == victim_id {
+            victim_positions.push(pos);
+        }
+    }
+
+    if attacker_positions.is_empty() || victim_positions.is_empty() {
+        warn!("Missing attacker or victim blocks");
+        return 0.0;
+    }
+
+    let mut successes = 0;
+    let mut total_pairs = 0;
+
+    for att_pos in &attacker_positions {
+        for vic_pos in &victim_positions {
+            total_pairs += 1;
+            if att_pos < vic_pos {
+                successes += 1;
+            }
+        }
+    }
+
+    if total_pairs == 0 {
+        warn!("No comparable block pairs found");
+        return 0.0;
+    }
+
+    let asr = (successes as f64 / total_pairs as f64) * 100.0;
+    info!(
+        "Baseline ASR calculation for node {} vs node {}: {}/{} pairs = {:.1}%",
+        attacker_id,
+        victim_id,
+        successes,
+        total_pairs,
+        asr
+    );
+    asr
+}
