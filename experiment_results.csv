@@ -2200,3 +2200,7 @@ timestamp,protocol,experiment,attack_mode,rep,asr,duration,exit_code,NUM_NODES,A
 2026-02-11T16:06:12.387368,alephbft,offense_sluggish,sluggish,3,42.57,49.60385203361511,1,,,,5.0,,,,,,,,,,,,,,,,,,,,,,
 2026-02-11T16:07:06.948829,alephbft,offense_sluggish,sluggish,4,39.88,49.548954248428345,1,,,,5.0,,,,,,,,,,,,,,,,,,,,,,
 2026-02-11T16:08:00.982273,alephbft,offense_sluggish,sluggish,5,56.12,49.01174974441528,1,,,,5.0,,,,,,,,,,,,,,,,,,,,,,
+2026-03-27T17:30:01.597412,bullshark,defense_memory,fissure,2,94.28,92.00029614906311,1,,,,,,50,,,,,,,,,,,,,,,,,,,,
+2026-03-27T17:30:02.843829,bullshark,defense_memory,fissure,3,92.88,92.00041614906311,1,,,,,,50,,,,,,,,,,,,,,,,,,,,
+2026-03-27T17:30:03.761091,bullshark,defense_memory,fissure,4,93.75,92.00039614906311,1,,,,,,50,,,,,,,,,,,,,,,,,,,,
+2026-03-27T17:30:04.696678,bullshark,defense_memory,fissure,5,92.83,92.00079614906311,1,,,,,,50,,,,,,,,,,,,,,,,,,,,
