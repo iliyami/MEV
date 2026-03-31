@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime
@@ -14,6 +15,10 @@ from .config import (
     ATTACK_ORDER,
     ATTACK_STYLES,
     ATTACK_TIKZ_COLORS,
+    BACKRUN_GAP_BUCKETS,
+    BACKRUN_GAP_LABELS,
+    BACKRUN_GAP_TIKZ_COLORS,
+    BACKRUN_PROTOCOL_ORDER,
     EXPERIMENT_LABELS,
     FIGURE_DIR,
     GENERATED_DIR,
@@ -72,7 +77,10 @@ EXPECTED_PROTOCOLS = {
 }
 
 COLUMN_TO_FIGURES = {
-    "asr": ["fig01_peak_attack_lift", "all sensitivity and scaling figures"],
+    "asr": ["fig01_peak_attack_lift", "all frontrunning sensitivity and scaling figures", "fig16_backrun_gap_histogram", "fig17_backrun_l1_l2_cumulative", "fig18_sandwich_triplet_overview"],
+    "asr_l1": ["fig17_backrun_l1_l2_cumulative"],
+    "asr_l2": ["fig17_backrun_l1_l2_cumulative"],
+    "asr_histogram": ["fig16_backrun_gap_histogram"],
     "rep": ["fig03-fig05 scaling boxplots", "distribution checks in reports"],
     "NUM_NODES": ["fig01_peak_attack_lift", "fig02_scaling_trends", "fig03-fig05 scaling boxplots"],
     "ATTACKER_RATIO": ["fig06_offense_sweeps"],
@@ -103,6 +111,8 @@ COLUMN_TO_FIGURES = {
     "AUTOBAHN_USE_FAST_PATH": ["inventory report only"],
     "duration": ["experiment inventory report"],
     "exit_code": ["experiment inventory report"],
+    "attack_type": ["fig16_backrun_gap_histogram", "fig17_backrun_l1_l2_cumulative", "fig18_sandwich_triplet_overview", "experiment inventory report"],
+    "SANDWICH_METRIC_MODE": ["fig18_sandwich_triplet_overview", "experiment inventory report"],
     "timestamp": ["provenance only"],
     "protocol": ["all figures"],
     "experiment": ["all figures"],
@@ -197,6 +207,7 @@ def filter_rows(
     *,
     protocol: str | None = None,
     experiment: str | None = None,
+    attack_type: str | None = None,
     attack_mode: str | None = None,
 ) -> List[Row]:
     filtered: List[Row] = []
@@ -204,6 +215,8 @@ def filter_rows(
         if protocol is not None and row.protocol != protocol:
             continue
         if experiment is not None and row.experiment != experiment:
+            continue
+        if attack_type is not None and row.attack_type != attack_type:
             continue
         if attack_mode is not None and row.attack_mode != attack_mode:
             continue
@@ -394,6 +407,49 @@ def effective_num_nodes(row: Row) -> int | None:
     return row.get_int("NUM_NODES")
 
 
+def parse_histogram(value: str) -> Dict[str, int]:
+    if value in ("", None):
+        return {}
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    hist: Dict[str, int] = {}
+    for key, count in parsed.items():
+        try:
+            hist[str(key)] = int(count)
+        except (TypeError, ValueError):
+            continue
+    return hist
+
+
+def collapse_gap_buckets(histogram: Dict[str, int]) -> Dict[str, int]:
+    collapsed = {bucket: 0 for bucket in BACKRUN_GAP_BUCKETS}
+    for key, count in histogram.items():
+        if key == "10+":
+            collapsed["10+"] += count
+            continue
+        try:
+            gap = int(key)
+        except ValueError:
+            continue
+        if gap == 1:
+            collapsed["1"] += count
+        elif gap == 2:
+            collapsed["2"] += count
+        elif gap == 3:
+            collapsed["3"] += count
+        elif gap in {4, 5}:
+            collapsed["4-5"] += count
+        elif 6 <= gap <= 9:
+            collapsed["6-9"] += count
+        else:
+            collapsed["10+"] += count
+    return collapsed
+
+
 def compute_peak_lifts(rows: Sequence[Row], baselines: Dict[str, float]) -> Dict[Tuple[str, str], Dict[str, object]]:
     candidates: Dict[Tuple[str, str], List[Tuple[float, Row]]] = defaultdict(list)
     for row in rows:
@@ -432,7 +488,7 @@ def raw_extra_field_count(path: Path) -> int:
 
 def suspicious_variance_cells(rows: Sequence[Row]) -> List[Tuple[str, str, str, str, float, float, float]]:
     flagged: List[Tuple[str, str, str, str, float, float, float]] = []
-    for (protocol, experiment, attack), bucket in experiment_matrix(rows).items():
+    for (protocol, experiment, attack_type, attack), bucket in experiment_matrix(rows).items():
         varying = varying_keys(bucket)
         if not varying:
             continue
@@ -450,7 +506,7 @@ def suspicious_variance_cells(rows: Sequence[Row]) -> List[Tuple[str, str, str, 
                 flagged.append(
                     (
                         protocol,
-                        experiment,
+                        experiment if attack_type == "frontrun" else f"{experiment}/{attack_type}",
                         attack,
                         ", ".join(f"{key}={value}" for key, value in zip(varying, signature)),
                         min(values),
@@ -819,6 +875,209 @@ def generate_latency_sensitivity(rows: Sequence[Row]) -> FigureInfo:
         purpose="Shows whether injected latency and jitter, used here as a geo-distribution proxy, amplify or suppress each attack across protocols.",
         setup="Uses the env_latency sweep with an added `0ms 0ms` no-added-latency slice derived from matching 13-node scaling rows, plus the collected `50±10`, `150±30`, and `300±50` profiles.",
         baseline_use="Adds a 50% fair-order reference; these runs are predominantly 13-node configurations.",
+    )
+
+
+def generate_backrun_gap_histogram(rows: Sequence[Row]) -> FigureInfo:
+    name = "fig16_backrun_gap_histogram"
+    path = FIGURE_DIR / f"{name}.tex"
+    panels = []
+    for idx, attack in enumerate(ATTACK_ORDER):
+        bucket = filter_rows(rows, experiment="simple", attack_type="backrun", attack_mode=attack)
+        protocols = [protocol for protocol in BACKRUN_PROTOCOL_ORDER if any(row.protocol == protocol for row in bucket)]
+        series_coords: Dict[str, List[str]] = {gap: [] for gap in BACKRUN_GAP_BUCKETS}
+        for protocol in protocols:
+            combined_hist: Dict[str, int] = {gap: 0 for gap in BACKRUN_GAP_BUCKETS}
+            for row in bucket:
+                if row.protocol != protocol:
+                    continue
+                row_hist = collapse_gap_buckets(parse_histogram(row.get("asr_histogram", "")))
+                for gap, count in row_hist.items():
+                    combined_hist[gap] += count
+            total_successes = sum(combined_hist.values())
+            if total_successes == 0:
+                continue
+            for gap in BACKRUN_GAP_BUCKETS:
+                share = (combined_hist[gap] / total_successes) * 100.0
+                series_coords[gap].append(f"({protocol},{fmt(share)})")
+        plots = []
+        for gap in BACKRUN_GAP_BUCKETS:
+            color = BACKRUN_GAP_TIKZ_COLORS[gap]
+            coords = " ".join(series_coords[gap])
+            plots.append(rf"\addplot+[ybar stacked, draw=black!15, fill={color}] coordinates {{{coords}}};")
+        option_lines = [
+            "mevAxis",
+            "width=0.31\\linewidth",
+            "height=0.30\\linewidth",
+            f"title={{{ATTACK_LABELS[attack]}}}",
+            "ylabel={Share of successful backruns (\\%)}",
+            "ymin=0",
+            "ymax=100",
+            axis_symbolic_setup(protocols, [PROTOCOL_LABELS[p] for p in protocols]),
+            "x tick label style={rotate=25, anchor=east}",
+        ]
+        panels.append(
+            rf"""
+\nextgroupplot[
+  {',\n  '.join(option_lines)}
+]
+{chr(10).join(plots)}
+"""
+        )
+    legend_entries = " & ".join(
+        rf"\node[draw=black!15, fill={BACKRUN_GAP_TIKZ_COLORS[gap]}, minimum width=8pt, minimum height=8pt, inner sep=0pt] {{}}; & \node[font=\scriptsize] {{{BACKRUN_GAP_LABELS[gap]}}};"
+        for gap in BACKRUN_GAP_BUCKETS
+    )
+    content = make_figure_header(name, "Backrun gap composition") + rf"""
+\begin{{tikzpicture}}
+\begin{{groupplot}}[
+  group style={{group size=3 by 1, horizontal sep=1.35cm}},
+]
+{''.join(panels)}
+\end{{groupplot}}
+\matrix[anchor=north, column sep=0.18cm, row sep=0pt] at ($(group c1r1.south west)!0.5!(group c3r1.south east)+(0,-0.82cm)$) {{
+  {legend_entries} \\
+}};
+\end{{tikzpicture}}
+"""
+    write_text(path, content)
+    return FigureInfo(
+        name=name,
+        title="Backrun gap composition",
+        path=path,
+        columns=["protocol", "attack_mode", "attack_type", "asr_histogram"],
+        purpose="Shows where successful backruns land in the ordering, emphasizing whether each protocol's backrun wins are immediate or only occur at larger gaps.",
+        setup="Uses the simple 13-node backrun campaign for Bullshark, AlephBFT, Mysticeti, and Autobahn; each stacked bar aggregates successful-gap histograms across the five reps and normalizes within successful backruns.",
+        baseline_use="No baseline line is used because the figure shows composition of successful backrun gaps rather than an order-fairness rate.",
+    )
+
+
+def generate_backrun_l_metrics(rows: Sequence[Row]) -> FigureInfo:
+    name = "fig17_backrun_l1_l2_cumulative"
+    path = FIGURE_DIR / f"{name}.tex"
+    panels = []
+    for idx, attack in enumerate(ATTACK_ORDER):
+        bucket = filter_rows(rows, experiment="simple", attack_type="backrun", attack_mode=attack)
+        protocols = [protocol for protocol in BACKRUN_PROTOCOL_ORDER if any(row.protocol == protocol for row in bucket)]
+        drawings: List[str] = []
+        attack_color = ATTACK_TIKZ_COLORS[attack]
+        for pos, protocol in enumerate(protocols, start=1):
+            cell = [row for row in bucket if row.protocol == protocol]
+            if not cell:
+                continue
+            cumulative = median(row.asr for row in cell)
+            l2 = median(row.get_float("asr_l2") or 0.0 for row in cell)
+            l1 = median(row.get_float("asr_l1") or 0.0 for row in cell)
+            drawings.append(
+                rf"\draw[{attack_color}, line width=1.5pt] (axis cs:{fmt(pos)},{fmt(l1)}) -- (axis cs:{fmt(pos)},{fmt(cumulative)});"
+            )
+            drawings.append(
+                rf"\addplot+[only marks, mark=triangle*, mark options={{fill={attack_color}}}, color={attack_color}, mark size=2.4pt] coordinates {{({fmt(pos)},{fmt(l1)})}};"
+            )
+            drawings.append(
+                rf"\addplot+[only marks, mark=square*, mark options={{fill=white}}, color={attack_color}, mark size=2.6pt, line width=1.1pt] coordinates {{({fmt(pos)},{fmt(l2)})}};"
+            )
+            drawings.append(
+                rf"\addplot+[only marks, mark=*, mark options={{fill={attack_color}}}, color={attack_color}, mark size=2.8pt] coordinates {{({fmt(pos)},{fmt(cumulative)})}};"
+            )
+        option_lines = [
+            "mevAxis",
+            "width=0.31\\linewidth",
+            "height=0.30\\linewidth",
+            f"title={{{ATTACK_LABELS[attack]}}}",
+            "ylabel={Median ASR (\\%)}",
+            "ymin=0",
+            "ymax=100",
+            "xmin=0.5",
+            f"xmax={len(protocols) + 0.5}",
+            f"xtick={{{','.join(str(i) for i in range(1, len(protocols) + 1))}}}",
+            f"xticklabels={{{','.join(PROTOCOL_LABELS[p] for p in protocols)}}}",
+            "x tick label style={rotate=25, anchor=east}",
+        ]
+        panels.append(
+            rf"""
+\nextgroupplot[
+  {',\n  '.join(option_lines)}
+]
+{chr(10).join(drawings)}
+"""
+        )
+    legend_entries = r"""
+\node[inner sep=0pt] {\tikz[baseline=-0.6ex]\fill[black] (0pt,0pt) -- (7pt,0pt) -- (3.5pt,6.1pt) -- cycle;}; & \node[font=\scriptsize] {L1}; &
+\node[draw=black, minimum width=7pt, minimum height=7pt, inner sep=0pt, fill=white] {}; & \node[font=\scriptsize] {L2}; &
+\node[inner sep=0pt] {\tikz[baseline=-0.6ex]\fill[black] (3.5pt,3.5pt) circle (3.0pt);}; & \node[font=\scriptsize] {Cumulative};
+"""
+    content = make_figure_header(name, "Backrun cumulative vs L1/L2") + rf"""
+\begin{{tikzpicture}}
+\begin{{groupplot}}[
+  group style={{group size=3 by 1, horizontal sep=1.35cm}},
+]
+{''.join(panels)}
+\end{{groupplot}}
+\matrix[anchor=north, column sep=0.18cm, row sep=0pt] at ($(group c1r1.south west)!0.5!(group c3r1.south east)+(0,-0.78cm)$) {{
+  {legend_entries} \\
+}};
+\end{{tikzpicture}}
+"""
+    write_text(path, content)
+    return FigureInfo(
+        name=name,
+        title="Backrun cumulative vs L1/L2",
+        path=path,
+        columns=["protocol", "attack_mode", "attack_type", "asr", "asr_l1", "asr_l2"],
+        purpose="Separates loose cumulative backrun success from stricter immediate and near-immediate wins, making the strictness gap visible without relying on tables.",
+        setup="Uses the simple 13-node backrun campaign; each protocol marker shows the median cumulative, L2, and L1 ASR across the five reps for one attack mode.",
+        baseline_use="No baseline line is used because cumulative, L2, and L1 are attack-specific success metrics rather than fair-order baselines.",
+    )
+
+
+def generate_sandwich_overview(rows: Sequence[Row]) -> FigureInfo:
+    name = "fig18_sandwich_triplet_overview"
+    path = FIGURE_DIR / f"{name}.tex"
+    protocols = [protocol for protocol in BACKRUN_PROTOCOL_ORDER if any(row.protocol == protocol for row in rows)]
+    labels = [PROTOCOL_LABELS[p] for p in protocols]
+    bar_plots = []
+    for attack in ATTACK_ORDER:
+        coords = []
+        bucket = filter_rows(rows, experiment="simple", attack_type="sandwich", attack_mode=attack)
+        for protocol in protocols:
+            cell = [row for row in bucket if row.protocol == protocol and row.get("SANDWICH_METRIC_MODE", "") == "triplet"]
+            if not cell:
+                continue
+            coords.append(f"({protocol},{fmt(median(row.asr for row in cell))})")
+        color = ATTACK_TIKZ_COLORS[attack]
+        bar_plots.append(
+            rf"\addplot+[fill={color}, draw=none, nodes near coords, every node near coord/.append style={{font=\scriptsize, rotate=90, anchor=west}}] coordinates {{{' '.join(coords)}}};"
+        )
+    content = make_figure_header(name, "Triplet sandwich ASR overview") + rf"""
+\begin{{tikzpicture}}
+\begin{{axis}}[
+  mevBarAxis,
+  ybar=4pt,
+  ymin=0,
+  ymax=100,
+  ylabel={{Median triplet sandwich ASR (\%)}},
+  {axis_symbolic_setup(protocols, labels)},
+  x tick label style={{rotate=25, anchor=east}},
+  legend columns=3,
+  legend style={{at={{(0.5,1.18)}}, anchor=south}},
+]
+{chr(10).join(bar_plots)}
+\addlegendentry{{Fissure}}
+\addlegendentry{{Speculative}}
+\addlegendentry{{Sluggish}}
+\end{{axis}}
+\end{{tikzpicture}}
+"""
+    write_text(path, content)
+    return FigureInfo(
+        name=name,
+        title="Triplet sandwich ASR overview",
+        path=path,
+        columns=["protocol", "attack_mode", "attack_type", "asr", "SANDWICH_METRIC_MODE"],
+        purpose="Presents sandwich attackability using the triplet metric that preserved the expected Bullshark-versus-Mysticeti ordering in direct sanity checks.",
+        setup="Uses the simple 13-node sandwich campaign for Bullshark, AlephBFT, Mysticeti, and Autobahn, restricted to `SANDWICH_METRIC_MODE=triplet` and summarized by per-cell medians.",
+        baseline_use="No baseline is overlaid because triplet sandwich ASR is not a fair-order metric with a natural 50% reference.",
     )
 
 
@@ -1303,13 +1562,13 @@ def generate_experiment_inventory(rows: Sequence[Row]) -> None:
             continue
         lines.append(f"## {PROTOCOL_LABELS[protocol]}")
         lines.append("")
-        for _, experiment, attack in protocol_keys:
-            bucket = grouped[(protocol, experiment, attack)]
+        for _, experiment, attack_type, attack in protocol_keys:
+            bucket = grouped[(protocol, experiment, attack_type, attack)]
             varying = varying_keys(bucket)
             fixed = fixed_values(bucket)
             rep_map = completeness(bucket, varying) if varying else {}
             sample_row = bucket[0]
-            lines.append(f"### `{experiment}` / `{attack}`")
+            lines.append(f"### `{experiment}` / `{attack_type}` / `{attack}`")
             lines.append(f"- Rows: `{len(bucket)}`")
             lines.append(f"- Source: `{sample_row.source}`")
             lines.append(f"- Varying columns: `{', '.join(varying) if varying else 'none'}`")
@@ -1339,7 +1598,7 @@ def generate_data_anomalies(rows: Sequence[Row], baselines: Dict[str, float]) ->
     for row in rows:
         expected = EXPECTED_PROTOCOLS.get(row.experiment)
         if expected is not None and row.protocol not in expected:
-            unexpected.append((row.protocol, row.experiment, row.attack_mode, row.rep))
+            unexpected.append((row.protocol, row.experiment, row.attack_type, row.attack_mode, row.rep))
 
     lines = ["# Data Anomalies and Consistency Checks", ""]
     lines.append(f"Last regenerated: `{report_stamp()}`")
@@ -1362,15 +1621,15 @@ def generate_data_anomalies(rows: Sequence[Row], baselines: Dict[str, float]) ->
 
     if unexpected:
         lines.append("## Unexpected protocol-experiment combinations")
-        for protocol, experiment, attack, rep in unexpected[:10]:
-            lines.append(f"- `{protocol}` appears in `{experiment}` / `{attack}` / rep `{rep}` even though that experiment belongs to another protocol family.")
+        for protocol, experiment, attack_type, attack, rep in unexpected[:10]:
+            lines.append(f"- `{protocol}` appears in `{experiment}` / `{attack_type}` / `{attack}` / rep `{rep}` even though that experiment belongs to another protocol family.")
         lines.append("")
 
     lines.append("## Incomplete cells")
     for cell in anomalies["incomplete_cells"][:25]:
         signature = ", ".join(f"{key}={value}" for key, value in zip(cell["varying"], cell["signature"]))
         lines.append(
-            f"- `{cell['protocol']}` / `{cell['experiment']}` / `{cell['attack_mode']}` / `{signature}` only has reps `{cell['reps']}` out of expected `{cell['expected']}`."
+            f"- `{cell['protocol']}` / `{cell['experiment']}` / `{cell['attack_type']}` / `{cell['attack_mode']}` / `{signature}` only has reps `{cell['reps']}` out of expected `{cell['expected']}`."
         )
     lines.append("")
 
@@ -1407,6 +1666,14 @@ def generate_category_summary(rows: Sequence[Row], figures: Sequence[FigureInfo]
         "Environment": {
             "figures": ["fig07_latency_sensitivity"],
             "experiments": ["env_latency"],
+        },
+        "Backrunning": {
+            "figures": ["fig16_backrun_gap_histogram", "fig17_backrun_l1_l2_cumulative"],
+            "experiments": ["simple_backrun"],
+        },
+        "Sandwiching": {
+            "figures": ["fig18_sandwich_triplet_overview"],
+            "experiments": ["simple_sandwich_triplet"],
         },
         "Core Defenses": {
             "figures": ["fig08_core_defenses"],
@@ -1445,6 +1712,14 @@ def generate_category_summary(rows: Sequence[Row], figures: Sequence[FigureInfo]
             lines.append(f"  Purpose: {figure.purpose}")
         lines.append("")
         for experiment in meta["experiments"]:
+            if experiment == "simple_backrun":
+                lines.append("- Experiment: `simple` / `backrun`")
+                lines.append("  Setup: 13-node simple campaign for Bullshark, AlephBFT, Mysticeti, and Autobahn with histogram-bearing backrun metrics.")
+                continue
+            if experiment == "simple_sandwich_triplet":
+                lines.append("- Experiment: `simple` / `sandwich` with `SANDWICH_METRIC_MODE=triplet`")
+                lines.append("  Setup: 13-node simple campaign for Bullshark, AlephBFT, Mysticeti, and Autobahn using the triplet sandwich metric.")
+                continue
             if experiment == "baseline":
                 lines.append("- Experiment: pure protocol baselines from `baseline.csv`")
                 lines.append("  Setup: all protocols on 13 nodes, no attack, node 0 versus node 1 measurement.")
@@ -1457,9 +1732,11 @@ def generate_category_summary(rows: Sequence[Row], figures: Sequence[FigureInfo]
             if not keys:
                 continue
             protocols = ", ".join(PROTOCOL_LABELS[protocol] for protocol in sorted({key[0] for key in keys}, key=PROTOCOL_ORDER.index))
-            attacks = ", ".join(sorted({ATTACK_LABELS[key[2]] for key in keys}))
+            attack_types = ", ".join(sorted({key[2] for key in keys}))
+            attacks = ", ".join(sorted({ATTACK_LABELS[key[3]] for key in keys}))
             lines.append(f"- Experiment: `{experiment}` ({EXPERIMENT_LABELS.get(experiment, experiment)})")
             lines.append(f"  Protocols: {protocols}")
+            lines.append(f"  Attack types: {attack_types}")
             lines.append(f"  Attacks: {attacks}")
             sample = grouped[keys[0]][0]
             fixed = fixed_values(grouped[keys[0]], keys=DISPLAY_KEYS)
@@ -1572,25 +1849,29 @@ def main() -> None:
 
     raw_rows = load_rows()
     rows = filter_expected(raw_rows)
+    frontrun_rows = [row for row in rows if row.attack_type == "frontrun"]
     baselines = load_baselines()
 
     figures: List[FigureInfo] = []
-    peak_lifts = compute_peak_lifts(rows, baselines)
-    figures.append(generate_peak_attack_lift(rows, baselines))
-    figures.append(generate_scaling_trends(rows))
-    figures.append(generate_scaling_boxplots(rows, "fissure", 3))
-    figures.append(generate_scaling_boxplots(rows, "speculative", 4))
-    figures.append(generate_scaling_boxplots(rows, "sluggish", 5))
-    figures.append(generate_offense_sweeps(rows))
-    figures.append(generate_latency_sensitivity(rows))
-    figures.append(generate_core_defenses(rows))
-    figures.append(generate_narwhal_workers(rows))
-    figures.append(generate_narwhal_heatmaps(rows, "defense_header", 10, "HEADER_SIZE", "MAX_HEADER_DELAY", "Narwhal header parameter surface"))
-    figures.append(generate_narwhal_heatmaps(rows, "defense_batching", 11, "BATCH_SIZE", "MAX_BATCH_DELAY", "Narwhal batching parameter surface"))
-    figures.append(generate_wave_leaders(rows))
-    figures.append(generate_strategy_sweeps(rows))
-    figures.append(generate_aleph_knobs(rows))
-    figures.append(generate_autobahn_knobs(rows))
+    peak_lifts = compute_peak_lifts(frontrun_rows, baselines)
+    figures.append(generate_peak_attack_lift(frontrun_rows, baselines))
+    figures.append(generate_scaling_trends(frontrun_rows))
+    figures.append(generate_scaling_boxplots(frontrun_rows, "fissure", 3))
+    figures.append(generate_scaling_boxplots(frontrun_rows, "speculative", 4))
+    figures.append(generate_scaling_boxplots(frontrun_rows, "sluggish", 5))
+    figures.append(generate_offense_sweeps(frontrun_rows))
+    figures.append(generate_latency_sensitivity(frontrun_rows))
+    figures.append(generate_core_defenses(frontrun_rows))
+    figures.append(generate_narwhal_workers(frontrun_rows))
+    figures.append(generate_narwhal_heatmaps(frontrun_rows, "defense_header", 10, "HEADER_SIZE", "MAX_HEADER_DELAY", "Narwhal header parameter surface"))
+    figures.append(generate_narwhal_heatmaps(frontrun_rows, "defense_batching", 11, "BATCH_SIZE", "MAX_BATCH_DELAY", "Narwhal batching parameter surface"))
+    figures.append(generate_wave_leaders(frontrun_rows))
+    figures.append(generate_strategy_sweeps(frontrun_rows))
+    figures.append(generate_aleph_knobs(frontrun_rows))
+    figures.append(generate_autobahn_knobs(frontrun_rows))
+    figures.append(generate_backrun_gap_histogram(rows))
+    figures.append(generate_backrun_l_metrics(rows))
+    figures.append(generate_sandwich_overview(rows))
 
     generate_column_audit(rows, figures)
     generate_experiment_inventory(rows)

@@ -76,6 +76,25 @@ ATTACK_TIKZ_COLORS = {
     "speculative": "AttackSpeculative",
 }
 
+BACKRUN_PROTOCOL_ORDER = ["bullshark", "alephbft", "mysticeti", "autobahn"]
+BACKRUN_GAP_BUCKETS = ["1", "2", "3", "4-5", "6-9", "10+"]
+BACKRUN_GAP_LABELS = {
+    "1": "Gap 1",
+    "2": "Gap 2",
+    "3": "Gap 3",
+    "4-5": "Gap 4--5",
+    "6-9": "Gap 6--9",
+    "10+": "Gap 10+",
+}
+BACKRUN_GAP_TIKZ_COLORS = {
+    "1": "GapOne",
+    "2": "GapTwo",
+    "3": "GapThree",
+    "4-5": "GapFourFive",
+    "6-9": "GapSixNine",
+    "10+": "GapTenPlus",
+}
+
 ATTACK_STYLES = {
     "fissure": "solid",
     "sluggish": "densely dashed",
@@ -136,6 +155,12 @@ TIKZ_STYLE_PREAMBLE = r"""
 \definecolor{AttackFissure}{HTML}{C0392B}
 \definecolor{AttackSluggish}{HTML}{2C7FB8}
 \definecolor{AttackSpeculative}{HTML}{7B3294}
+\definecolor{GapOne}{HTML}{1B9E77}
+\definecolor{GapTwo}{HTML}{66A61E}
+\definecolor{GapThree}{HTML}{7570B3}
+\definecolor{GapFourFive}{HTML}{E6AB02}
+\definecolor{GapSixNine}{HTML}{D95F02}
+\definecolor{GapTenPlus}{HTML}{C0392B}
 \pgfplotsset{
   mevAxis/.style={
     width=0.31\linewidth,

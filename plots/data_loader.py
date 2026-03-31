@@ -16,6 +16,7 @@ from .config import ROOT
 RESULT_PATHS = [
     ROOT / "experiment_results.csv",
     ROOT / "autobahn_results.csv",
+    ROOT / "back_sand_results.csv",
 ]
 
 BASELINE_PATH = ROOT / "baseline.csv"
@@ -34,9 +35,13 @@ META_KEYS = {
     "timestamp",
     "protocol",
     "experiment",
+    "attack_type",
     "attack_mode",
     "rep",
     "asr",
+    "asr_l1",
+    "asr_l2",
+    "asr_histogram",
     "duration",
     "exit_code",
 }
@@ -90,6 +95,10 @@ class Row:
     @property
     def attack_mode(self) -> str:
         return self.raw["attack_mode"]
+
+    @property
+    def attack_type(self) -> str:
+        return self.raw.get("attack_type", "") or self.raw.get("ATTACK_TYPE", "") or "frontrun"
 
     @property
     def rep(self) -> int:
@@ -150,6 +159,8 @@ def load_rows() -> List[Row]:
     defaults = load_protocol_defaults()
     rows: List[Row] = []
     for path in RESULT_PATHS:
+        if not path.exists():
+            continue
         with path.open() as handle:
             reader = csv.DictReader(handle)
             for raw_row in reader:
@@ -251,10 +262,10 @@ def unique_effective_values(rows: Iterable[Row], key: str) -> List[str]:
     return sorted(values, key=sort_key)
 
 
-def experiment_matrix(rows: Iterable[Row]) -> Dict[Tuple[str, str, str], List[Row]]:
-    grouped: Dict[Tuple[str, str, str], List[Row]] = defaultdict(list)
+def experiment_matrix(rows: Iterable[Row]) -> Dict[Tuple[str, str, str, str], List[Row]]:
+    grouped: Dict[Tuple[str, str, str, str], List[Row]] = defaultdict(list)
     for row in rows:
-        grouped[(row.protocol, row.experiment, row.attack_mode)].append(row)
+        grouped[(row.protocol, row.experiment, row.attack_type, row.attack_mode)].append(row)
     return grouped
 
 
@@ -325,7 +336,7 @@ def find_structural_anomalies(rows: Sequence[Row]) -> Dict[str, object]:
     ]
     by_file: Dict[str, int] = Counter(row.source for row in rows)
     incomplete_cells: List[Dict[str, object]] = []
-    for (protocol, experiment, attack), bucket in sorted(experiment_matrix(rows).items()):
+    for (protocol, experiment, attack_type, attack), bucket in sorted(experiment_matrix(rows).items()):
         varying = varying_keys(bucket)
         if not varying:
             continue
@@ -336,6 +347,7 @@ def find_structural_anomalies(rows: Sequence[Row]) -> Dict[str, object]:
                 incomplete_cells.append({
                     "protocol": protocol,
                     "experiment": experiment,
+                    "attack_type": attack_type,
                     "attack_mode": attack,
                     "varying": list(varying),
                     "signature": list(signature),
@@ -349,4 +361,3 @@ def find_structural_anomalies(rows: Sequence[Row]) -> Dict[str, object]:
         "high_asr_examples": high_asr[:12],
         "incomplete_cells": incomplete_cells,
     }
-
