@@ -1,0 +1,35 @@
+experiment:
+  name: "bullshark_simple_campaign"
+  description: "Bullshark simple 13-node MEV campaign"
+
+protocol:
+  name: "bullshark"
+  path: "bullshark"
+
+docker:
+  tag: "mev-bullshark:latest"
+  cpus: "8.0"
+  memory: "16g"
+
+test:
+  test_name: "test_fissure_attack_asr_dynamic"
+  REPETITIONS: 5
+
+environment:
+  NUM_NODES: "13"
+  ATTACK_MODE: "fissure"
+  ATTACKER_RATIO: "0.308"
+  VICTIM_RATIO: "0.231"
+  SPECULATIVE_P_MAX: "50"
+  SLUGGISH_TIMEOUT_MULTIPLIER: "1.5"
+  NUM_TRANSACTIONS: "65"
+  MIN_COMMITS: "23"
+  COLLECTION_DURATION: "35"
+  DAG_STATE_CACHED_ROUNDS: "5"
+  SYNC_TIMEOUT_MS: "2000"
+  GC_DEPTH: "10"
+  RUST_LOG: "info"
+
+output:
+  expected_asr: 50.0
+  tolerance_percent: 100.0

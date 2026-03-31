@@ -1,64 +1,158 @@
-//! Paper-Aligned ASR Calculation Module
-//!
-//! This module implements the Attack Success Rate (ASR) calculation according to
-//! the methodology specified in the reference paper:
-//! "No Fish Is Too Big for Flash Boys! Frontrunning on DAG-based Blockchains"
-//!
-//! Methodology:
-//! - All-pairs matching (all attacker blocks × all victim blocks)
-//! - Filter: attacker_round >= victim_round (attacker creates block after witnessing victim)
-//! - Success: attacker_height < victim_height (attacker block ordered before victim block)
-//! - ASR = successes / total_pairs
+//! ASR calculation helpers for AlephBFT attack tests.
 
-use crate::{NodeIndex, OrderedUnit, Round};
+use crate::{OrderedUnit, Round};
 use aleph_bft_mock::{Data, Hasher64};
+use std::collections::BTreeMap;
 
-/// Calculate ASR using paper-aligned methodology (all-pairs matching)
-///
-/// # Arguments
-/// * `finalized_units` - All finalized units from the consensus run
-/// * `num_nodes` - Total number of nodes in the network
-/// * `num_attackers` - Number of attacker nodes (indices 0..num_attackers)
-/// * `num_victims` - Number of victim nodes (indices (num_nodes - num_victims)..num_nodes)
-///
-/// # Returns
-/// ASR as a fraction (0.0 to 1.0), or 0.0 if no valid pairs found
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AttackType {
+    Frontrun,
+    Backrun,
+    Sandwich,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum NodeRole {
+    FrontAttacker,
+    Victim,
+    BackAttacker,
+    Honest,
+}
+
+#[derive(Clone, Debug)]
+struct AttackLayout {
+    front_attackers: std::ops::Range<usize>,
+    victims: std::ops::Range<usize>,
+    back_attackers: std::ops::Range<usize>,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct UnitRecord {
+    creator: usize,
+    height: usize,
+    round: Round,
+}
+
+impl AttackType {
+    fn from_env() -> Self {
+        match std::env::var("ATTACK_TYPE")
+            .unwrap_or_else(|_| "frontrun".to_string())
+            .as_str()
+        {
+            "backrun" => Self::Backrun,
+            "sandwich" => Self::Sandwich,
+            _ => Self::Frontrun,
+        }
+    }
+}
+
+impl AttackLayout {
+    fn new(num_nodes: usize, num_attackers: usize, num_victims: usize, attack_type: AttackType) -> Self {
+        match attack_type {
+            AttackType::Frontrun => Self {
+                front_attackers: 0..num_attackers,
+                victims: num_nodes.saturating_sub(num_victims)..num_nodes,
+                back_attackers: 0..0,
+            },
+            AttackType::Backrun => Self {
+                front_attackers: 0..0,
+                victims: 0..num_victims,
+                back_attackers: num_victims..num_victims + num_attackers,
+            },
+            AttackType::Sandwich => {
+                let front = num_attackers / 2;
+                let back = num_attackers - front;
+                let victims_start = front;
+                let back_start = victims_start + num_victims;
+                Self {
+                    front_attackers: 0..front,
+                    victims: victims_start..victims_start + num_victims,
+                    back_attackers: back_start..back_start + back,
+                }
+            }
+        }
+    }
+
+    fn role(&self, node: usize) -> NodeRole {
+        if self.front_attackers.contains(&node) {
+            NodeRole::FrontAttacker
+        } else if self.victims.contains(&node) {
+            NodeRole::Victim
+        } else if self.back_attackers.contains(&node) {
+            NodeRole::BackAttacker
+        } else {
+            NodeRole::Honest
+        }
+    }
+}
+
+fn attack_mode() -> String {
+    std::env::var("ATTACK_MODE").unwrap_or_default()
+}
+
+fn extract_units(finalized_units: &[OrderedUnit<Data, Hasher64>]) -> Vec<UnitRecord> {
+    finalized_units
+        .iter()
+        .enumerate()
+        .map(|(height, unit)| UnitRecord {
+            creator: unit.creator.0,
+            height,
+            round: unit.round,
+        })
+        .collect()
+}
+
+fn histogram_json(histogram: &BTreeMap<String, usize>) -> String {
+    let parts = histogram
+        .iter()
+        .map(|(gap, count)| format!("\"{}\":{}", gap, count))
+        .collect::<Vec<_>>();
+    format!("{{{}}}", parts.join(","))
+}
+
+fn allowed_round_gap_for_backrun(mode: &str) -> i64 {
+    if mode == "sluggish" {
+        6
+    } else {
+        0
+    }
+}
+
+fn sandwich_metric_mode() -> String {
+    std::env::var("SANDWICH_METRIC_MODE").unwrap_or_else(|_| "strict".to_string())
+}
+
+/// Paper-aligned frontrun calculation.
 pub fn calculate_asr_paper_aligned(
     finalized_units: &[OrderedUnit<Data, Hasher64>],
     num_nodes: usize,
     num_attackers: usize,
     num_victims: usize,
 ) -> f64 {
+    if AttackType::from_env() != AttackType::Frontrun {
+        return calculate_asr_paper_aligned_advanced(
+            finalized_units,
+            num_nodes,
+            num_attackers,
+            num_victims,
+        );
+    }
+
     if finalized_units.is_empty() {
         log::warn!("No finalized units to calculate ASR");
         return 0.0;
     }
 
-    // Extract all finalized units with creator, height (position), and round
-    // Height = position in finalization order (not round number!)
-    // Paper: "height" means position in committed order
-    let all_units: Vec<(NodeIndex, usize, Round)> = finalized_units
-        .iter()
-        .enumerate()
-        .map(|(height, unit)| (unit.creator, height, unit.round))
-        .collect();
+    let layout = AttackLayout::new(num_nodes, num_attackers, num_victims, AttackType::Frontrun);
+    let all_units = extract_units(finalized_units);
 
-    // Identify attackers and victims
-    let attacker_indices: Vec<usize> = (0..num_attackers).collect();
-    let victim_start = num_nodes - num_victims;
-    let victim_indices: Vec<usize> = (victim_start..num_nodes).collect();
-
-    // Extract victim blocks and attacker blocks with their height and round
-    let mut victim_blocks: Vec<(usize, Round)> = Vec::new(); // (height, round)
-    let mut attacker_blocks: Vec<(usize, Round)> = Vec::new(); // (height, round)
-
-    for (height, (creator, _, round)) in all_units.iter().enumerate() {
-        let creator_idx = creator.0;
-        if attacker_indices.contains(&creator_idx) {
-            attacker_blocks.push((height, *round));
-        }
-        if victim_indices.contains(&creator_idx) {
-            victim_blocks.push((height, *round));
+    let mut victim_blocks = Vec::new();
+    let mut attacker_blocks = Vec::new();
+    for unit in &all_units {
+        match layout.role(unit.creator) {
+            NodeRole::FrontAttacker => attacker_blocks.push((unit.height, unit.round)),
+            NodeRole::Victim => victim_blocks.push((unit.height, unit.round)),
+            _ => {}
         }
     }
 
@@ -73,41 +167,22 @@ pub fn calculate_asr_paper_aligned(
         return 0.0;
     }
 
-    // PAPER'S METHODOLOGY (All-Pairs Matching):
-    // - All attacker blocks can attempt to frontrun all victim blocks
-    // - Filter: attacker_round >= victim_round (attacker creates block after witnessing victim)
-    // - Success: attacker_height < victim_height (attacker block ordered before victim block)
-    // - ASR = successes / total_pairs
-
     let mut successes = 0;
     let mut total_trials = 0;
-
-    // PAPER'S METHODOLOGY (Optimized for AlephBFT):
-    // - For each victim block, find the closest attacker block (by round)
-    // - Filter: attacker_round >= victim_round
-    // - Success: attacker_height < victim_height
     for (vic_height, vic_round) in &victim_blocks {
-        // Find attacker blocks created at same round or AFTER victim block
         let mut candidate_attackers: Vec<(usize, Round)> = attacker_blocks
             .iter()
             .filter(|(_, att_round)| *att_round >= *vic_round)
-            .cloned()
+            .copied()
             .collect();
 
         if candidate_attackers.is_empty() {
-            continue; // No matching attacker block for this victim
+            continue;
         }
 
-        // Match the CLOSEST attacker block (by round difference)
-        candidate_attackers.sort_by_key(|(_, att_round)| {
-            *att_round as i32 - *vic_round as i32
-        });
-
-        let (att_height, _) = candidate_attackers[0]; // Closest attacker block
-
+        candidate_attackers.sort_by_key(|(_, att_round)| *att_round as i64 - *vic_round as i64);
+        let (att_height, _) = candidate_attackers[0];
         total_trials += 1;
-
-        // Success = attacker block height < victim block height
         if att_height < *vic_height {
             successes += 1;
         }
@@ -119,16 +194,187 @@ pub fn calculate_asr_paper_aligned(
     }
 
     let asr = (successes as f64 / total_trials as f64) * 100.0;
+    println!("FINAL_ASR_RESULT: {:.2}%", asr);
     log::info!(
         "   ASR calculation (closest-match): {}/{} trials = {:.2}%",
         successes,
         total_trials,
         asr
     );
-
-    asr / 100.0 // Return as fraction (0.0 to 1.0)
+    asr / 100.0
 }
 
+/// Advanced metrics for backrun and sandwich attack types.
+pub fn calculate_asr_paper_aligned_advanced(
+    finalized_units: &[OrderedUnit<Data, Hasher64>],
+    num_nodes: usize,
+    num_attackers: usize,
+    num_victims: usize,
+) -> f64 {
+    if finalized_units.is_empty() {
+        log::warn!("No finalized units to calculate ASR");
+        return 0.0;
+    }
 
+    let attack_type = AttackType::from_env();
+    if attack_type == AttackType::Frontrun {
+        return calculate_asr_paper_aligned(finalized_units, num_nodes, num_attackers, num_victims);
+    }
 
+    let layout = AttackLayout::new(num_nodes, num_attackers, num_victims, attack_type);
+    let mode = attack_mode();
+    let round_gap = allowed_round_gap_for_backrun(&mode);
+    let all_units = extract_units(finalized_units);
 
+    let victims = all_units
+        .iter()
+        .copied()
+        .filter(|unit| layout.role(unit.creator) == NodeRole::Victim)
+        .collect::<Vec<_>>();
+    let front_attackers = all_units
+        .iter()
+        .copied()
+        .filter(|unit| layout.role(unit.creator) == NodeRole::FrontAttacker)
+        .collect::<Vec<_>>();
+    let back_attackers = all_units
+        .iter()
+        .copied()
+        .filter(|unit| layout.role(unit.creator) == NodeRole::BackAttacker)
+        .collect::<Vec<_>>();
+
+    if victims.is_empty() {
+        log::warn!("Missing victim blocks");
+        return 0.0;
+    }
+
+    if attack_type == AttackType::Backrun {
+        if back_attackers.is_empty() {
+            log::warn!("Missing back attacker blocks");
+            return 0.0;
+        }
+
+        let mut histogram: BTreeMap<String, usize> = BTreeMap::new();
+        let mut successful_victims = 0usize;
+        let mut l1_successes = 0usize;
+        let mut l2_successes = 0usize;
+
+        for victim in &victims {
+            let best_gap = back_attackers
+                .iter()
+                .filter(|att| att.height > victim.height)
+                .filter(|att| {
+                    let diff = att.round as i64 - victim.round as i64;
+                    diff >= 0 && diff <= round_gap
+                })
+                .map(|att| att.height - victim.height)
+                .min();
+
+            if let Some(gap) = best_gap {
+                successful_victims += 1;
+                if gap == 1 {
+                    l1_successes += 1;
+                }
+                if gap <= 2 {
+                    l2_successes += 1;
+                }
+                let bucket = if gap >= 10 {
+                    "10+".to_string()
+                } else {
+                    gap.to_string()
+                };
+                *histogram.entry(bucket).or_insert(0) += 1;
+            }
+        }
+
+        let total_victims = victims.len();
+        let cumulative_asr = (successful_victims as f64 / total_victims as f64) * 100.0;
+        let l1_asr = (l1_successes as f64 / total_victims as f64) * 100.0;
+        let l2_asr = (l2_successes as f64 / total_victims as f64) * 100.0;
+
+        println!(
+            "FINAL_BACKRUN_STATS: {{\"l1_asr\": {:.2}, \"l2_asr\": {:.2}, \"cumulative_asr\": {:.2}, \"histogram\": {}}}",
+            l1_asr,
+            l2_asr,
+            cumulative_asr,
+            histogram_json(&histogram)
+        );
+        println!("FINAL_ASR_RESULT: {:.2}%", cumulative_asr);
+        return cumulative_asr / 100.0;
+    }
+
+    if front_attackers.is_empty() || back_attackers.is_empty() {
+        log::warn!("Missing front or back attacker blocks");
+        return 0.0;
+    }
+
+    let metric_mode = sandwich_metric_mode();
+    let sesr = if metric_mode == "triplet" {
+        let mut successes = 0usize;
+        let mut total_triplets = 0usize;
+        for front in &front_attackers {
+            for victim in &victims {
+                let front_round_diff = victim.round as i64 - front.round as i64;
+                if front_round_diff < 0 || front_round_diff > round_gap {
+                    continue;
+                }
+                for back in &back_attackers {
+                    let back_round_diff = back.round as i64 - victim.round as i64;
+                    if back_round_diff < 0 || back_round_diff > round_gap {
+                        continue;
+                    }
+                    total_triplets += 1;
+                    if front.height < victim.height && victim.height < back.height {
+                        successes += 1;
+                    }
+                }
+            }
+        }
+
+        if total_triplets == 0 {
+            log::warn!("No comparable sandwich triplets found");
+            0.0
+        } else {
+            let sesr = (successes as f64 / total_triplets as f64) * 100.0;
+            println!(
+                "FINAL_SANDWICH_STATS: {{\"sesr\": {:.2}, \"successful_triplets\": {}, \"total_triplets\": {}, \"metric_mode\": \"{}\"}}",
+                sesr,
+                successes,
+                total_triplets,
+                metric_mode
+            );
+            sesr
+        }
+    } else {
+        let mut sandwiched_victims = 0usize;
+        let height_to_role = all_units
+            .iter()
+            .map(|unit| (unit.height, layout.role(unit.creator)))
+            .collect::<BTreeMap<_, _>>();
+        for victim in &victims {
+            let front_is_adjacent = victim
+                .height
+                .checked_sub(1)
+                .and_then(|height| height_to_role.get(&height))
+                .is_some_and(|role| *role == NodeRole::FrontAttacker);
+            let back_is_adjacent = height_to_role
+                .get(&(victim.height + 1))
+                .is_some_and(|role| *role == NodeRole::BackAttacker);
+
+            if front_is_adjacent && back_is_adjacent {
+                sandwiched_victims += 1;
+            }
+        }
+
+        let sesr = (sandwiched_victims as f64 / victims.len() as f64) * 100.0;
+        println!(
+            "FINAL_SANDWICH_STATS: {{\"sesr\": {:.2}, \"sandwiched_victims\": {}, \"total_victims\": {}, \"metric_mode\": \"{}\"}}",
+            sesr,
+            sandwiched_victims,
+            victims.len(),
+            metric_mode
+        );
+        sesr
+    };
+    println!("FINAL_ASR_RESULT: {:.2}%", sesr);
+    sesr / 100.0
+}

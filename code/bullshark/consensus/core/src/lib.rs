@@ -63,6 +63,9 @@ mod fissure_attack_test;
 #[cfg(test)]
 mod speculative_attack_test;
 
+#[cfg(test)]
+mod mev_attack_metrics;
+
 /// Exported Consensus API.
 pub use authority_node::ConsensusAuthority;
 pub use block::{BlockAPI, CertifiedBlock, CertifiedBlocksOutput};

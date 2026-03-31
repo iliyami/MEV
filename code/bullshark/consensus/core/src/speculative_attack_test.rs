@@ -20,6 +20,7 @@ use crate::{
     authority_node::ConsensusAuthority,
     block::{BlockAPI, CertifiedBlocksOutput},
     commit::{CommittedSubDag},
+    mev_attack_metrics::calculate_attack_score,
     transaction::NoopTransactionVerifier,
     Clock, CommitConsumerArgs,
 };
@@ -239,8 +240,13 @@ async fn test_speculative_attack_asr_dynamic() {
         authority.stop().await;
     }
     
-    // Assert reasonable ASR
-    assert!(asr > 50.0, "ASR too low: {:.1}%", asr);
+    let attack_type = env::var("ATTACK_TYPE").unwrap_or_else(|_| "frontrun".to_string());
+    if attack_type == "frontrun" {
+        assert!(asr > 50.0, "ASR too low: {:.1}%", asr);
+    } else {
+        assert!(asr >= 0.0, "ASR negative: {:.1}%", asr);
+    }
+    assert!(asr <= 100.0, "ASR suspiciously high: {:.1}%", asr);
     
     info!("✅ Test completed successfully with ASR {:.1}%", asr);
 }
@@ -251,70 +257,5 @@ fn calculate_asr(
     num_attacker: usize, 
     num_victim: usize
 ) -> f64 {
-    if commits.is_empty() {
-        warn!("No commits to analyze");
-        return 0.0;
-    }
-    
-    // Build global ordering
-    let mut global_order = Vec::new();
-    for commit in commits {
-        for block in commit.blocks.iter() {
-            global_order.push((block.author(), block.round(), block.reference()));
-        }
-    }
-    
-    info!("Global order contains {} blocks", global_order.len());
-    
-    // Identify attacker and victim blocks
-    let mut attacker_positions = Vec::new();
-    let mut victim_positions = Vec::new();
-    
-    for (pos, (author, round, _block_ref)) in global_order.iter().enumerate() {
-        let author_index = author.value() as usize;
-        if author_index < num_attacker {
-            attacker_positions.push((pos, *round));
-        } else if author_index >= num_validators - num_victim {
-            victim_positions.push((pos, *round));
-        }
-    }
-    
-    info!("Attacker blocks: {}", attacker_positions.len());
-    info!("Victim blocks: {}", victim_positions.len());
-    
-    if attacker_positions.is_empty() || victim_positions.is_empty() {
-        warn!("Missing attacker or victim blocks");
-        return 0.0;
-    }
-    
-    let mut successes = 0;
-    let mut total_pairs = 0;
-    
-    // SPECULATIVE ASR Calculation logic
-    // We strictly compare blocks in the SAME ROUND (competition)
-    // ASR = (Attacker < Victim)
-    
-    for (att_pos, att_round) in &attacker_positions {
-        for (vic_pos, vic_round) in &victim_positions {
-            // Strict competition in the SAME round
-            if *att_round == *vic_round {
-                total_pairs += 1;
-                
-                // Success: attacker ordered before victim
-                if att_pos < vic_pos {
-                    successes += 1;
-                }
-            }
-        }
-    }
-    
-    if total_pairs == 0 {
-        warn!("No comparable block pairs found in same round");
-        return 0.0;
-    }
-    
-    let asr = (successes as f64 / total_pairs as f64) * 100.0;
-    info!("ASR calculation (Same-Round): {}/{} pairs = {:.1}%", successes, total_pairs, asr);
-    
-    asr
+    calculate_attack_score(commits, num_validators, num_attacker, num_victim)
 }

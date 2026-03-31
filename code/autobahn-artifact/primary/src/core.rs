@@ -142,6 +142,60 @@ pub struct Core {
     async_delayed_prepare: Option<ConsensusMessage>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AttackType {
+    Frontrun,
+    Backrun,
+    Sandwich,
+}
+
+fn attack_type_from_env() -> AttackType {
+    match std::env::var("ATTACK_TYPE")
+        .unwrap_or_else(|_| "frontrun".to_string())
+        .as_str()
+    {
+        "backrun" => AttackType::Backrun,
+        "sandwich" => AttackType::Sandwich,
+        _ => AttackType::Frontrun,
+    }
+}
+
+fn env_usize(name: &str, default: usize) -> usize {
+    std::env::var(name)
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(default)
+}
+
+fn front_attacker_id() -> usize {
+    env_usize("FRONT_ATTACKER_ID", env_usize("ATTACKER_ID", 0))
+}
+
+fn back_attacker_id() -> usize {
+    env_usize("BACK_ATTACKER_ID", env_usize("ATTACKER_ID", 2))
+}
+
+fn victim_id_from_env() -> usize {
+    env_usize("VICTIM_ID", 1)
+}
+
+fn participant_keys(committee: &Committee) -> (Option<PublicKey>, Option<PublicKey>, Option<PublicKey>) {
+    let authorities_vec: Vec<PublicKey> = committee.authorities.keys().copied().collect();
+    (
+        authorities_vec.get(front_attacker_id()).copied(),
+        authorities_vec.get(victim_id_from_env()).copied(),
+        authorities_vec.get(back_attacker_id()).copied(),
+    )
+}
+
+fn delay_actor_pk(committee: &Committee, attack_type: AttackType) -> Option<PublicKey> {
+    let (front_pk, _, back_pk) = participant_keys(committee);
+    match attack_type {
+        AttackType::Frontrun => front_pk,
+        AttackType::Backrun | AttackType::Sandwich => back_pk,
+    }
+}
+
 impl Core {
     #[allow(clippy::too_many_arguments)]
     pub fn spawn(
@@ -281,19 +335,11 @@ impl Core {
         // TIP EXCLUSION ATTACK: Prevent victim headers from being added to tips
         // This prevents victim's latest blocks from being selected as proposals
         let attack_mode = std::env::var("ATTACK_MODE").unwrap_or_default();
+        let attack_type = attack_type_from_env();
         let should_exclude_tip = if attack_mode == "fissure" || attack_mode == "tip_exclusion" {
-            if let Ok(attacker_id_str) = std::env::var("ATTACKER_ID") {
-                let attacker_id: usize = attacker_id_str.parse().unwrap_or(999);
-                let victim_id: usize = std::env::var("VICTIM_ID")
-                    .ok()
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(999);
-                
-                let authorities_vec: Vec<PublicKey> = self.committee.authorities.keys().copied().collect();
-                let attacker_pk = authorities_vec.get(attacker_id).copied();
-                let victim_pk = authorities_vec.get(victim_id).copied();
-                
-                if let (Some(attacker_pk), Some(victim_pk)) = (attacker_pk, victim_pk) {
+            if attack_type != AttackType::Backrun {
+                let (front_pk, victim_pk, _) = participant_keys(&self.committee);
+                if let (Some(attacker_pk), Some(victim_pk)) = (front_pk, victim_pk) {
                     if self.name == attacker_pk && header.origin() == victim_pk {
                         // Calculate exclusion probability (same as proposal exclusion)
                         let committee_size = self.committee.size();
@@ -815,38 +861,20 @@ impl Core {
             // TIMING ATTACK: Accelerate our own certificate sending to get earlier positions
             // SLUGGISH ATTACK: Delay our own certificate sending to lag behind in height
             let attack_mode = std::env::var("ATTACK_MODE").unwrap_or_default();
+            let attack_type = attack_type_from_env();
             let cert = dissemination_cert.as_ref().unwrap();
             
             let should_accelerate = if attack_mode == "fissure" || attack_mode == "timing" {
-                if let Ok(attacker_id_str) = std::env::var("ATTACKER_ID") {
-                    let attacker_id: usize = attacker_id_str.parse().unwrap_or(999);
-                    let authorities_vec: Vec<PublicKey> = self.committee.authorities.keys().copied().collect();
-                    let attacker_pk = authorities_vec.get(attacker_id).copied();
-                    if let Some(attacker_pk) = attacker_pk {
-                        cert.origin() == attacker_pk
-                    } else {
-                        false
-                    }
-                } else {
-                    false
-                }
+                let (front_pk, _, _) = participant_keys(&self.committee);
+                front_pk.map(|pk| cert.origin() == pk).unwrap_or(false)
             } else {
                 false
             };
             
             let should_delay = if attack_mode == "sluggish" {
-                if let Ok(attacker_id_str) = std::env::var("ATTACKER_ID") {
-                    let attacker_id: usize = attacker_id_str.parse().unwrap_or(999);
-                    let authorities_vec: Vec<PublicKey> = self.committee.authorities.keys().copied().collect();
-                    let attacker_pk = authorities_vec.get(attacker_id).copied();
-                    if let Some(attacker_pk) = attacker_pk {
-                        cert.origin() == attacker_pk
-                    } else {
-                        false
-                    }
-                } else {
-                    false
-                }
+                delay_actor_pk(&self.committee, attack_type)
+                    .map(|pk| cert.origin() == pk)
+                    .unwrap_or(false)
             } else {
                 false
             };
@@ -1006,6 +1034,7 @@ impl Core {
                 // ATTACK MODES: Fissure and Leader Support Manipulation
                 // Apply attack to proposals regardless of whether we just set them or they were already set
                 let attack_mode = std::env::var("ATTACK_MODE").unwrap_or_default();
+                let attack_type = attack_type_from_env();
                 
                 // Log attack mode check (only once per slot to avoid spam)
                 if *slot % 100 == 0 {
@@ -1014,19 +1043,9 @@ impl Core {
                 }
                 
                 // FISSURE ATTACK: Quorum-aware exclusion of victim proposals (Bullshark-style)
-                if attack_mode == "fissure" && !proposals.is_empty() {
-                    if let Ok(attacker_id_str) = std::env::var("ATTACKER_ID") {
-                        let attacker_id: usize = attacker_id_str.parse().unwrap_or(999);
-                        let victim_id: usize = std::env::var("VICTIM_ID")
-                            .ok()
-                            .and_then(|s| s.parse().ok())
-                            .unwrap_or(999);
-                        
-                        let authorities_vec: Vec<PublicKey> = self.committee.authorities.keys().copied().collect();
-                        let attacker_pk = authorities_vec.get(attacker_id).copied();
-                        let victim_pk = authorities_vec.get(victim_id).copied();
-                        
-                        if let (Some(attacker_pk), Some(victim_pk)) = (attacker_pk, victim_pk) {
+                if attack_mode == "fissure" && attack_type != AttackType::Backrun && !proposals.is_empty() {
+                        let (front_pk, victim_pk, _) = participant_keys(&self.committee);
+                        if let (Some(attacker_pk), Some(victim_pk)) = (front_pk, victim_pk) {
                             if self.name == attacker_pk {
                                 // Calculate exclusion probability using paper's equation
                                 let committee_size = self.committee.size();
@@ -1098,7 +1117,6 @@ impl Core {
                                 }
                             }
                         }
-                    }
                 }
                 
                 // LEADER SUPPORT MANIPULATION ATTACK: Exclude victim leader proposals and order strategically
@@ -1108,21 +1126,14 @@ impl Core {
                     }
                     
                     if !proposals.is_empty() {
-                        if let Ok(attacker_id_str) = std::env::var("ATTACKER_ID") {
-                            let attacker_id: usize = attacker_id_str.parse().unwrap_or(999);
-                            let victim_id: usize = std::env::var("VICTIM_ID")
-                                .ok()
-                                .and_then(|s| s.parse().ok())
-                                .unwrap_or(999);
-                            
+                        if attack_type != AttackType::Backrun {
                             let exclusion_prob: f64 = std::env::var("EXCLUSION_PROBABILITY")
                                 .ok()
                                 .and_then(|s| s.parse().ok())
                                 .unwrap_or(0.8); // Higher default for leader support attack
                             
                             let authorities_vec: Vec<PublicKey> = self.committee.authorities.keys().copied().collect();
-                            let attacker_pk = authorities_vec.get(attacker_id).copied();
-                            let victim_pk = authorities_vec.get(victim_id).copied();
+                            let (attacker_pk, victim_pk, _) = participant_keys(&self.committee);
                             
                             if *slot % 100 == 0 {
                                 log::info!("🔍 LEADER_SUPPORT: self.name={:?}, attacker_pk={:?}, victim_pk={:?}", 

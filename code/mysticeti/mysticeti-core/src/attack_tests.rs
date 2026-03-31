@@ -24,11 +24,125 @@ use crate::types::RoundNumber;
 use std::env;
 use std::time::Duration;
 use rand::Rng;
+use std::collections::BTreeMap;
 use tokio::sync::mpsc;
 use tracing::{info, warn};
 
     // Default constants (used as fallbacks)
     const DEFAULT_NUM_VALIDATORS: usize = 13;
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    enum AttackType {
+        Frontrun,
+        Backrun,
+        Sandwich,
+    }
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    enum NodeRole {
+        FrontAttacker,
+        Victim,
+        BackAttacker,
+        Honest,
+    }
+
+    #[derive(Clone, Debug)]
+    struct AttackLayout {
+        front_attackers: std::ops::Range<usize>,
+        victims: std::ops::Range<usize>,
+        back_attackers: std::ops::Range<usize>,
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    struct BlockRecord {
+        author: usize,
+        position: usize,
+        round: RoundNumber,
+    }
+
+    impl AttackType {
+        fn from_env() -> Self {
+            match env::var("ATTACK_TYPE")
+                .unwrap_or_else(|_| "frontrun".to_string())
+                .as_str()
+            {
+                "backrun" => Self::Backrun,
+                "sandwich" => Self::Sandwich,
+                _ => Self::Frontrun,
+            }
+        }
+    }
+
+    impl AttackLayout {
+        fn new(n: usize, num_attackers: usize, num_victims: usize, attack_type: AttackType) -> Self {
+            match attack_type {
+                AttackType::Frontrun => Self {
+                    front_attackers: 0..num_attackers,
+                    victims: n.saturating_sub(num_victims)..n,
+                    back_attackers: 0..0,
+                },
+                AttackType::Backrun => Self {
+                    front_attackers: 0..0,
+                    victims: 0..num_victims,
+                    back_attackers: num_victims..num_victims + num_attackers,
+                },
+                AttackType::Sandwich => {
+                    let front = num_attackers / 2;
+                    let back = num_attackers - front;
+                    let victims_start = front;
+                    let back_start = victims_start + num_victims;
+                    Self {
+                        front_attackers: 0..front,
+                        victims: victims_start..victims_start + num_victims,
+                        back_attackers: back_start..back_start + back,
+                    }
+                }
+            }
+        }
+
+        fn role(&self, node: usize) -> NodeRole {
+            if self.front_attackers.contains(&node) {
+                NodeRole::FrontAttacker
+            } else if self.victims.contains(&node) {
+                NodeRole::Victim
+            } else if self.back_attackers.contains(&node) {
+                NodeRole::BackAttacker
+            } else {
+                NodeRole::Honest
+            }
+        }
+    }
+
+    fn histogram_json(histogram: &BTreeMap<String, usize>) -> String {
+        let parts = histogram
+            .iter()
+            .map(|(gap, count)| format!("\"{}\":{}", gap, count))
+            .collect::<Vec<_>>();
+        format!("{{{}}}", parts.join(","))
+    }
+
+    fn attack_mode() -> String {
+        env::var("ATTACK_MODE").unwrap_or_default()
+    }
+
+    fn allowed_round_gap(mode: &str) -> i64 {
+        if mode == "sluggish" {
+            6
+        } else {
+            0
+        }
+    }
+
+    fn sandwich_gap_k() -> usize {
+        env::var("SANDWICH_GAP_K")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0)
+    }
+
+    fn sandwich_metric_mode() -> String {
+        env::var("SANDWICH_METRIC_MODE").unwrap_or_else(|_| "strict".to_string())
+    }
 
     fn get_counts() -> (usize, usize, usize) {
         let n = env::var("NUM_NODES")
@@ -125,71 +239,240 @@ use tracing::{info, warn};
             warn!("No commits to analyze");
             return 0.0;
         }
-        
-        // Build global ordering from all commits
+
+        let attack_type = AttackType::from_env();
+        let mode = attack_mode();
+        let round_gap = allowed_round_gap(&mode);
+        let layout = AttackLayout::new(n, num_attacker, num_victim, attack_type);
+
         let mut global_order = Vec::new();
         for commit in commits {
             for block in commit.blocks.iter() {
-                global_order.push((block.author(), block.round()));
+                global_order.push(BlockRecord {
+                    author: block.author() as usize,
+                    position: global_order.len(),
+                    round: block.round(),
+                });
             }
         }
-        
+
         info!("Global order contains {} blocks", global_order.len());
-        
-        // Identify attacker and victim blocks
-        // Attackers are first NUM_ATTACKER nodes (indices 0 to NUM_ATTACKER-1)
-        // Victims are last NUM_VICTIM nodes (indices NUM_VALIDATORS-NUM_VICTIM to NUM_VALIDATORS-1)
-        let mut attacker_positions = Vec::new();
-        let mut victim_positions = Vec::new();
-        
-        for (pos, (author, round)) in global_order.iter().enumerate() {
-            let author_index = *author as usize;
-            if author_index < num_attacker {
-                attacker_positions.push((pos, *round));
-            } else if author_index >= n - num_victim {
-                victim_positions.push((pos, *round));
+
+        if attack_type == AttackType::Frontrun {
+            let attacker_positions = global_order
+                .iter()
+                .filter(|record| layout.role(record.author) == NodeRole::FrontAttacker)
+                .map(|record| (record.position, record.round))
+                .collect::<Vec<_>>();
+            let victim_positions = global_order
+                .iter()
+                .filter(|record| layout.role(record.author) == NodeRole::Victim)
+                .map(|record| (record.position, record.round))
+                .collect::<Vec<_>>();
+
+            info!("Attacker blocks: {}", attacker_positions.len());
+            info!("Victim blocks: {}", victim_positions.len());
+
+            if attacker_positions.is_empty() || victim_positions.is_empty() {
+                warn!("Missing attacker or victim blocks");
+                return 0.0;
             }
-        }
-        
-        info!("Attacker blocks: {}", attacker_positions.len());
-        info!("Victim blocks: {}", victim_positions.len());
-        
-        if attacker_positions.is_empty() || victim_positions.is_empty() {
-            warn!("Missing attacker or victim blocks");
-            return 0.0;
-        }
-        
-        // Count successful frontrunning (attacker before victim)
-        // This measures: Ba ≺C Bv (attacker block ordered before victim block)
-        let mut successes = 0;
-        let mut total_pairs = 0;
-        
-        for (att_pos, _att_round) in &attacker_positions {
-            for (vic_pos, _vic_round) in &victim_positions {
-                total_pairs += 1;
-                
-                // Success: attacker ordered before victim (Ba ≺C Bv)
-                if att_pos < vic_pos {
-                    successes += 1;
+
+            let mut successes = 0usize;
+            let mut total_pairs = 0usize;
+            for (att_pos, _att_round) in &attacker_positions {
+                for (vic_pos, _vic_round) in &victim_positions {
+                    total_pairs += 1;
+                    if att_pos < vic_pos {
+                        successes += 1;
+                    }
                 }
             }
+
+            if total_pairs == 0 {
+                warn!("No comparable block pairs found");
+                return 0.0;
+            }
+
+            let asr = (successes as f64 / total_pairs as f64) * 100.0;
+            info!("📊 ASR Analysis (Block-Pair Ordering):");
+            info!("  Total pairs: {}", total_pairs);
+            info!("  Successful frontrunning pairs: {} ({:.1}%)", successes, asr);
+            info!("  Attacker blocks: {}", attacker_positions.len());
+            info!("  Victim blocks: {}", victim_positions.len());
+            info!("  Expected attacker ratio (stake): ~{:.1}%", (num_attacker as f64 / n as f64) * 100.0);
+            println!("FINAL_ASR_RESULT: {:.2}%", asr);
+            return asr;
         }
-        
-        if total_pairs == 0 {
-            warn!("No comparable block pairs found");
+
+        let victims = global_order
+            .iter()
+            .copied()
+            .filter(|record| layout.role(record.author) == NodeRole::Victim)
+            .collect::<Vec<_>>();
+        let front_attackers = global_order
+            .iter()
+            .copied()
+            .filter(|record| layout.role(record.author) == NodeRole::FrontAttacker)
+            .collect::<Vec<_>>();
+        let back_attackers = global_order
+            .iter()
+            .copied()
+            .filter(|record| layout.role(record.author) == NodeRole::BackAttacker)
+            .collect::<Vec<_>>();
+
+        if victims.is_empty() {
+            warn!("Missing victim blocks");
             return 0.0;
         }
-        
-        let asr = (successes as f64 / total_pairs as f64) * 100.0;
-        info!("📊 ASR Analysis (Block-Pair Ordering):");
-        info!("  Total pairs: {}", total_pairs);
-        info!("  Successful frontrunning pairs: {} ({:.1}%)", successes, asr);
-        info!("  Attacker blocks: {}", attacker_positions.len());
-        info!("  Victim blocks: {}", victim_positions.len());
-        info!("  Expected attacker ratio (stake): ~{:.1}%", (num_attacker as f64 / n as f64) * 100.0);
-        
-        info!("FINAL_ASR_RESULT: {}%", asr);
-        asr
+
+        if attack_type == AttackType::Backrun {
+            if back_attackers.is_empty() {
+                warn!("Missing back attacker blocks");
+                return 0.0;
+            }
+
+            let mut histogram: BTreeMap<String, usize> = BTreeMap::new();
+            let mut successful_victims = 0usize;
+            let mut l1_successes = 0usize;
+            let mut l2_successes = 0usize;
+
+            for victim in &victims {
+                let best_gap = back_attackers
+                    .iter()
+                    .filter(|attacker| attacker.position > victim.position)
+                    .filter(|attacker| {
+                        let diff = attacker.round as i64 - victim.round as i64;
+                        diff >= 0 && diff <= round_gap
+                    })
+                    .map(|attacker| attacker.position - victim.position)
+                    .min();
+
+                if let Some(gap) = best_gap {
+                    successful_victims += 1;
+                    if gap == 1 {
+                        l1_successes += 1;
+                    }
+                    if gap <= 2 {
+                        l2_successes += 1;
+                    }
+                    let bucket = if gap >= 10 {
+                        "10+".to_string()
+                    } else {
+                        gap.to_string()
+                    };
+                    *histogram.entry(bucket).or_insert(0) += 1;
+                }
+            }
+
+            let total_victims = victims.len();
+            let cumulative_asr = (successful_victims as f64 / total_victims as f64) * 100.0;
+            let l1_asr = (l1_successes as f64 / total_victims as f64) * 100.0;
+            let l2_asr = (l2_successes as f64 / total_victims as f64) * 100.0;
+
+            println!(
+                "FINAL_BACKRUN_STATS: {{\"l1_asr\": {:.2}, \"l2_asr\": {:.2}, \"cumulative_asr\": {:.2}, \"histogram\": {}}}",
+                l1_asr,
+                l2_asr,
+                cumulative_asr,
+                histogram_json(&histogram)
+            );
+            println!("FINAL_ASR_RESULT: {:.2}%", cumulative_asr);
+            return cumulative_asr;
+        }
+
+        if front_attackers.is_empty() || back_attackers.is_empty() {
+            warn!("Missing front or back attacker blocks");
+            return 0.0;
+        }
+
+        let metric_mode = sandwich_metric_mode();
+        let gap_k = sandwich_gap_k();
+        let sesr = if metric_mode == "triplet" {
+            let mut successes = 0usize;
+            let mut total_triplets = 0usize;
+            for front in &front_attackers {
+                for victim in &victims {
+                    let front_round_diff = victim.round as i64 - front.round as i64;
+                    if front_round_diff < 0 || front_round_diff > round_gap {
+                        continue;
+                    }
+                    for back in &back_attackers {
+                        let back_round_diff = back.round as i64 - victim.round as i64;
+                        if back_round_diff < 0 || back_round_diff > round_gap {
+                            continue;
+                        }
+                        total_triplets += 1;
+                        if front.position < victim.position && victim.position < back.position {
+                            successes += 1;
+                        }
+                    }
+                }
+            }
+
+            if total_triplets == 0 {
+                warn!("No comparable sandwich triplets found");
+                0.0
+            } else {
+                let sesr = (successes as f64 / total_triplets as f64) * 100.0;
+                println!(
+                    "FINAL_SANDWICH_STATS: {{\"sesr\": {:.2}, \"successful_triplets\": {}, \"total_triplets\": {}, \"metric_mode\": \"{}\"}}",
+                    sesr,
+                    successes,
+                    total_triplets,
+                    metric_mode
+                );
+                sesr
+            }
+        } else {
+            let mut sandwiched_victims = 0usize;
+            let window = gap_k + 1;
+            let position_to_record = global_order
+                .iter()
+                .map(|record| (record.position, *record))
+                .collect::<BTreeMap<_, _>>();
+            for victim in &victims {
+                let front_found = (1..=window).any(|distance| {
+                    victim
+                        .position
+                        .checked_sub(distance)
+                        .and_then(|pos| position_to_record.get(&pos))
+                        .is_some_and(|record| {
+                            let round_diff = victim.round as i64 - record.round as i64;
+                            layout.role(record.author) == NodeRole::FrontAttacker
+                                && round_diff >= 0
+                                && round_diff <= round_gap
+                        })
+                });
+                let back_found = (1..=window).any(|distance| {
+                    position_to_record
+                        .get(&(victim.position + distance))
+                        .is_some_and(|record| {
+                            let round_diff = record.round as i64 - victim.round as i64;
+                            layout.role(record.author) == NodeRole::BackAttacker
+                                && round_diff >= 0
+                                && round_diff <= round_gap
+                        })
+                });
+
+                if front_found && back_found {
+                    sandwiched_victims += 1;
+                }
+            }
+
+            let sesr = (sandwiched_victims as f64 / victims.len() as f64) * 100.0;
+            println!(
+                "FINAL_SANDWICH_STATS: {{\"sesr\": {:.2}, \"sandwiched_victims\": {}, \"total_victims\": {}, \"gap_k\": {}, \"metric_mode\": \"{}\"}}",
+                sesr,
+                sandwiched_victims,
+                victims.len(),
+                gap_k,
+                metric_mode
+            );
+            sesr
+        };
+        println!("FINAL_ASR_RESULT: {:.2}%", sesr);
+        sesr
     }
 
     fn get_pair_ids(n: usize) -> (usize, usize) {

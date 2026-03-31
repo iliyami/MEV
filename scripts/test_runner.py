@@ -10,6 +10,7 @@ Usage:
 """
 
 import argparse
+import json
 import os
 import re
 import subprocess
@@ -50,6 +51,7 @@ yaml = _get_working_yaml()
 BASE_DIR = Path(__file__).parent.parent
 CODE_DIR = BASE_DIR / "code"
 RESULTS_DIR = BASE_DIR / "results"
+BUILD_CACHE_DIR = BASE_DIR / ".build-cache"
 
 
 def get_docker_resource_limits() -> tuple[float | None, int | None]:
@@ -112,6 +114,29 @@ def load_config(config_path: str) -> dict:
         return yaml.safe_load(f)
 
 
+def extract_final_json_marker(output: str, marker: str) -> dict:
+    matches = [
+        line.split(marker, 1)[1].strip()
+        for line in output.splitlines()
+        if marker in line
+    ]
+    if not matches:
+        return {}
+    try:
+        return json.loads(matches[-1])
+    except json.JSONDecodeError:
+        return {}
+
+
+def load_result_output(results_mount: Path) -> str:
+    parts = []
+    for filename in ("test_output.log", "asr_output.log"):
+        path = results_mount / filename
+        if path.exists():
+            parts.append(path.read_text(errors="replace"))
+    return "\n".join(parts)
+
+
 def build_docker_image(config: dict) -> bool:
     """Build the Docker image for the specified protocol."""
     protocol = config['protocol']['name']
@@ -156,6 +181,9 @@ def run_attack_test(config: dict) -> dict:
     RESULTS_DIR.mkdir(exist_ok=True)
     results_mount = RESULTS_DIR / config['experiment']['name']
     results_mount.mkdir(exist_ok=True)
+    BUILD_CACHE_DIR.mkdir(exist_ok=True)
+    target_cache_mount = BUILD_CACHE_DIR / f"{config['protocol']['name']}-target"
+    target_cache_mount.mkdir(exist_ok=True)
     
     print(f"\nRunning attack test: {test_name}")
     print(f"  Image: {tag}")
@@ -167,6 +195,10 @@ def run_attack_test(config: dict) -> dict:
     asr_file = results_mount / "asr_result.txt"
     if asr_file.exists():
         asr_file.unlink()
+    for stale_name in ("test_output.log", "asr_output.log"):
+        stale_path = results_mount / stale_name
+        if stale_path.exists():
+            stale_path.unlink()
     
     # Build docker run command
     protocol_path = CODE_DIR / config['protocol']['path']
@@ -179,6 +211,9 @@ def run_attack_test(config: dict) -> dict:
         "--label", f"mev.protocol={config['protocol']['name']}",
         "--label", f"mev.experiment={config['experiment']['name']}",
     ]
+
+    if config['protocol']['name'] != "autobahn":
+        cmd.extend(["-v", f"{target_cache_mount}:/app/target"])
 
     # Mount local fixed scripts over the container's scripts to avoid rebuilds
     # Protocol-specific script mappings
@@ -250,9 +285,9 @@ def run_attack_test(config: dict) -> dict:
     
     # Add protocol-specific command to override Dockerfile CMD
     if config['protocol']['name'] == "mysticeti":
-        cmd.append("/app/docker/mev-test/run_attack_test.sh")
+        cmd.extend(["bash", "/app/docker/mev-test/run_attack_test.sh"])
     elif config['protocol']['name'] in ["alephbft", "autobahn"]:
-        cmd.append("/app/run_attack_test.sh")
+        cmd.extend(["bash", "/app/run_attack_test.sh"])
     
     print(f"  Command: {' '.join(cmd[:10])}...")
     
@@ -260,16 +295,33 @@ def run_attack_test(config: dict) -> dict:
     
     # Parse results
     asr_file = results_mount / "asr_result.txt"
+    combined_output = load_result_output(results_mount)
     if asr_file.exists():
         with open(asr_file, 'r') as f:
             content = f.read()
             if "FINAL_ASR=" in content:
                 asr_value = content.split("=")[1].strip()
                 if asr_value == "UNKNOWN":
-                    return {"asr": "UNKNOWN", "success": False}
-                return {"asr": asr_value, "success": True}
-    
-    return {"asr": "UNKNOWN", "success": False}
+                    return {"asr": "UNKNOWN", "success": False, "output": combined_output}
+                return {
+                    "asr": asr_value,
+                    "success": True,
+                    "output": combined_output,
+                    "backrun_stats": extract_final_json_marker(combined_output, "FINAL_BACKRUN_STATS:"),
+                    "sandwich_stats": extract_final_json_marker(combined_output, "FINAL_SANDWICH_STATS:"),
+                }
+
+    asr = extract_final_asr(combined_output)
+    if asr != "N/A":
+        return {
+            "asr": asr,
+            "success": result.returncode == 0,
+            "output": combined_output,
+            "backrun_stats": extract_final_json_marker(combined_output, "FINAL_BACKRUN_STATS:"),
+            "sandwich_stats": extract_final_json_marker(combined_output, "FINAL_SANDWICH_STATS:"),
+        }
+
+    return {"asr": "UNKNOWN", "success": False, "output": combined_output}
 
 
 def extract_final_asr(output: str) -> str:
@@ -288,25 +340,51 @@ def extract_final_asr(output: str) -> str:
 
 def run_local_test(config: dict) -> dict:
     """Run the attack test locally with cargo test."""
-    test_name = config['test']['test_name']
     env_vars = config['environment']
+    protocol_name = config['protocol']['name']
+    attack_mode = env_vars.get('ATTACK_MODE', 'fissure')
+
+    dynamic_test_names = {
+        "bullshark": {
+            "fissure": "test_fissure_attack_asr_dynamic",
+            "speculative": "test_speculative_attack_asr_dynamic",
+            "sluggish": "test_sluggish_attack_asr_dynamic",
+            "baseline": "test_baseline_13_nodes_no_attack",
+        },
+        "alephbft": {
+            "fissure": "test_fissure_attack_asr_13_nodes",
+            "speculative": "test_speculative_attack_asr_13_nodes",
+            "sluggish": "test_sluggish_attack_asr_13_nodes",
+            "baseline": "test_baseline_asr_13_nodes_no_attack",
+        },
+        "mysticeti": {
+            "fissure": "test_fissure_attack_asr_13_nodes",
+            "speculative": "test_speculative_attack_asr_13_nodes",
+            "sluggish": "test_sluggish_attack_asr_13_nodes",
+            "baseline": "test_baseline_asr_13_nodes",
+        },
+    }
+
+    test_name = dynamic_test_names.get(protocol_name, {}).get(
+        attack_mode,
+        config['test'].get('test_name', config['experiment']['name']),
+    )
     
     # Path to bullshark code
     protocol_path = CODE_DIR / config['protocol']['path']
     
     print(f"\nRunning local attack test: {test_name}")
-    print(f"  Attack Mode: {env_vars.get('ATTACK_MODE', 'unknown')}")
+    print(f"  Attack Mode: {attack_mode}")
     print(f"  CWD: {protocol_path}")
     
     # Determine if we should use cargo test or a script
     is_script = protocol_path.name == "mahi-mahi-consensus" or config['protocol'].get('use_scripts', False)
     
     if is_script:
-        attack_mode = env_vars.get('ATTACK_MODE', 'fissure')
         script_path = f"./scripts/legacy_automation/automated_{attack_mode}_attack.sh"
         cmd = ["bash", script_path]
     else:
-        if config['protocol']['name'] == "alephbft":
+        if protocol_name == "alephbft":
             package_name = "aleph-bft"
         else:
             package_name = config['protocol'].get('package_name', 'consensus-core')
@@ -350,7 +428,9 @@ def run_local_test(config: dict) -> dict:
     return {
         "asr": asr, 
         "success": result.returncode == 0 and asr != "N/A",
-        "output": output # Sweeper might need this for logging
+        "output": output, # Sweeper might need this for logging
+        "backrun_stats": extract_final_json_marker(output, "FINAL_BACKRUN_STATS:"),
+        "sandwich_stats": extract_final_json_marker(output, "FINAL_SANDWICH_STATS:"),
     }
 
 
@@ -427,6 +507,10 @@ def main():
     
     # Explicitly print ASR so sweeper can pick it up
     print(f"FINAL_ASR_RESULT: {result['asr']}%")
+    if result.get("backrun_stats"):
+        print(f"FINAL_BACKRUN_STATS: {json.dumps(result['backrun_stats'], sort_keys=True)}")
+    if result.get("sandwich_stats"):
+        print(f"FINAL_SANDWICH_STATS: {json.dumps(result['sandwich_stats'], sort_keys=True)}")
 
     # Verify parity
     if verify_parity(config, result):

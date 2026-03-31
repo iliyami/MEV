@@ -1,6 +1,7 @@
 import argparse
 import sys
 import os
+import json
 
 # Robust YAML import to avoid shadowing by local folders or broken venv
 def _get_working_yaml():
@@ -43,26 +44,59 @@ DEFAULT_RESULTS_FILE = "experiment_results.csv"
 
 # --- GLOBAL FIELDNAMES ---
 FIELDNAMES = [
-    "timestamp", "protocol", "experiment", "attack_mode", "rep", "asr", "duration", "exit_code", 
-    "NUM_NODES", "ATTACKER_RATIO", "SPECULATIVE_P_MAX", "SLUGGISH_TIMEOUT_MULTIPLIER", "SLUGGISH_MULTIPLIER",
+    "timestamp", "protocol", "experiment", "attack_mode", "attack_type", "rep", "asr", "asr_l1", "asr_l2", "asr_histogram", "duration", "exit_code", 
+    "NUM_NODES", "ATTACKER_RATIO", "ATTACKER_ID", "FRONT_ATTACKER_ID", "BACK_ATTACKER_ID", "VICTIM_ID", "SPECULATIVE_P_MAX", "SLUGGISH_TIMEOUT_MULTIPLIER", "SLUGGISH_MULTIPLIER",
     "DAG_STATE_CACHED_ROUNDS", "SYNC_TIMEOUT_MS", "GC_DEPTH", "LATENCY_JITTER", "LATENCY_MS", "JITTER_MS",
     "HEADER_SIZE", "MAX_HEADER_DELAY", "BATCH_SIZE", "MAX_BATCH_DELAY", "NUM_WORKERS",
     "WAVE_LENGTH", "NUMBER_OF_LEADERS", "SPECULATIVE_STRATEGY", "EXCLUSION_PROBABILITY", "HYBRID_EXCLUSION", 
-    "SIMPLE_EXCLUSION_PROB", "VICTIM_RATIO", "VICTIM_COUNT", "ALEPH_ELECTION_LOOKAHEAD", "ALEPH_COORD_REQUEST_DELAY_MS", "ALEPH_HASH_SORT_SEED",
+    "SIMPLE_EXCLUSION_PROB", "VICTIM_RATIO", "VICTIM_COUNT", "ATTACK_TYPE", "SANDWICH_METRIC_MODE", "ALEPH_ELECTION_LOOKAHEAD", "ALEPH_COORD_REQUEST_DELAY_MS", "ALEPH_HASH_SORT_SEED",
     "AUTOBAHN_K", "AUTOBAHN_FAST_PATH_TIMEOUT", "AUTOBAHN_USE_FAST_PATH"
 ]
 
 # Keys that define the experiment's unique configuration (for deduplication)
 # Excludes metadata like timestamp, asr, etc.
-PARAM_KEYS = [k for k in FIELDNAMES if k not in ["timestamp", "protocol", "experiment", "attack_mode", "rep", "asr", "duration", "exit_code"]]
+PARAM_KEYS = [
+    k
+    for k in FIELDNAMES
+    if k
+    not in [
+        "timestamp",
+        "protocol",
+        "experiment",
+        "attack_mode",
+        "attack_type",
+        "rep",
+        "asr",
+        "asr_l1",
+        "asr_l2",
+        "asr_histogram",
+        "duration",
+        "exit_code",
+    ]
+]
 
-INVALID_ASR_VALUES = {"", "N/A", "0.0", "0.00", "0", "0%"}
+INVALID_ASR_VALUES = {"", "N/A"}
+
+
+def is_success_exit_code(value):
+    try:
+        return int(value) == 0
+    except (TypeError, ValueError):
+        return False
+
+
+def is_recordable_result(asr_value, exit_code):
+    return is_valid_asr(asr_value) and is_success_exit_code(exit_code)
 
 # Define the Experiment Matrix
 # Each key acts as a "dimension" we can sweep over independently.
 # When sweeping one dimension, others stay at their default (index 0).
 
 EXPERIMENTS = {
+    "simple": {
+        "params": ["NUM_NODES"],
+        "values": [[13]]
+    },
     # 1. Global Scaling
     "scaling": {
         "params": ["NUM_NODES"],
@@ -326,6 +360,23 @@ def extract_final_asr(output):
     return matches[-1].rstrip("%").strip()
 
 
+def extract_final_json_marker(output, marker):
+    import json
+
+    matches = [
+        line.split(marker, 1)[1].strip()
+        for line in output.splitlines()
+        if marker in line
+    ]
+    if not matches:
+        return {}
+
+    try:
+        return json.loads(matches[-1])
+    except json.JSONDecodeError:
+        return {}
+
+
 def cleanup_protocol_containers(config, reason=None):
     tag = config.get('docker', {}).get('tag')
     if not tag:
@@ -371,6 +422,7 @@ def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_p
         config['environment'][k] = str(v)
     
     config['environment']['ATTACK_MODE'] = attack_mode
+    config['environment']['ATTACK_TYPE'] = str(config_override.get("ATTACK_TYPE", os.environ.get("ATTACK_TYPE", "frontrun")))
     num_nodes = int(config_override.get('NUM_NODES', config['environment'].get('NUM_NODES', 13)))
     duration = int(config['environment'].get('DURATION', 120))
     # STOCHASTIC DURATION: Add 0-20s jitter to break block-count determinism
@@ -480,6 +532,10 @@ def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_p
 
     # 3. Parse ASR
     asr = extract_final_asr(output)
+    backrun_stats = extract_final_json_marker(output, "FINAL_BACKRUN_STATS:")
+    sandwich_stats = extract_final_json_marker(output, "FINAL_SANDWICH_STATS:")
+    if sandwich_stats:
+        asr = normalize_param_value(sandwich_stats.get("sesr", asr))
     
     # Save log for debugging
     with open(log_file, "w") as f:
@@ -502,8 +558,14 @@ def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_p
         "protocol": config['protocol']['name'],
         "experiment": exp_name,
         "attack_mode": attack_mode,
+        "attack_type": config['environment'].get('ATTACK_TYPE', 'frontrun'),
         "rep": rep_id,
         "asr": asr,
+        "asr_l1": backrun_stats.get("l1_asr", ""),
+        "asr_l2": backrun_stats.get("l2_asr", ""),
+        "asr_histogram": json.dumps(backrun_stats.get("histogram", ""), sort_keys=True)
+        if isinstance(backrun_stats.get("histogram", ""), (dict, list))
+        else backrun_stats.get("histogram", ""),
         "duration": duration,
         "exit_code": exit_code,
         **config_override
@@ -517,9 +579,8 @@ def load_existing_results(results_file):
     with open(results_file, 'r') as f:
         reader = csv.DictReader(f)
         for row in reader:
-            # ONLY skip if we actually got a valid ASR result (0.0 is often a simulation failure)
             asr_val = row.get('asr', "N/A")
-            if is_valid_asr(asr_val):
+            if is_recordable_result(asr_val, row.get('exit_code', "")):
                 key = build_result_key(row['protocol'], row['experiment'], row['attack_mode'], row['rep'], row)
                 results.add(key)
     return results
@@ -541,14 +602,15 @@ def deduplicate_results(results_file):
         for row in reader:
             key = build_result_key(row['protocol'], row['experiment'], row['attack_mode'], row['rep'], row)
             
-            # Keep the latest entry, but prioritize successful ones over N/A/0.0
             asr_val = row.get('asr', "N/A")
-            is_valid = is_valid_asr(asr_val)
+            is_valid = is_recordable_result(asr_val, row.get('exit_code', ""))
             
             if is_valid:
-                if key not in unique_results or not is_valid_asr(unique_results[key].get('asr')):
+                if key not in unique_results or not is_recordable_result(
+                    unique_results[key].get('asr'),
+                    unique_results[key].get('exit_code', ""),
+                ):
                     unique_results[key] = row
-            # If not valid, only keep if we don't have anything better (allows seeing failure but won't block re-runs)
             elif key not in unique_results:
                  unique_results[key] = row
 
@@ -562,6 +624,29 @@ def deduplicate_results(results_file):
     
     print(f"Deduplicated {results_file}: Kept {len(unique_results)} unique entries.")
 
+
+def ensure_results_header(results_file):
+    if not os.path.exists(results_file):
+        return
+    if os.path.getsize(results_file) == 0:
+        return
+
+    with open(results_file, "r", newline="") as f:
+        first_line = f.readline()
+
+    if first_line.startswith("timestamp,"):
+        return
+
+    with open(results_file, "r", newline="") as f:
+        body = f.read()
+
+    with open(results_file, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(FIELDNAMES)
+        f.write(body)
+
+    print(f"Normalized headerless results file: {results_file}")
+
 def main():
     parser = argparse.ArgumentParser(description="Multi-Attack Parameter Sweeper")
     parser.add_argument("--config", default=DEFAULT_BASE_CONFIG, help="Base YAML config (default: grand_experiment.yaml)")
@@ -569,11 +654,13 @@ def main():
     parser.add_argument("--local", action="store_true", help="Run tests locally via cargo instead of Docker")
     parser.add_argument("--out", default=DEFAULT_RESULTS_FILE, help=f"Output CSV file for results (default: {DEFAULT_RESULTS_FILE})")
     parser.add_argument("--no-build", action="store_true", help="Skip building binary inside Docker (use existing)")
+    parser.add_argument("--type", default="frontrun", choices=["frontrun", "backrun", "sandwich"], help="MEV attack type")
     args = parser.parse_args()
 
     results_file = args.out
 
     # 0. Clean up and load existing progress
+    ensure_results_header(results_file)
     deduplicate_results(results_file)
     existing_results = load_existing_results(results_file)
     print(f"Loaded {len(existing_results)} existing results. Resuming...")
@@ -583,7 +670,7 @@ def main():
     repetitions = int(config.get('test', {}).get('REPETITIONS', 1))
 
     # Initialize CSV
-    file_exists = os.path.exists(results_file)
+    file_exists = os.path.exists(results_file) and os.path.getsize(results_file) > 0
     target_protocol = config['protocol']['name']
     with open(results_file, 'a', newline='') as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=FIELDNAMES, extrasaction='ignore')
@@ -653,6 +740,9 @@ def main():
                 override = {}
                 for i, param in enumerate(params):
                     override[param] = values[i]
+                override["ATTACK_TYPE"] = args.type
+                if args.type == "sandwich" and os.environ.get("SANDWICH_METRIC_MODE"):
+                    override["SANDWICH_METRIC_MODE"] = os.environ["SANDWICH_METRIC_MODE"]
 
                 # Skip 100 nodes for mahimahi protocol to avoid consensus stalls
                 # Other protocols (Bullshark/Narwhal) handle 100 nodes fine
@@ -695,13 +785,17 @@ def main():
                     
                     # ONLY record if we got a non-zero ASR (0.0 usually means simulation liveness failure)
                     asr_result = str(data.get('asr', '0.0'))
-                    if is_valid_asr(asr_result):
+                    exit_code = data.get('exit_code', "")
+                    if is_recordable_result(asr_result, exit_code):
                         writer.writerow(data)
                         csvfile.flush() # CRITICAL: Write to disk immediately
                         os.fsync(csvfile.fileno()) # Force OS to flush buffers
                         existing_results.add(build_result_key(target_protocol, exp_name, target_attack, r, data))
                     else:
-                        print(f"  [!] Not recording result with ASR={asr_result}% (Likely simulation failure)")
+                        print(
+                            f"  [!] Not recording result with ASR={asr_result}% and exit={exit_code} "
+                            "(Likely simulation failure)"
+                        )
 
                     # Wait between repetitions to allow Docker/OS cleanup or socket release
                     if "mahi" in target_protocol.lower():

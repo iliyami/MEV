@@ -6,9 +6,12 @@ set -e
 
 # Default values
 ATTACK_MODE=${ATTACK_MODE:-"fissure"}
+ATTACK_TYPE=${ATTACK_TYPE:-"frontrun"}
 NUM_NODES=${NUM_NODES:-"13"}
 DURATION=${DURATION:-"60"}
 ATTACKER_ID=${ATTACKER_ID:-"0"}
+FRONT_ATTACKER_ID=${FRONT_ATTACKER_ID:-${ATTACKER_ID}}
+BACK_ATTACKER_ID=${BACK_ATTACKER_ID:-"2"}
 VICTIM_ID=${VICTIM_ID:-"1"}
 EXCLUSION_PROBABILITY=${EXCLUSION_PROBABILITY:-"1.0"}
 VICTIM_DELAY_MS=${VICTIM_DELAY_MS:-"50"}
@@ -17,8 +20,10 @@ AUTOBAHN_K=${AUTOBAHN_K:-"4"}
 
 echo "--- Autobahn Attack Test Configuration ---"
 echo "Mode: $ATTACK_MODE"
+echo "Attack Type: $ATTACK_TYPE"
 echo "Nodes: $NUM_NODES"
-echo "Attacker: $ATTACKER_ID"
+echo "Front Attacker: $FRONT_ATTACKER_ID"
+echo "Back Attacker: $BACK_ATTACKER_ID"
 echo "Victim: $VICTIM_ID"
 echo "Duration: $DURATION s"
 echo "K: $AUTOBAHN_K"
@@ -96,11 +101,24 @@ for i in $(seq 0 $(($NUM_NODES - 1))); do
     # Base command
     CMD="$NODE_BIN -vv run --keys .node-$i.json --committee .committee.json --store .db-primary-$i --parameters .parameters.json primary"
     
-    # Add attack environment variables if node is attacker
-    if [ "$ATTACK_MODE" != "baseline" ] && [ "$i" -eq "$ATTACKER_ID" ]; then
+    SHOULD_INJECT_ATTACK_ENV=0
+    if [ "$ATTACK_MODE" != "baseline" ]; then
+        if [ "$ATTACK_TYPE" = "backrun" ] && [ "$i" -eq "$BACK_ATTACKER_ID" ]; then
+            SHOULD_INJECT_ATTACK_ENV=1
+        elif [ "$ATTACK_TYPE" = "sandwich" ] && { [ "$i" -eq "$FRONT_ATTACKER_ID" ] || [ "$i" -eq "$BACK_ATTACKER_ID" ]; }; then
+            SHOULD_INJECT_ATTACK_ENV=1
+        elif [ "$ATTACK_TYPE" = "frontrun" ] && [ "$i" -eq "$FRONT_ATTACKER_ID" ]; then
+            SHOULD_INJECT_ATTACK_ENV=1
+        fi
+    fi
+
+    if [ "$SHOULD_INJECT_ATTACK_ENV" -eq 1 ]; then
         echo "🔧 Starting attacker node $i"
         ATTACK_MODE=$ATTACK_MODE \
+        ATTACK_TYPE=$ATTACK_TYPE \
         ATTACKER_ID=$ATTACKER_ID \
+        FRONT_ATTACKER_ID=$FRONT_ATTACKER_ID \
+        BACK_ATTACKER_ID=$BACK_ATTACKER_ID \
         VICTIM_ID=$VICTIM_ID \
         EXCLUSION_PROBABILITY=$EXCLUSION_PROBABILITY \
         VICTIM_DELAY_MS=$VICTIM_DELAY_MS \
@@ -144,10 +162,15 @@ cleanup
 echo "Calculating ASR..."
 # The script expects primary logs
 PRIMARY_LOGS=$(ls logs/primary-*.log)
+ATTACK_TYPE=$ATTACK_TYPE \
+ATTACKER_ID=$ATTACKER_ID \
+FRONT_ATTACKER_ID=$FRONT_ATTACKER_ID \
+BACK_ATTACKER_ID=$BACK_ATTACKER_ID \
+VICTIM_ID=$VICTIM_ID \
 python3 scripts/calculate-fissure-asr.py $PRIMARY_LOGS > /app/results/asr_output.log 2>&1
 
 # Extract ASR
-ASR=$(grep "FINAL ATTACK SUCCESS RATE (ASR):" /app/results/asr_output.log | tail -n 1 | sed 's/.*ASR): \([0-9.]*\)%/\1/')
+ASR=$(grep "FINAL_ASR_RESULT:" /app/results/asr_output.log | tail -n 1 | sed -n 's/.*FINAL_ASR_RESULT: \([0-9.]*\)%.*/\1/p')
 
 if [ -z "$ASR" ]; then
     echo "Error: Could not extract ASR from logs."

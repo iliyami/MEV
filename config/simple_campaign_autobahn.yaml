@@ -1,0 +1,35 @@
+experiment:
+  name: "autobahn_simple_campaign"
+  description: "Autobahn simple 13-node MEV campaign"
+
+protocol:
+  name: "autobahn"
+  path: "autobahn-artifact"
+
+docker:
+  tag: "mev-autobahn:latest"
+  cpus: "8.0"
+  memory: "16g"
+
+test:
+  test_name: "test_autobahn_asr"
+  REPETITIONS: 5
+
+environment:
+  NUM_NODES: "13"
+  DURATION: "60"
+  ATTACK_MODE: "fissure"
+  ATTACKER_ID: "0"
+  FRONT_ATTACKER_ID: "0"
+  BACK_ATTACKER_ID: "2"
+  VICTIM_ID: "1"
+  EXCLUSION_PROBABILITY: "1.0"
+  VICTIM_DELAY_MS: "50"
+  SLUGGISH_TIMEOUT_MULTIPLIER: "5.0"
+  AUTOBAHN_K: "4"
+  AUTOBAHN_FAST_PATH_TIMEOUT: "200"
+  AUTOBAHN_USE_FAST_PATH: "true"
+
+output:
+  expected_asr: 50.0
+  tolerance_percent: 100.0

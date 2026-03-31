@@ -123,10 +123,12 @@ pub(crate) struct Core {
     round_tracker: Arc<RwLock<PeerRoundTracker>>,
     // Speculative attack configuration
     attack_mode: String,
+    attack_type: String,
     attacker_ratio: f64,
     victim_ratio: f64,
     speculative_p_max: usize,
     is_attacker: bool,
+    is_back_attacker: bool,
     attack_active: bool,
 }
 
@@ -194,6 +196,7 @@ impl Core {
 
         // --- Speculative attack configuration from environment ---
         let attack_mode = env::var("ATTACK_MODE").unwrap_or_default();
+        let attack_type = env::var("ATTACK_TYPE").unwrap_or_else(|_| "frontrun".to_string());
         let attacker_ratio: f64 = env::var("ATTACKER_RATIO")
             .ok()
             .and_then(|s| s.parse().ok())
@@ -215,8 +218,24 @@ impl Core {
 
         let committee_size = context.committee.size();
         let attacker_count = ((committee_size as f64) * attacker_ratio).floor() as usize;
-        let is_attacker = (attack_mode == "fissure" || attack_mode == "speculative" || attack_mode == "sluggish")
-            && context.own_index.value() < attacker_count;
+        let victim_count = ((committee_size as f64) * victim_ratio).floor() as usize;
+        let own_index = context.own_index.value();
+        let (is_attacker, is_back_attacker) = match attack_type.as_str() {
+            "backrun" => {
+                let back_start = victim_count;
+                let back = own_index >= back_start && own_index < (back_start + attacker_count);
+                (back, back)
+            }
+            "sandwich" => {
+                let front_count = attacker_count / 2;
+                let back_count = attacker_count - front_count;
+                let back_start = front_count + victim_count;
+                let front = own_index < front_count;
+                let back = own_index >= back_start && own_index < (back_start + back_count);
+                (front || back, back)
+            }
+            _ => (own_index < attacker_count, false),
+        };
         let attack_active = attack_mode == "fissure" || attack_mode == "speculative" || attack_mode == "sluggish";
         
         let sluggish_timeout_multiplier: f64 = env::var("SLUGGISH_TIMEOUT_MULTIPLIER")
@@ -245,10 +264,12 @@ impl Core {
             ancestor_state_manager,
             round_tracker,
             attack_mode,
+            attack_type,
             attacker_ratio,
             victim_ratio,
             speculative_p_max,
             is_attacker,
+            is_back_attacker,
             attack_active,
             sluggish_timeout_multiplier,
             last_signaled_round,
@@ -516,7 +537,11 @@ impl Core {
     fn try_propose(&mut self, force: bool) -> ConsensusResult<Option<VerifiedBlock>> {
         // SLUGGISH ATTACK: Add delay for attackers in sluggish mode
         // The delay should be significant relative to leader_timeout to cause round lagging
-        if self.attack_active && self.is_attacker && self.attack_mode == "sluggish" {
+        if self.attack_active
+            && self.is_attacker
+            && self.attack_mode == "sluggish"
+            && (self.attack_type != "sandwich" || self.is_back_attacker)
+        {
             // Use leader_timeout as base, multiply by sluggish_timeout_multiplier for significant lag
             let base_timeout_ms = self.context.parameters.leader_timeout.as_millis() as f64;
             let delay_ms = (base_timeout_ms * self.sluggish_timeout_multiplier) as u64;
@@ -774,8 +799,15 @@ impl Core {
                         best_transactions = candidate.clone();
                     }
                     Some(current) => {
-                        // Lexicographic comparison: larger digest wins
-                        if digest.0 > current.0 {
+                        let prefer_smaller_digest =
+                            self.attack_type == "backrun"
+                                || (self.attack_type == "sandwich" && self.is_back_attacker);
+                        let is_better = if prefer_smaller_digest {
+                            digest.0 < current.0
+                        } else {
+                            digest.0 > current.0
+                        };
+                        if is_better {
                             best_digest = Some(digest);
                             best_transactions = candidate.clone();
                         }
@@ -1461,14 +1493,25 @@ impl Core {
         let attacker_count = (committee_size as f64 * self.attacker_ratio) as usize;
         let victim_count = (committee_size as f64 * self.victim_ratio) as usize;
 
-        // Determine if this node is an attacker
-        let is_attacker = self.context.own_index.value() < attacker_count;
-        
-        if !is_attacker {
+        if !self.is_attacker {
             return (ancestors, FissureAttackMetrics::default());
         }
 
         let quorum_round = clock_round.saturating_sub(1);
+
+        if self.attack_type != "frontrun" {
+            let victim_parent_present = ancestors
+                .iter()
+                .any(|ancestor| ancestor.round() == quorum_round && self.is_victim_block(ancestor, victim_count));
+            if !victim_parent_present {
+                debug!(
+                    "Backrun/sandwich: waiting for victim parent in round {} before proposing",
+                    quorum_round
+                );
+                return (vec![], FissureAttackMetrics::default());
+            }
+            return (ancestors, FissureAttackMetrics::default());
+        }
         
         // Count current stake and victims in parent round to ensure quorum
         let mut parent_round_stake = 0;
@@ -1580,9 +1623,16 @@ impl Core {
     /// Check if a block is from a victim node
     fn is_victim_block(&self, block: &VerifiedBlock, victim_count: usize) -> bool {
         let author = block.author().value();
-        // Victim nodes are the last victim_count nodes in the committee
         let committee_size = self.context.committee.size();
-        author >= committee_size - victim_count
+        match self.attack_type.as_str() {
+            "backrun" => author < victim_count,
+            "sandwich" => {
+                let attacker_count = (committee_size as f64 * self.attacker_ratio) as usize;
+                let front_count = attacker_count / 2;
+                author >= front_count && author < (front_count + victim_count)
+            }
+            _ => author >= committee_size - victim_count,
+        }
     }
 
     /// Calculate exclusion probability using the paper's equation

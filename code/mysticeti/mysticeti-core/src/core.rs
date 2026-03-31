@@ -68,6 +68,86 @@ pub enum MetaStatement {
     Payload(Vec<BaseStatement>),
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AttackType {
+    Frontrun,
+    Backrun,
+    Sandwich,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AttackRole {
+    FrontAttacker,
+    Victim,
+    BackAttacker,
+    Honest,
+}
+
+fn attack_type_from_env() -> AttackType {
+    match env::var("ATTACK_TYPE")
+        .unwrap_or_else(|_| "frontrun".to_string())
+        .as_str()
+    {
+        "backrun" => AttackType::Backrun,
+        "sandwich" => AttackType::Sandwich,
+        _ => AttackType::Frontrun,
+    }
+}
+
+fn attack_counts(committee_size: usize) -> (usize, usize) {
+    let attacker_ratio: f64 = env::var("ATTACKER_RATIO")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0.33);
+    let victim_ratio: f64 = env::var("VICTIM_RATIO")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0.22);
+    let attacker_count = ((committee_size as f64) * attacker_ratio).floor() as usize;
+    let victim_count = ((committee_size as f64) * victim_ratio).floor() as usize;
+    (attacker_count, victim_count)
+}
+
+fn attack_role(authority: usize, committee_size: usize, attacker_count: usize, victim_count: usize, attack_type: AttackType) -> AttackRole {
+    match attack_type {
+        AttackType::Frontrun => {
+            if authority < attacker_count {
+                AttackRole::FrontAttacker
+            } else if authority >= committee_size.saturating_sub(victim_count) {
+                AttackRole::Victim
+            } else {
+                AttackRole::Honest
+            }
+        }
+        AttackType::Backrun => {
+            if authority < victim_count {
+                AttackRole::Victim
+            } else if authority < victim_count + attacker_count {
+                AttackRole::BackAttacker
+            } else {
+                AttackRole::Honest
+            }
+        }
+        AttackType::Sandwich => {
+            let front_count = attacker_count / 2;
+            let back_count = attacker_count - front_count;
+            if authority < front_count {
+                AttackRole::FrontAttacker
+            } else if authority < front_count + victim_count {
+                AttackRole::Victim
+            } else if authority < front_count + victim_count + back_count {
+                AttackRole::BackAttacker
+            } else {
+                AttackRole::Honest
+            }
+        }
+    }
+}
+
+fn is_mev_attack_mode(mode: &str) -> bool {
+    matches!(mode, "fissure" | "speculative" | "sluggish" | "certification_race")
+}
+
 impl<H: BlockHandler> Core<H> {
     #[allow(clippy::too_many_arguments)]
     pub fn open(
@@ -271,6 +351,45 @@ impl<H: BlockHandler> Core<H> {
                 }
             }
         }
+
+        let attack_mode = env::var("ATTACK_MODE").unwrap_or_default();
+        let attack_type = attack_type_from_env();
+        if matches!(attack_type, AttackType::Backrun | AttackType::Sandwich) && is_mev_attack_mode(&attack_mode) {
+            let committee_size = self.committee.len();
+            let (attacker_count, victim_count) = attack_counts(committee_size);
+            let role = attack_role(
+                self.authority as usize,
+                committee_size,
+                attacker_count,
+                victim_count,
+                attack_type,
+            );
+
+            if role == AttackRole::BackAttacker {
+                let mut victim_seen = false;
+                for block in &result {
+                    let block_role = attack_role(
+                        block.author() as usize,
+                        committee_size,
+                        attacker_count,
+                        victim_count,
+                        attack_type,
+                    );
+                    if block_role == AttackRole::Victim {
+                        victim_seen = true;
+                        tracing::info!(
+                            "🔁 BACKRUN: back attacker {} observed victim block {} at round {}",
+                            self.authority,
+                            block.reference(),
+                            block.round()
+                        );
+                    }
+                }
+                if victim_seen {
+                    self.force_immediate_proposal = true;
+                }
+            }
+        }
         
         self.run_block_handler(&result);
         missing_references.into_iter().collect()
@@ -306,20 +425,20 @@ impl<H: BlockHandler> Core<H> {
 
         // --- Attack configuration from environment ---
         let attack_mode = env::var("ATTACK_MODE").unwrap_or_default();
-        let attacker_ratio: f64 = env::var("ATTACKER_RATIO")
-            .ok()
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(0.33);
-        let victim_ratio: f64 = env::var("VICTIM_RATIO")
-            .ok()
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(0.22);
         let committee_size = self.committee.len();
-        let attacker_count = ((committee_size as f64) * attacker_ratio).floor() as usize;
-        let victim_count = ((committee_size as f64) * victim_ratio).floor() as usize;
-        let is_attacker = (attack_mode == "fissure" || attack_mode == "speculative" || attack_mode == "sluggish" || attack_mode == "certification_race")
-            && (self.authority as usize) < attacker_count;
-        let _is_victim = (self.authority as usize) >= (committee_size - victim_count);
+        let attack_type = attack_type_from_env();
+        let (attacker_count, victim_count) = attack_counts(committee_size);
+        let role = attack_role(
+            self.authority as usize,
+            committee_size,
+            attacker_count,
+            victim_count,
+            attack_type,
+        );
+        let is_front_attacker = role == AttackRole::FrontAttacker;
+        let is_back_attacker = role == AttackRole::BackAttacker;
+        let is_attacker = is_mev_attack_mode(&attack_mode) && (is_front_attacker || is_back_attacker);
+        let _is_victim = role == AttackRole::Victim;
 
         let default_exclusion: f64 = env::var("EXCLUSION_PROBABILITY")
             .ok()
@@ -359,7 +478,7 @@ impl<H: BlockHandler> Core<H> {
         // REACTIVE FISSURE ATTACK: Same-round frontrunning with maximum exclusion
         // Strategy: Target specific victim blocks for 100% exclusion, maximum exclusion for others
         // Key insight: By excluding victims aggressively, their blocks are delayed/blocked, giving attackers ordering advantage
-        let mut includes = if is_attacker && attack_mode == "fissure" {
+        let mut includes = if is_front_attacker && attack_mode == "fissure" {
             let quorum_round = clock_round.saturating_sub(1);
             let quorum_threshold = self.committee.quorum_threshold();
             let own_prev_block = *self.last_own_block.block.reference();
@@ -385,7 +504,13 @@ impl<H: BlockHandler> Core<H> {
             let min_round = clock_round.saturating_sub(self.wave_length * 2);
             for round in min_round..=clock_round {
                 for authority in 0..committee_size {
-                    let is_victim = authority >= (committee_size - victim_count);
+                    let is_victim = attack_role(
+                        authority,
+                        committee_size,
+                        attacker_count,
+                        victim_count,
+                        attack_type,
+                    ) == AttackRole::Victim;
                     if is_victim {
                         if let Some(block) = self.block_store.get_block_at_authority_round(authority as AuthorityIndex, round) {
                             let block_ref = *block.reference();
@@ -431,8 +556,15 @@ impl<H: BlockHandler> Core<H> {
             for include in &all_includes {
                 if *include == own_prev_block { continue; }
                 let include_stake = self.committee.get_stake(include.authority).unwrap_or(0);
-                let is_victim = (include.authority as usize) >= (committee_size - victim_count);
-                let is_attacker = (include.authority as usize) < attacker_count;
+                let include_role = attack_role(
+                    include.authority as usize,
+                    committee_size,
+                    attacker_count,
+                    victim_count,
+                    attack_type,
+                );
+                let is_victim = include_role == AttackRole::Victim;
+                let is_attacker = matches!(include_role, AttackRole::FrontAttacker | AttackRole::BackAttacker);
                 let is_parent = include.round == quorum_round;
                 let is_target = target_victim_blocks.contains(include);
                 

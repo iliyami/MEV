@@ -4,6 +4,46 @@ use rand::Rng;
 use std::env;
 use thiserror::Error;
 
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum AttackType {
+    Frontrun,
+    Backrun,
+    Sandwich,
+}
+
+fn attack_type_from_env() -> AttackType {
+    match env::var("ATTACK_TYPE")
+        .unwrap_or_else(|_| "frontrun".to_string())
+        .as_str()
+    {
+        "backrun" => AttackType::Backrun,
+        "sandwich" => AttackType::Sandwich,
+        _ => AttackType::Frontrun,
+    }
+}
+
+fn node_is_front_attacker(node: usize, num_attackers: usize, num_victims: usize, attack_type: AttackType) -> bool {
+    match attack_type {
+        AttackType::Frontrun => node < num_attackers,
+        AttackType::Sandwich => {
+            let _ = num_victims;
+            node < (num_attackers / 2)
+        }
+        AttackType::Backrun => false,
+    }
+}
+
+fn node_is_victim(node: usize, num_nodes: usize, num_attackers: usize, num_victims: usize, attack_type: AttackType) -> bool {
+    match attack_type {
+        AttackType::Frontrun => node >= num_nodes.saturating_sub(num_victims),
+        AttackType::Backrun => node < num_victims,
+        AttackType::Sandwich => {
+            let front = num_attackers / 2;
+            node >= front && node < (front + num_victims)
+        }
+    }
+}
+
 #[derive(Eq, Error, Debug, PartialEq)]
 pub enum ConstraintError {
     #[error("Not enough parents.")]
@@ -104,20 +144,18 @@ impl<H: Hasher> UnitsCollector<H> {
             .parse()
             .unwrap_or(0.231);
         let n_members = self.candidates.size();
+        let attack_type = attack_type_from_env();
         // Use round() instead of ceil() to get exact count (3.003 -> 3, not 4)
         let n_attackers = ((n_members.0 as f64) * attacker_ratio).round() as usize;
         let n_victims = ((n_members.0 as f64) * victim_ratio).round() as usize;
 
-        // Identify victim nodes (last n_victims nodes)
-        // For 13 nodes with 0.231 ratio: 13 * 0.231 = 3.003 -> 3 victims (indices 10, 11, 12)
-        let victim_start = n_members.0 - n_victims;
-        let victim_indices: Vec<NodeIndex> = (victim_start..n_members.0)
+        let victim_indices: Vec<NodeIndex> = (0..n_members.0)
+            .filter(|idx| node_is_victim(*idx, n_members.0, n_attackers, n_victims, attack_type))
             .map(|i| NodeIndex(i))
             .collect();
 
-        // Check if current node is attacker
-        if attacker_id.0 >= n_attackers {
-            // Not an attacker, return original
+        // Only front-attackers execute fissure-style parent exclusion.
+        if !node_is_front_attacker(attacker_id.0, n_attackers, n_victims, attack_type) {
             return Ok(self.candidates.clone());
         }
 

@@ -1,0 +1,32 @@
+experiment:
+  name: "alephbft_simple_campaign"
+  description: "AlephBFT simple 13-node MEV campaign"
+
+protocol:
+  name: "alephbft"
+  path: "alephbft"
+
+docker:
+  tag: "mev-alephbft:latest"
+  cpus: "8.0"
+  memory: "16g"
+
+test:
+  REPETITIONS: 5
+
+environment:
+  NUM_NODES: "13"
+  DURATION: "30"
+  ATTACK_MODE: "fissure"
+  ATTACKER_RATIO: "0.308"
+  VICTIM_RATIO: "0.231"
+  SPECULATIVE_P_MAX: "50"
+  SLUGGISH_PROCESSING_DELAY_MS: "11"
+  EXCLUSION_PROBABILITY: "0.95"
+  ALEPH_ELECTION_LOOKAHEAD: "3"
+  ALEPH_COORD_REQUEST_DELAY_MS: "200"
+  ALEPH_HASH_SORT_SEED: "0"
+
+output:
+  expected_asr: 50.0
+  tolerance_percent: 100.0

@@ -52,6 +52,39 @@ pub struct Proposer {
     is_special: bool,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AttackType {
+    Frontrun,
+    Backrun,
+    Sandwich,
+}
+
+fn attack_type_from_env() -> AttackType {
+    match std::env::var("ATTACK_TYPE")
+        .unwrap_or_else(|_| "frontrun".to_string())
+        .as_str()
+    {
+        "backrun" => AttackType::Backrun,
+        "sandwich" => AttackType::Sandwich,
+        _ => AttackType::Frontrun,
+    }
+}
+
+fn env_usize(name: &str, default: usize) -> usize {
+    std::env::var(name)
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(default)
+}
+
+fn front_attacker_id() -> usize {
+    env_usize("FRONT_ATTACKER_ID", env_usize("ATTACKER_ID", 0))
+}
+
+fn back_attacker_id() -> usize {
+    env_usize("BACK_ATTACKER_ID", env_usize("ATTACKER_ID", 2))
+}
+
 impl Proposer {
     #[allow(clippy::too_many_arguments)]
     pub fn spawn(
@@ -247,8 +280,12 @@ impl Proposer {
                     // This causes attackers to stay at lower heights (lower rounds = earlier ordering)
                     let attack_mode = std::env::var("ATTACK_MODE").unwrap_or_default();
                     if attack_mode == "sluggish" {
-                        if let Ok(attacker_id_str) = std::env::var("ATTACKER_ID") {
-                            let attacker_id: usize = attacker_id_str.parse().unwrap_or(999);
+                        let attack_type = attack_type_from_env();
+                        let attacker_id = match attack_type {
+                            AttackType::Frontrun => front_attacker_id(),
+                            AttackType::Backrun | AttackType::Sandwich => back_attacker_id(),
+                        };
+                        if attacker_id != usize::MAX {
                             let authorities_vec: Vec<PublicKey> = self.committee.authorities.keys().copied().collect();
                             let attacker_pk = authorities_vec.get(attacker_id).copied();
                             

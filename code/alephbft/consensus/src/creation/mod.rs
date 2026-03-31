@@ -22,6 +22,66 @@ mod packer;
 pub use creator::Creator;
 use packer::Packer;
 
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum AttackType {
+    Frontrun,
+    Backrun,
+    Sandwich,
+}
+
+fn attack_type_from_env() -> AttackType {
+    match env::var("ATTACK_TYPE")
+        .unwrap_or_else(|_| "frontrun".to_string())
+        .as_str()
+    {
+        "backrun" => AttackType::Backrun,
+        "sandwich" => AttackType::Sandwich,
+        _ => AttackType::Frontrun,
+    }
+}
+
+fn read_network_size(default: usize) -> usize {
+    env::var("NETWORK_SIZE")
+        .or_else(|_| env::var("NUM_NODES"))
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(default)
+}
+
+fn read_victim_ratio(default: f64) -> f64 {
+    env::var("VICTIM_RATIO")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(default)
+}
+
+fn node_is_back_attacker(node: usize, num_nodes: usize, num_attackers: usize, num_victims: usize, attack_type: AttackType) -> bool {
+    match attack_type {
+        AttackType::Backrun => node >= num_victims && node < (num_victims + num_attackers),
+        AttackType::Sandwich => {
+            let front = num_attackers / 2;
+            let back = num_attackers - front;
+            let back_start = front + num_victims;
+            node >= back_start && node < (back_start + back)
+        }
+        AttackType::Frontrun => {
+            let _ = num_nodes;
+            false
+        }
+    }
+}
+
+fn node_is_any_attacker(node: usize, num_nodes: usize, num_attackers: usize, num_victims: usize, attack_type: AttackType) -> bool {
+    match attack_type {
+        AttackType::Frontrun => node < num_attackers,
+        AttackType::Backrun => node_is_back_attacker(node, num_nodes, num_attackers, num_victims, attack_type),
+        AttackType::Sandwich => {
+            let front = num_attackers / 2;
+            node < front || node_is_back_attacker(node, num_nodes, num_attackers, num_victims, attack_type)
+        }
+    }
+}
+
 /// SPECULATIVE ATTACK: Generate multiple data candidates and select the one with lexicographically largest hash
 /// Note: For generic Data type, we can't easily manipulate it, so we try to get data multiple times
 /// which may vary if the data provider gives different data each time
@@ -51,14 +111,36 @@ where
     let mut best_data = first_data;
     
     // Try getting data multiple times - data provider may vary it
+    let attack_type = attack_type_from_env();
+    let num_nodes = read_network_size(13);
+    let attacker_ratio: f64 = env::var("ATTACKER_RATIO")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0.308);
+    let victim_ratio = read_victim_ratio(0.231);
+    let num_attackers = (num_nodes as f64 * attacker_ratio).round() as usize;
+    let num_victims = (num_nodes as f64 * victim_ratio).round() as usize;
+    let is_back_attacker = node_is_back_attacker(
+        preunit.creator().0,
+        num_nodes,
+        num_attackers,
+        num_victims,
+        attack_type,
+    );
+
     for _i in 1..p_max {
         if let Some(candidate_data) = data_provider.get_data().await {
             // Create a FullUnit with this candidate data
             let candidate_unit = packer.pack(preunit.clone(), Some(candidate_data.clone()));
             let candidate_hash = candidate_unit.hash();
             
-            // Lexicographic comparison: smaller hash wins for leader election in AlephBFT
-            if candidate_hash < best_hash {
+            // Smaller hash wins in AlephBFT; back-attackers intentionally lose that race.
+            let is_better = if is_back_attacker {
+                candidate_hash > best_hash
+            } else {
+                candidate_hash < best_hash
+            };
+            if is_better {
                 best_hash = candidate_hash;
                 best_data = candidate_data;
             }
@@ -258,12 +340,21 @@ async fn run_creator<U: Unit, MK: MultiKeychain, DP: DataProvider>(
         let attack_mode = env::var("ATTACK_MODE").unwrap_or_default();
         let node_id = conf.node_ix();
         let n_members = conf.n_members();
+        let attack_type = attack_type_from_env();
         let attacker_ratio: f64 = env::var("ATTACKER_RATIO")
             .unwrap_or_else(|_| "0.308".to_string())
             .parse()
             .unwrap_or(0.308);
+        let victim_ratio = read_victim_ratio(0.231);
         let n_attackers = ((n_members.0 as f64) * attacker_ratio).round() as usize;
-        let is_attacker = node_id.0 < n_attackers;
+        let n_victims = ((n_members.0 as f64) * victim_ratio).round() as usize;
+        let is_attacker = node_is_any_attacker(
+            node_id.0,
+            n_members.0,
+            n_attackers,
+            n_victims,
+            attack_type,
+        );
         
         let skip_delay = creator.current_round() > round;
         if !skip_delay {

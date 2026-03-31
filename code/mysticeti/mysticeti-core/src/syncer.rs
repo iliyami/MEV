@@ -55,6 +55,82 @@ impl SyncerSignals for Signals {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AttackType {
+    Frontrun,
+    Backrun,
+    Sandwich,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AttackRole {
+    FrontAttacker,
+    Victim,
+    BackAttacker,
+    Honest,
+}
+
+fn attack_type_from_env() -> AttackType {
+    match env::var("ATTACK_TYPE")
+        .unwrap_or_else(|_| "frontrun".to_string())
+        .as_str()
+    {
+        "backrun" => AttackType::Backrun,
+        "sandwich" => AttackType::Sandwich,
+        _ => AttackType::Frontrun,
+    }
+}
+
+fn attack_counts(committee_size: usize) -> (usize, usize) {
+    let attacker_ratio: f64 = env::var("ATTACKER_RATIO")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0.33);
+    let victim_ratio: f64 = env::var("VICTIM_RATIO")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0.22);
+    let attacker_count = ((committee_size as f64) * attacker_ratio).floor() as usize;
+    let victim_count = ((committee_size as f64) * victim_ratio).floor() as usize;
+    (attacker_count, victim_count)
+}
+
+fn attack_role(authority: usize, committee_size: usize, attacker_count: usize, victim_count: usize, attack_type: AttackType) -> AttackRole {
+    match attack_type {
+        AttackType::Frontrun => {
+            if authority < attacker_count {
+                AttackRole::FrontAttacker
+            } else if authority >= committee_size.saturating_sub(victim_count) {
+                AttackRole::Victim
+            } else {
+                AttackRole::Honest
+            }
+        }
+        AttackType::Backrun => {
+            if authority < victim_count {
+                AttackRole::Victim
+            } else if authority < victim_count + attacker_count {
+                AttackRole::BackAttacker
+            } else {
+                AttackRole::Honest
+            }
+        }
+        AttackType::Sandwich => {
+            let front_count = attacker_count / 2;
+            let back_count = attacker_count - front_count;
+            if authority < front_count {
+                AttackRole::FrontAttacker
+            } else if authority < front_count + victim_count {
+                AttackRole::Victim
+            } else if authority < front_count + victim_count + back_count {
+                AttackRole::BackAttacker
+            } else {
+                AttackRole::Honest
+            }
+        }
+    }
+}
+
 impl<H: BlockHandler, S: SyncerSignals, C: CommitObserver> Syncer<H, S, C> {
     pub fn new(
         core: Core<H>,
@@ -119,14 +195,18 @@ impl<H: BlockHandler, S: SyncerSignals, C: CommitObserver> Syncer<H, S, C> {
         
         // CERTIFICATION RACE ATTACK: Aggressive network-layer timing optimization
         let attack_mode = env::var("ATTACK_MODE").unwrap_or_default();
+        let attack_type = attack_type_from_env();
+        let committee_size = self.core.committee().len();
+        let (attacker_count, victim_count) = attack_counts(committee_size);
+        let role = attack_role(
+            self.core.authority() as usize,
+            committee_size,
+            attacker_count,
+            victim_count,
+            attack_type,
+        );
         if attack_mode == "certification_race" {
-            let attacker_ratio: f64 = env::var("ATTACKER_RATIO")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(0.33);
-            let committee_size = self.core.committee().len();
-            let attacker_count = ((committee_size as f64) * attacker_ratio).floor() as usize;
-            let is_attacker = (self.core.authority() as usize) < attacker_count;
+            let is_attacker = role == AttackRole::FrontAttacker;
             
             if is_attacker {
                 // Check if immediate proposal was triggered
@@ -153,16 +233,24 @@ impl<H: BlockHandler, S: SyncerSignals, C: CommitObserver> Syncer<H, S, C> {
                 }
             }
         }
+
+        if matches!(attack_type, AttackType::Backrun | AttackType::Sandwich) && role == AttackRole::BackAttacker {
+            let triggered = self.core.check_and_reset_immediate_proposal();
+            if triggered {
+                tracing::info!(
+                    "🔁 BACKRUN: authority {} forcing immediate block proposal after victim observation",
+                    self.core.authority()
+                );
+                self.force_new_block = true;
+            }
+        }
         
         // SLUGGISH ATTACK: Optimized adaptive delay strategy for maximum round-gap advantage
         if attack_mode == "sluggish" {
-            let attacker_ratio: f64 = env::var("ATTACKER_RATIO")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(0.33);
-            let committee_size = self.core.committee().len();
-            let attacker_count = ((committee_size as f64) * attacker_ratio).floor() as usize;
-            let is_attacker = (self.core.authority() as usize) < attacker_count;
+            let is_attacker = match attack_type {
+                AttackType::Sandwich => role == AttackRole::BackAttacker,
+                _ => matches!(role, AttackRole::FrontAttacker | AttackRole::BackAttacker),
+            };
             
             if is_attacker {
                 let sluggish_timeout_multiplier: f64 = env::var("SLUGGISH_TIMEOUT_MULTIPLIER")

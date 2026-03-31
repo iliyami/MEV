@@ -9,7 +9,31 @@ echo "MEV Attack Test Runner"
 echo "========================================"
 echo "Attack Mode: $ATTACK_MODE"
 echo "Nodes: ${NUM_NODES:-13}"
-echo "Test Name: ${TEST_NAME:-test_fissure_attack_asr_dynamic}"
+
+case "${ATTACK_MODE}" in
+    "fissure")
+        DEFAULT_TEST_NAME="test_fissure_attack_asr_dynamic"
+        ;;
+    "speculative")
+        DEFAULT_TEST_NAME="test_speculative_attack_asr_dynamic"
+        ;;
+    "sluggish")
+        DEFAULT_TEST_NAME="test_sluggish_attack_asr_dynamic"
+        ;;
+    "baseline")
+        DEFAULT_TEST_NAME="test_baseline_13_nodes_no_attack"
+        ;;
+    *)
+        DEFAULT_TEST_NAME="${TEST_NAME:-test_fissure_attack_asr_dynamic}"
+        ;;
+esac
+
+TEST_NAME=${TEST_NAME:-$DEFAULT_TEST_NAME}
+if [ "$TEST_NAME" = "test_fissure_attack_asr_dynamic" ] && [ "$DEFAULT_TEST_NAME" != "$TEST_NAME" ]; then
+    TEST_NAME="$DEFAULT_TEST_NAME"
+fi
+
+echo "Test Name: ${TEST_NAME}"
 
 # -----------------------------------------------------
 # Network Simulation (Geo-Distribution / Jitter) - Defense 2/3

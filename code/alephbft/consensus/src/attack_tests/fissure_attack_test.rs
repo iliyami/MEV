@@ -3,7 +3,7 @@
 //! This test measures the Attack Success Rate (ASR) of the fissure attack
 //! where attackers exclude victim units from their parent sets.
 
-use crate::attack_tests::asr_calculation::calculate_asr_paper_aligned;
+use crate::attack_tests::asr_calculation::calculate_asr_paper_aligned_advanced;
 use crate::testing::{gen_config, gen_delay_config, init_log};
 use crate::{LocalIO, NodeCount, OrderedUnit, UnitFinalizationHandler, run_session, Terminator};
 use aleph_bft_mock::{Data, DataProvider, Hasher64, Keychain, Loader, Router, Saver, Spawner};
@@ -15,6 +15,7 @@ use std::{env, sync::Arc, time::Duration};
 // Helper function to read configuration from environment variables with defaults
 fn get_config() -> (usize, usize, usize, usize, u64) {
     let num_nodes = env::var("NETWORK_SIZE")
+        .or_else(|_| env::var("NUM_NODES"))
         .unwrap_or_else(|_| "13".to_string())
         .parse()
         .unwrap_or(13);
@@ -34,6 +35,7 @@ fn get_config() -> (usize, usize, usize, usize, u64) {
     let num_honest = num_nodes - num_attackers - num_victims;
     
     let duration_seconds: u64 = env::var("TEST_DURATION_SECONDS")
+        .or_else(|_| env::var("DURATION"))
         .unwrap_or_else(|_| "35".to_string())
         .parse()
         .unwrap_or(35);
@@ -209,8 +211,9 @@ async fn test_fissure_attack_asr_13_nodes() {
     }
     log::info!("📊 Units by creator: {:?}", units_by_creator);
     
-    let asr = calculate_asr_paper_aligned(&finalized_units_guard, num_nodes, num_attackers, num_victims);
+    let asr = calculate_asr_paper_aligned_advanced(&finalized_units_guard, num_nodes, num_attackers, num_victims);
     log::info!("📊 Attack Success Rate (ASR): {:.2}%", asr * 100.0);
+    log::info!("Attack Success Rate (ASR): {:.2}%", asr * 100.0);
     drop(finalized_units_guard);
     
     // Cleanup
@@ -233,10 +236,12 @@ async fn test_baseline_asr_13_nodes_no_attack() {
     
     // Read configuration from environment variables
     let num_nodes: usize = env::var("NETWORK_SIZE")
+        .or_else(|_| env::var("NUM_NODES"))
         .unwrap_or_else(|_| "13".to_string())
         .parse()
         .unwrap_or(13);
     let duration_seconds: u64 = env::var("TEST_DURATION_SECONDS")
+        .or_else(|_| env::var("DURATION"))
         .unwrap_or_else(|_| "35".to_string())
         .parse()
         .unwrap_or(35);

@@ -54,3 +54,4 @@ paper.pdf
 plots/generated/preview.*
 plots/generated/reports/*
 experiment_results.csv
+.build-cache/*
