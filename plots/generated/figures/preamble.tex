@@ -1,0 +1,86 @@
+
+\pgfplotsset{compat=1.18}
+\usetikzlibrary{calc}
+\usepgfplotslibrary{groupplots}
+\usepgfplotslibrary{statistics}
+\usepgfplotslibrary{colorbrewer}
+\definecolor{ProtoNarwhal}{HTML}{1B9E77}
+\definecolor{ProtoBullshark}{HTML}{D95F02}
+\definecolor{ProtoMysticeti}{HTML}{7570B3}
+\definecolor{ProtoMevSui}{HTML}{E7298A}
+\definecolor{ProtoAleph}{HTML}{66A61E}
+\definecolor{ProtoMahi}{HTML}{E6AB02}
+\definecolor{ProtoAutobahn}{HTML}{1F78B4}
+\definecolor{AttackFissure}{HTML}{C0392B}
+\definecolor{AttackSluggish}{HTML}{2C7FB8}
+\definecolor{AttackSpeculative}{HTML}{7B3294}
+\pgfplotsset{
+  mevAxis/.style={
+    width=0.31\linewidth,
+    height=0.24\linewidth,
+    ymin=0,
+    ymax=100,
+    ymajorgrids=true,
+    grid style={draw=black!10},
+    axis line style={draw=black!55},
+    tick style={draw=black!55},
+    tick label style={font=\scriptsize},
+    label style={font=\small},
+    title style={font=\small\bfseries},
+    legend style={
+      font=\scriptsize,
+      draw=none,
+      fill=none,
+      legend cell align=left,
+      /tikz/every even column/.append style={column sep=0.35cm},
+    },
+    line width=1pt,
+    mark size=2.2pt,
+  },
+  mevSmallAxis/.style={
+    width=0.24\linewidth,
+    height=0.18\linewidth,
+    ymin=0,
+    ymax=100,
+    ymajorgrids=true,
+    grid style={draw=black!10},
+    axis line style={draw=black!55},
+    tick style={draw=black!55},
+    tick label style={font=\scriptsize},
+    label style={font=\scriptsize},
+    title style={font=\scriptsize\bfseries},
+    line width=0.9pt,
+    mark size=2pt,
+    clip mode=individual,
+  },
+  mevBarAxis/.style={
+    width=\linewidth,
+    height=0.33\linewidth,
+    ymin=0,
+    ymajorgrids=true,
+    grid style={draw=black!10},
+    axis line style={draw=black!55},
+    tick style={draw=black!55},
+    tick label style={font=\scriptsize},
+    label style={font=\small},
+    title style={font=\small\bfseries},
+    legend style={font=\scriptsize, draw=none, fill=none},
+    bar width=7pt,
+  },
+  mevHeatAxis/.style={
+    width=0.29\linewidth,
+    height=0.25\linewidth,
+    ymin=0.5,
+    ymax=3.5,
+    axis line style={draw=black!55},
+    tick style={draw=black!55},
+    tick label style={font=\scriptsize},
+    label style={font=\small},
+    title style={font=\small\bfseries},
+    enlargelimits=false,
+    y dir=reverse,
+    point meta min=0,
+    point meta max=100,
+    colormap/viridis,
+  },
+}
