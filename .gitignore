@@ -49,8 +49,8 @@ build/
 code/*/.git/
 
 *.csv.backup
-paper.txt
-paper.pdf
+*paper.txt
+*paper.pdf
 plots/generated/preview.*
 plots/generated/reports/*
 experiment_results.csv
@@ -58,3 +58,4 @@ experiment_results.csv
 preview.aux
 preview.fdb_latexmk
 preview.fls
+paper_workspace/

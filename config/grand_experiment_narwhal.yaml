@@ -21,8 +21,8 @@ environment:
   
   # ATTACK CONFIGURATION (OFFENSE)
   ATTACK_MODE: "fissure" # [fissure, speculative, sluggish]
-  ATTACKER_RATIO: "0.33"
-  VICTIM_RATIO: "0.22"
+  ATTACKER_RATIO: "0.308"
+  VICTIM_RATIO: "0.231"
   
   # Sluggish-specific
   SLUGGISH_TIMEOUT_MULTIPLIER: "2.0"

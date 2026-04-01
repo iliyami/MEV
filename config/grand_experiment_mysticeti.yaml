@@ -21,7 +21,7 @@ environment:
   NUM_NODES: "13"
   DURATION: "30"
   ATTACK_MODE: "fissure" # [fissure, speculative, sluggish, certification_race]
-  ATTACKER_RATIO: "0.307"
+  ATTACKER_RATIO: "0.308"
   VICTIM_RATIO: "0.231"
   SLUGGISH_TIMEOUT_MULTIPLIER: "2.0"
   NUMBER_OF_LEADERS: "1"
