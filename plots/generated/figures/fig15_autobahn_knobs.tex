@@ -3,20 +3,29 @@
 
 \begin{tikzpicture}
 \begin{groupplot}[
-  group style={group size=2 by 1, horizontal sep=1.8cm},
+  group style={group size=2 by 1, horizontal sep=0.22cm},
 ]
 
 \nextgroupplot[
   mevAxis,
-  width=0.44\linewidth,
-  height=0.28\linewidth,
+  scale only axis,
+  width=0.43\linewidth,
+  height=0.22\linewidth,
   title={Autobahn K},
-  xlabel={Autobahn K},
+  title style={font=\scriptsize\bfseries},
   ylabel={Median ASR (\%)},
+  ylabel style={font=\scriptsize},
+  tick label style={font=\tiny},
+  line width=0.8pt,
+  mark size=1.7pt,
   xmin=0.8,
   xmax=16.2,
   xtick={1,2,4,8,16},
-  ymin=49.36, ymax=51.73, legend to name=fig15_autobahn_knobslegend, xmode=log, log basis x=2,
+  ymin=49.36, ymax=51.73,
+  legend to name=fig15_autobahn_knobslegend,
+  legend columns=2,
+  legend style={font=\tiny, /tikz/every even column/.append style={column sep=0.5cm}},
+  xmode=log, log basis x=2,
 ]
 \addplot+[black!40, densely dashed, mark=none] coordinates {(1,50.00) (2,50.00) (4,50.00) (8,50.00) (16,50.00)};
 \addplot+[color=AttackFissure, solid, mark=square*, mark options={fill=AttackFissure}] coordinates {(1,50.06) (2,49.99) (4,50.04) (8,49.91) (16,51.39)};
@@ -29,15 +38,20 @@
 
 \nextgroupplot[
   mevAxis,
-  width=0.44\linewidth,
-  height=0.28\linewidth,
+  scale only axis,
+  width=0.43\linewidth,
+  height=0.22\linewidth,
   title={Fast-path timeout (ms)},
-  xlabel={Fast-path timeout (ms)},
-  ylabel={Median ASR (\%)},
+  title style={font=\scriptsize\bfseries},
+  tick label style={font=\tiny},
+  line width=0.8pt,
+  mark size=1.7pt,
   xmin=49.8,
   xmax=1000.2,
   xtick={50,200,500,1000},
   ymin=49.39, ymax=50.39,
+  ytick={49.4,49.6,49.8,50.0,50.2},
+  yticklabels={,,,,},
 ]
 \addplot+[black!40, densely dashed, mark=none] coordinates {(50,50.00) (200,50.00) (500,50.00) (1000,50.00)};
 \addplot+[color=AttackFissure, solid, mark=square*, mark options={fill=AttackFissure}] coordinates {(50,49.85) (200,49.98) (500,50.02) (1000,50.00)};
@@ -46,5 +60,5 @@
 
 
 \end{groupplot}
-\node[anchor=north] at ($(group c1r1.south west)!0.5!(group c2r1.south east)+(0,-0.72cm)$) {\pgfplotslegendfromname{fig15_autobahn_knobslegend}};
+\node[anchor=north] at ($(group c1r1.south west)!0.5!(group c2r1.south east)+(0,-0.38cm)$) {\pgfplotslegendfromname{fig15_autobahn_knobslegend}};
 \end{tikzpicture}

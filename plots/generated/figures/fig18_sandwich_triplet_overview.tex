@@ -4,20 +4,52 @@
 \begin{tikzpicture}
 \begin{axis}[
   mevBarAxis,
+  scale only axis,
+  width=0.88\linewidth,
+  height=0.26\linewidth,
   ybar=4pt,
   ymin=0,
   ymax=100,
-  ylabel={Median triplet sandwich ASR (\%)},
-  symbolic x coords={bullshark,alephbft,mysticeti,autobahn}, xtick={bullshark,alephbft,mysticeti,autobahn}, xticklabels={Bullshark,AlephBFT,Mysticeti,Autobahn},
-  x tick label style={rotate=25, anchor=east},
-  legend columns=3,
-  legend style={at={(0.5,1.18)}, anchor=south},
+  ytick={0,20,40,60,80,100},
+  symbolic x coords={bullshark,alephbft,mysticeti,autobahn}, xtick={bullshark,alephbft,mysticeti,autobahn}, xticklabels={Bull\\shark,Aleph\\BFT,Mysti\\ceti,Auto\\bahn},
+  x tick label style={font=\tiny, align=center},
+  legend columns=1,
+  legend style={
+    at={(0.98,0.98)},
+    anchor=north east,
+    font=\tiny,
+    draw=none,
+    fill=white,
+    fill opacity=0.9,
+    text opacity=1,
+    inner sep=0.5pt,
+    row sep=0.02cm,
+  },
 ]
-\addplot+[fill=AttackFissure, draw=none, nodes near coords, every node near coord/.append style={font=\scriptsize, rotate=90, anchor=west}] coordinates {(bullshark,81.82) (alephbft,0.00) (mysticeti,16.26) (autobahn,25.00)};
-\addplot+[fill=AttackSpeculative, draw=none, nodes near coords, every node near coord/.append style={font=\scriptsize, rotate=90, anchor=west}] coordinates {(bullshark,80.95) (alephbft,0.00) (mysticeti,16.84) (autobahn,16.78)};
-\addplot+[fill=AttackSluggish, draw=none, nodes near coords, every node near coord/.append style={font=\scriptsize, rotate=90, anchor=west}] coordinates {(bullshark,100.00) (alephbft,76.38) (mysticeti,40.26) (autobahn,15.51)};
+\addplot+[
+  fill=AttackFissure!35,
+  draw=AttackFissure!70!black,
+  postaction={pattern=north east lines, pattern color=black!65},
+  nodes near coords,
+  every node near coord/.append style={font=\scriptsize, rotate=90, anchor=west, text=AttackFissure!90!black},
+] coordinates {(bullshark,81.82) (alephbft,0.00) (mysticeti,16.26) (autobahn,25.00)};
+\addplot+[
+  fill=AttackSpeculative!35,
+  draw=AttackSpeculative!70!black,
+  postaction={pattern=dots, pattern color=black!65},
+  nodes near coords,
+  every node near coord/.append style={font=\scriptsize, rotate=90, anchor=west, text=AttackSpeculative!90!black},
+] coordinates {(bullshark,80.95) (alephbft,0.00) (mysticeti,16.84) (autobahn,16.78)};
+\addplot+[
+  fill=AttackSluggish!35,
+  draw=AttackSluggish!70!black,
+  postaction={pattern=crosshatch, pattern color=black!65},
+  nodes near coords,
+  every node near coord/.append style={font=\scriptsize, rotate=90, anchor=west, text=AttackSluggish!90!black},
+] coordinates {(bullshark,100.00) (alephbft,76.38) (mysticeti,40.26) (autobahn,15.51)};
 \addlegendentry{Fissure}
 \addlegendentry{Speculative}
 \addlegendentry{Sluggish}
 \end{axis}
+\node[rotate=90, anchor=south, font=\tiny] at ($(current bounding box.north west)!0.5!(current bounding box.south west)+(-0.18cm,0)$) {Median triplet sandwich ASR (\%)};
 \end{tikzpicture}

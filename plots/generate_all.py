@@ -804,10 +804,11 @@ def generate_offense_sweeps(rows: Sequence[Row]) -> FigureInfo:
             r"legend style={at={(1.58,1.20)}, anchor=south}",
         ])
         legend = emit_legend(legend_entries) if idx == 0 else ""
+        options_block = ",\n  ".join(option_lines)
         panels.append(
             rf"""
 \nextgroupplot[
-  {',\n  '.join(option_lines)}
+  {options_block}
 ]
 {lines}
 {legend}
@@ -916,10 +917,11 @@ def generate_backrun_gap_histogram(rows: Sequence[Row]) -> FigureInfo:
             axis_symbolic_setup(protocols, [PROTOCOL_LABELS[p] for p in protocols]),
             "x tick label style={rotate=25, anchor=east}",
         ]
+        options_block = ",\n  ".join(option_lines)
         panels.append(
             rf"""
 \nextgroupplot[
-  {',\n  '.join(option_lines)}
+  {options_block}
 ]
 {chr(10).join(plots)}
 """
@@ -994,10 +996,11 @@ def generate_backrun_l_metrics(rows: Sequence[Row]) -> FigureInfo:
             f"xticklabels={{{','.join(PROTOCOL_LABELS[p] for p in protocols)}}}",
             "x tick label style={rotate=25, anchor=east}",
         ]
+        options_block = ",\n  ".join(option_lines)
         panels.append(
             rf"""
 \nextgroupplot[
-  {',\n  '.join(option_lines)}
+  {options_block}
 ]
 {chr(10).join(drawings)}
 """
@@ -1243,9 +1246,10 @@ def emit_heatmap_panel(
         f"xticklabels={{{xticklabels}}}",
         f"yticklabels={{{yticklabels}}}",
     ]
+    options_block = ",\n  ".join(option_lines)
     return rf"""
 \nextgroupplot[
-  {',\n  '.join(option_lines)}
+  {options_block}
 ]
 {chr(10).join(background_cells)}
 {chr(10).join(colored_cells)}

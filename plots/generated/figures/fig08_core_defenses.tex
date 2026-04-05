@@ -3,33 +3,44 @@
 
 \begin{tikzpicture}
 \begin{groupplot}[
-  group style={group size=3 by 3, horizontal sep=1.2cm, vertical sep=1.45cm},
+  group style={group size=3 by 3, horizontal sep=0.20cm, vertical sep=0.72cm},
 ]
 
 \nextgroupplot[
   mevSmallAxis,
-  width=0.27\linewidth,
-  height=0.19\linewidth,
+  scale only axis,
+  width=0.305\linewidth,
+  height=0.21\linewidth,
   title={Cache depth},
   xlabel={},
   ylabel={Median ASR (\%)},
   xmin=0.8,
   xmax=50.2,
   xtick={1,2,5,20,50},
-  ymin=69.48, ymax=98.62, legend to name=fig08_core_defenseslegend,
+  ymin=69.48, ymax=98.62,
+  legend to name=fig08_core_defenseslegend,
+  legend columns=3,
+  legend style={
+    font=\tiny,
+    draw=none,
+    fill=none,
+    cells={align=center},
+    /tikz/every even column/.append style={column sep=0.35cm},
+  },
 ]
 \addplot+[color=AttackFissure, solid, mark=square*, mark options={fill=AttackFissure}] coordinates {(1,93.60) (2,93.80) (5,90.20) (20,94.80) (50,93.75)};
 \addplot+[color=AttackSpeculative, densely dotted, mark=*, mark options={fill=AttackSpeculative}] coordinates {(1,93.40) (2,87.40) (5,93.30) (20,93.80)};
 \addplot+[color=AttackSluggish, densely dashed, mark=triangle*, mark options={fill=AttackSluggish}] coordinates {(1,92.40) (2,94.10) (5,94.20) (20,93.10)};
-\node[anchor=north west, font=\scriptsize\bfseries, fill=white, fill opacity=0.92, text opacity=1, inner sep=1.2pt] at (rel axis cs:0.02,0.98) {Bullshark};
+\node[anchor=south west, font=\scriptsize\bfseries, fill=white, fill opacity=0.92, text opacity=1, inner sep=1.2pt] at (rel axis cs:0.05,0.08) {Bullshark};
 \addlegendentry{Fissure}
 \addlegendentry{Speculative}
 \addlegendentry{Sluggish}
 
 \nextgroupplot[
   mevSmallAxis,
-  width=0.27\linewidth,
-  height=0.19\linewidth,
+  scale only axis,
+  width=0.305\linewidth,
+  height=0.21\linewidth,
   title={GC depth},
   xlabel={},
   ylabel={},
@@ -37,6 +48,7 @@
   xmax=50.2,
   xtick={5,10,50},
   ymin=80.94, ymax=97.06,
+  yticklabels={,,},
 ]
 \addplot+[color=AttackFissure, solid, mark=square*, mark options={fill=AttackFissure}] coordinates {(5,93.40) (10,91.90) (50,91.60)};
 \addplot+[color=AttackSpeculative, densely dotted, mark=*, mark options={fill=AttackSpeculative}] coordinates {(5,91.40) (10,92.80) (50,87.70)};
@@ -46,8 +58,9 @@
 
 \nextgroupplot[
   mevSmallAxis,
-  width=0.27\linewidth,
-  height=0.19\linewidth,
+  scale only axis,
+  width=0.305\linewidth,
+  height=0.21\linewidth,
   title={Sync timeout (ms)},
   xlabel={},
   ylabel={},
@@ -55,6 +68,7 @@
   xmax=5000.2,
   xtick={500,2000,5000},
   ymin=76.30, ymax=97.00,
+  yticklabels={,,},
 ]
 \addplot+[color=AttackFissure, solid, mark=square*, mark options={fill=AttackFissure}] coordinates {(500,90.60) (2000,92.20) (5000,92.80)};
 \addplot+[color=AttackSpeculative, densely dotted, mark=*, mark options={fill=AttackSpeculative}] coordinates {(500,93.90) (2000,91.70) (5000,92.40)};
@@ -64,8 +78,9 @@
 
 \nextgroupplot[
   mevSmallAxis,
-  width=0.27\linewidth,
-  height=0.19\linewidth,
+  scale only axis,
+  width=0.305\linewidth,
+  height=0.21\linewidth,
   title={},
   xlabel={},
   ylabel={Median ASR (\%)},
@@ -82,8 +97,9 @@
 
 \nextgroupplot[
   mevSmallAxis,
-  width=0.27\linewidth,
-  height=0.19\linewidth,
+  scale only axis,
+  width=0.305\linewidth,
+  height=0.21\linewidth,
   title={},
   xlabel={},
   ylabel={},
@@ -91,6 +107,7 @@
   xmax=50.2,
   xtick={5,10,50},
   ymin=16.00, ymax=100.00,
+  yticklabels={,,,,,},
 ]
 \addplot+[color=AttackFissure, solid, mark=square*, mark options={fill=AttackFissure}] coordinates {(5,66.67) (10,75.00) (50,100.00)};
 \addplot+[color=AttackSpeculative, densely dotted, mark=*, mark options={fill=AttackSpeculative}] coordinates {(5,66.67) (10,33.33) (50,33.33)};
@@ -100,8 +117,9 @@
 
 \nextgroupplot[
   mevSmallAxis,
-  width=0.27\linewidth,
-  height=0.19\linewidth,
+  scale only axis,
+  width=0.305\linewidth,
+  height=0.21\linewidth,
   title={},
   xlabel={},
   ylabel={},
@@ -109,6 +127,7 @@
   xmax=5000.2,
   xtick={500,2000,5000},
   ymin=6.67, ymax=100.00,
+  yticklabels={,,,,,},
 ]
 \addplot+[color=AttackFissure, solid, mark=square*, mark options={fill=AttackFissure}] coordinates {(500,50.00) (2000,50.00) (5000,66.67)};
 \addplot+[color=AttackSpeculative, densely dotted, mark=*, mark options={fill=AttackSpeculative}] coordinates {(500,66.67) (2000,62.50) (5000,58.34)};
@@ -118,8 +137,9 @@
 
 \nextgroupplot[
   mevSmallAxis,
-  width=0.27\linewidth,
-  height=0.19\linewidth,
+  scale only axis,
+  width=0.305\linewidth,
+  height=0.21\linewidth,
   title={},
   xlabel={Cache depth},
   ylabel={Median ASR (\%)},
@@ -136,8 +156,9 @@
 
 \nextgroupplot[
   mevSmallAxis,
-  width=0.27\linewidth,
-  height=0.19\linewidth,
+  scale only axis,
+  width=0.305\linewidth,
+  height=0.21\linewidth,
   title={},
   xlabel={GC depth},
   ylabel={},
@@ -145,6 +166,7 @@
   xmax=50.2,
   xtick={5,10,50},
   ymin=73.72, ymax=100.00,
+  yticklabels={,,},
 ]
 \addplot+[color=AttackFissure, solid, mark=square*, mark options={fill=AttackFissure}] coordinates {(5,93.10) (10,92.00) (50,90.30)};
 \addplot+[color=AttackSpeculative, densely dotted, mark=*, mark options={fill=AttackSpeculative}] coordinates {(5,92.30) (10,89.40) (50,90.20)};
@@ -154,8 +176,9 @@
 
 \nextgroupplot[
   mevSmallAxis,
-  width=0.27\linewidth,
-  height=0.19\linewidth,
+  scale only axis,
+  width=0.305\linewidth,
+  height=0.21\linewidth,
   title={},
   xlabel={Sync timeout (ms)},
   ylabel={},
@@ -163,6 +186,7 @@
   xmax=5000.2,
   xtick={500,2000,5000},
   ymin=81.61, ymax=100.00,
+  yticklabels={,,},
 ]
 \addplot+[color=AttackFissure, solid, mark=square*, mark options={fill=AttackFissure}] coordinates {(500,93.60) (2000,94.00) (5000,90.40)};
 \addplot+[color=AttackSpeculative, densely dotted, mark=*, mark options={fill=AttackSpeculative}] coordinates {(500,94.10) (2000,92.10) (5000,90.10)};
@@ -171,5 +195,5 @@
 
 
 \end{groupplot}
-\node[anchor=north] at ($(group c1r3.south west)!0.5!(group c3r3.south east)+(0,-0.85cm)$) {\pgfplotslegendfromname{fig08_core_defenseslegend}};
+\node[anchor=north] at ($(group c1r3.south west)!0.5!(group c3r3.south east)+(0,-0.62cm)$) {\pgfplotslegendfromname{fig08_core_defenseslegend}};
 \end{tikzpicture}

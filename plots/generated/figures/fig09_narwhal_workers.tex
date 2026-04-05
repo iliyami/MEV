@@ -4,16 +4,29 @@
 \begin{tikzpicture}
 \begin{axis}[
   mevAxis,
-  width=0.62\linewidth,
-  height=0.30\linewidth,
+  scale only axis,
+  width=0.70\linewidth,
+  height=0.28\linewidth,
   title={Narwhal worker scaling},
+  title style={font=\scriptsize\bfseries},
   xlabel={Workers per node},
   ylabel={Median ASR (\%)},
+  ylabel style={font=\scriptsize},
+  tick label style={font=\tiny},
+  line width=0.8pt,
+  mark size=1.7pt,
   xmin=0.8,
   xmax=8.2,
   xtick={1,2,4,8},
+  legend to name=fig09_narwhal_workerslegend,
   legend columns=4,
-  legend style={at={(0.5,1.18)}, anchor=south},
+  legend style={
+    font=\tiny,
+    draw=none,
+    fill=none,
+    cells={align=center},
+    /tikz/every even column/.append style={column sep=0.35cm},
+  },
 ]
 \addplot+[black!40, densely dashed, mark=none] coordinates {(1,50.00) (2,50.00) (4,50.00) (8,50.00)};
 \addplot+[color=AttackFissure, solid, mark=square*, mark options={fill=AttackFissure}] coordinates {(1,51.34) (2,55.85) (4,64.52) (8,58.73)};
@@ -24,4 +37,5 @@
 \addlegendentry{Speculative}
 \addlegendentry{Sluggish}
 \end{axis}
+\node[anchor=south] at ($(current axis.north)+(0,0.45cm)$) {\pgfplotslegendfromname{fig09_narwhal_workerslegend}};
 \end{tikzpicture}

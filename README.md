@@ -1,136 +1,293 @@
-# Bullshark and Tusk MEV Attack Reproduction Project
+# Transaction Order Manipulation in DAG-Based BFT
 
-This project aims to reproduce the results from the Bullshark and Tusk consensus papers and extend the research to study MEV (Maximal Extractable Value) attacks on DAG-based blockchain systems.
+This repository contains the code, data, and plotting pipeline for our experimental study of transaction-order manipulation in DAG-based Byzantine fault-tolerant consensus protocols.
 
-## Project Overview
+The artifact evaluates:
+- 7 DAG-based BFT codebases: Narwhal-Tusk, Bullshark, Mysticeti, MEVSUI, AlephBFT, Mahi-Mahi, and Autobahn
+- 3 attack families: frontrunning, backrunning, and sandwiching
+- 3 attacker strategies: fissure, speculative, and sluggish
 
-Based on meeting notes, the research objectives are:
-1. **Reproduce Bullshark and Tusk results** - Validate original paper findings
-2. **Study MEV attacks on DAGs** - Frontrunning and other MEV strategies
-3. **Empirical analysis** - Test under different network conditions (latency, distribution, jitter)
-4. **Extend to other DAG systems** - IOTA, Hedera, Fantom, Avalanche
+The repository already includes the evaluated protocol forks under [`code/`](code), the committed datasets at the project root, and the auto-generated figure pipeline under [`plots/`](plots).
 
-## Key Papers
+## What Is In This Repository
 
-### Primary Papers
-- **Narwhal and Tusk**: "Narwhal and Tusk: A DAG-based Mempool and Efficient BFT Consensus"
-  - Authors: George Danezis, Eleftherios Kokoris Kogias, Alberto Sonnino, Alexander Spiegelman
-  - arXiv: [2105.11827](https://arxiv.org/abs/2105.11827)
+- [`code/`](code): protocol-specific implementations and attack hooks
+- [`config/`](config): experiment configurations used by the runners
+- [`scripts/`](scripts): campaign runners for baselines, frontrunning sweeps, and post-victim attacks
+- [`plots/`](plots): data loader, figure generator, and generated reports
+- [`baseline.csv`](baseline.csv): attack-disabled baselines
+- [`experiment_results.csv`](experiment_results.csv): main frontrunning campaign results
+- [`autobahn_results.csv`](autobahn_results.csv): Autobahn frontrunning campaign results
+- [`back_sand_results.csv`](back_sand_results.csv): backrunning and sandwich campaign results
 
-- **Bullshark**: "Bullshark: DAG BFT Protocols Made Practical"
-  - Authors: Alexander Spiegelman, Neil Giridharan, Alberto Sonnino, Lefteris Kokoris-Kogias
-  - arXiv: [2201.05677](https://arxiv.org/abs/2201.05677)
+## Quick Start
 
-## Code Repositories
+If you only want to reproduce the figures and reports from the committed paper data, you do not need to rerun the experiments.
 
-### Official Implementations
-- **Narwhal and Tusk**: [Facebook Research Narwhal](https://github.com/facebookresearch/narwhal)
-- **Bullshark**: [Mysten Labs Sui - Bullshark Implementation](https://github.com/MystenLabs/sui/tree/main/narwhal/consensus/src/bullshark)
+### Requirements
 
-## Project Structure
+- Python 3.9+
+- `pip`
+- `docker` only if you want to rerun experiments
+- `cargo` only if you want to rebuild local protocol binaries
+- a TeX distribution only if you want to compile the paper locally
 
-```
-├── README.md                           # This file
-├── docs/                              # Documentation
-│   ├── phase1_artifacts.md            # Phase 1 findings and analysis
-│   ├── phase2_setup.md                # Phase 2 environment setup
-│   ├── experimental_design.md         # Experimental methodology
-│   └── reproduction_results.md        # Results and analysis
-├── code/                              # Source code and implementations
-│   ├── narwhal-tusk/                  # Narwhal and Tusk implementation
-│   ├── bullshark/                     # Bullshark implementation
-│   ├── attack_implementations/        # MEV attack implementations
-│   ├── measurement_tools/             # Performance measurement tools
-│   └── orchestration/                 # Docker and deployment scripts
-├── experiments/                       # Experimental configurations and results
-│   ├── baseline/                      # Baseline performance tests
-│   ├── attacks/                       # MEV attack experiments
-│   ├── network_conditions/            # Different network scenarios
-│   └── data/                          # Raw experimental data
-├── scripts/                           # Automation and utility scripts
-└── docker/                            # Docker configurations
+Install the only Python dependency used by the plotting and runner layer:
+
+```bash
+python3 -m pip install pyyaml
 ```
 
-## Phase 1: Artifact Collection ✅
+## Running Long Experiments On Your Own Machines
 
-### Completed Tasks
-- [x] Located primary papers (Narwhal/Tusk and Bullshark)
-- [x] Found official code repositories
-- [x] Identified key authors and affiliations (Mysten Labs, Facebook Research)
+The long campaigns do not provision cloud resources for you. They assume you already have one or more Linux machines with enough CPU, RAM, and disk, and that Docker can run privileged network-emulation commands on those hosts.
 
-### Key Findings
-- **Narwhal**: DAG-based mempool for high-throughput transaction processing
-- **Tusk**: BFT consensus protocol built on top of Narwhal
-- **Bullshark**: Optimized version of Tusk for synchronous environments
-- **Implementation**: Both protocols implemented in Rust
-- **Organization**: Facebook Research (Narwhal) and Mysten Labs (Bullshark)
+The simplest setup is:
 
-## Phase 2: Environment Setup (In Progress)
+1. Provision one or more Ubuntu-class machines.
+2. Clone this repository onto each machine that will execute experiments.
+3. Install Docker and confirm that your user can run it.
+4. Install Python and `pyyaml`.
+5. Run the campaign commands from the repository root on each machine.
 
-### Current Status
-- Setting up development environment
-- Preparing Docker containers for reproducible experiments
-- Configuring network simulation tools
+For the Docker-backed paths, the runner expects:
 
-### Next Steps
-1. Clone and build the repositories
-2. Set up Docker orchestration
-3. Configure network simulation (tc/netem)
-4. Implement measurement tools
-5. Run baseline experiments
+- `docker build` and `docker run` to work without sudo prompts
+- support for `--cap-add=NET_ADMIN`
+- enough local disk for Docker images, temporary build artifacts, and logs under [`results/`](results)
 
-## Experimental Design
+The YAML files under [`config/`](config) declare the requested Docker resources for each protocol, for example:
 
-### Network Conditions to Test
-- **Latency**: 1ms (LAN), 20-50ms (intra-DC), 100-300ms (inter-region)
-- **Jitter**: None, low (5-20ms), high (50-150ms)
-- **Partitions**: Short (1-5s), long (30-120s)
-- **Node counts**: 4-7 (small), 16 (medium), 50+ (large)
+- Narwhal-Tusk: [`config/grand_experiment_narwhal.yaml`](config/grand_experiment_narwhal.yaml)
+- Autobahn: [`config/grand_experiment_autobahn.yaml`](config/grand_experiment_autobahn.yaml)
 
-### MEV Attack Types
-1. **Frontrunning**: Detect profitable transactions and submit higher-priority versions
-2. **Sandwich attacks**: Frontrun + backrun around target transactions
-3. **Time-bandit attacks**: Influence ordering through block production
-4. **Network manipulation**: Delay/re-route messages to bias ordering
+If your machine is smaller than the validated setup, reduce the `docker.cpus` and `docker.memory` values in the relevant config before launching a long run. The runner will cap requests to the Docker daemon limits when possible, but a smaller machine can still change throughput and timing behavior.
 
-### Metrics to Measure
-- Attack success rate
-- Profit per attack
-- Transaction ordering divergence
-- Time-to-finality
-- Throughput and latency impact
-- Resource costs for attackers
+Useful preflight checks:
 
-## Getting Started
+```bash
+docker info
+docker run --rm --cap-add=NET_ADMIN alpine true
+python3 -m pip install pyyaml
+```
 
-1. **Clone repositories**:
-   ```bash
-   git clone https://github.com/facebookresearch/narwhal.git code/narwhal-tusk/
-   git clone https://github.com/MystenLabs/sui.git code/bullshark/
-   ```
+If Docker build issues appear on some cloud images, try:
 
-2. **Set up environment**:
-   ```bash
-   cd code/narwhal-tusk/
-   # Follow build instructions in repository
-   ```
+```bash
+export DOCKER_BUILDKIT=0
+```
 
-3. **Run Dynamic Attack Tests**:
-   ```bash
-   cd code/bullshark/
-   export NUM_NODES=13
-   cargo test --release --package consensus-core test_fissure_attack_asr_dynamic -- --nocapture
-   ```
+before running the campaign. The runner already honors that override.
 
-## Timeline
+Recommended execution pattern:
 
-- **Week 1**: Phase 1 (Artifact collection) ✅
-- **Week 2**: Phase 2 (Environment setup) 🔄
-- **Week 3**: Phase 3 (Baseline validation)
-- **Week 4**: Phase 4 (Attack reproduction)
-- **Week 5**: Phase 5 (Results validation)
-- **Week 6**: Analysis and documentation
+- use one machine per large campaign family if you want to parallelize runs
+- keep a separate output CSV per machine while the runs are in progress
+- copy the finished CSVs back into the repository root before regenerating figures
 
-## Contact
+The validated paper datasets were produced from containerized runs on dedicated cloud machines. Full reruns on smaller hosts are still useful, but the committed CSVs remain the reference data for the artifact.
 
-For questions about this reproduction project, refer to the meeting notes in `MeetingSummary.txt`.
+## Reproduce Figures And Reports From The Committed Data
+
+From the repository root:
+
+```bash
+python3 -m plots.generate_all
+```
+
+This regenerates:
+
+- TikZ figure sources in [`plots/generated/figures/`](plots/generated/figures)
+- coverage and inventory reports in [`plots/generated/reports/`](plots/generated/reports)
+- a lightweight preview document in [`plots/generated/preview.tex`](plots/generated/preview.tex)
+
+Optional preview build:
+
+```bash
+cd plots/generated
+latexmk -pdf preview.tex
+```
+
+The most useful generated reports are:
+
+- [`plots/generated/reports/experiment_inventory.md`](plots/generated/reports/experiment_inventory.md)
+- [`plots/generated/reports/figure_manifest.md`](plots/generated/reports/figure_manifest.md)
+- [`plots/generated/reports/data_anomalies.md`](plots/generated/reports/data_anomalies.md)
+
+Important note:
+
+- [`plots/generated/figures/`](plots/generated/figures) contains the auto-generated figure sources driven directly from the CSVs.
+
+## Smoke-Test The Reproduction Entry Points
+
+Before launching a full rerun, you can validate the entry points without writing CSV output:
+
+```bash
+python3 scripts/run_protocol_baselines.py --dry-run --out /tmp/baseline_smoke.csv
+```
+
+```bash
+python3 scripts/experiment_sweeper.py \
+  --config config/grand_experiment_narwhal.yaml \
+  --experiments scaling,env_latency,offense_fissure,offense_speculative,offense_sluggish,defense_memory,defense_network,defense_gc,defense_header,defense_batching,scaling_workers \
+  --type frontrun \
+  --out /tmp/experiment_results_smoke.csv \
+  --dry-run
+```
+
+```bash
+python3 scripts/experiment_sweeper.py \
+  --config config/grand_experiment_autobahn.yaml \
+  --experiments scaling,env_latency,offense_fissure,offense_speculative,offense_sluggish,offense_exclusion,autobahn_k,autobahn_fast_path \
+  --type frontrun \
+  --out /tmp/autobahn_results_smoke.csv \
+  --dry-run
+```
+
+```bash
+python3 scripts/run_backrun_sandwich_simple_campaign.py \
+  --out /tmp/back_sand_results_smoke.csv \
+  --dry-run
+```
+
+These commands do not execute the full experiments. They verify that the runner scripts, config files, and command wiring resolve correctly on your machine.
+
+## Reproduce The Data
+
+The committed CSV files are the paper datasets. If you want to regenerate them from the experiment runners, use the workflow below.
+
+### 1. Reproduce Baselines
+
+```bash
+python3 scripts/run_protocol_baselines.py --out baseline.csv
+```
+
+This regenerates the attack-disabled baseline measurements used as the fair-order reference.
+
+### 2. Reproduce Frontrunning Campaigns
+
+The main sweeps are driven by [`scripts/experiment_sweeper.py`](scripts/experiment_sweeper.py):
+
+```bash
+python3 scripts/experiment_sweeper.py \
+  --config <config-file> \
+  --experiments <comma-separated-experiments> \
+  --type frontrun \
+  --out <output.csv>
+```
+
+Common experiment groups:
+
+- `scaling`
+- `env_latency`
+- `offense_fissure`
+- `offense_speculative`
+- `offense_sluggish`
+
+Protocol-specific extensions:
+
+- Bullshark / MEVSUI / Narwhal-Tusk:
+  - `defense_memory`
+  - `defense_network`
+  - `defense_gc`
+- Narwhal-Tusk:
+  - `defense_header`
+  - `defense_batching`
+  - `scaling_workers`
+- Mysticeti:
+  - `offense_exclusion`
+  - `mysticeti_strategy`
+  - `mahimahi_wave`
+  - `mahimahi_leaders`
+- Mahi-Mahi:
+  - `mahimahi_strategy`
+  - `mahimahi_wave`
+  - `mahimahi_leaders`
+- AlephBFT:
+  - `offense_exclusion`
+  - `aleph_lookahead`
+  - `aleph_sync_speed`
+  - `aleph_hash_randomization`
+- Autobahn:
+  - `offense_exclusion`
+  - `autobahn_k`
+  - `autobahn_fast_path`
+
+Main configuration files:
+
+- [`config/local_verify_unified.yaml`](config/local_verify_unified.yaml): Bullshark
+- [`config/grand_experiment.yaml`](config/grand_experiment.yaml): MEVSUI
+- [`config/grand_experiment_narwhal.yaml`](config/grand_experiment_narwhal.yaml): Narwhal-Tusk
+- [`config/grand_experiment_mysticeti.yaml`](config/grand_experiment_mysticeti.yaml): Mysticeti
+- [`config/grand_experiment_alephbft.yaml`](config/grand_experiment_alephbft.yaml): AlephBFT
+- [`config/grand_experiment_mahimahi.yaml`](config/grand_experiment_mahimahi.yaml): Mahi-Mahi
+- [`config/grand_experiment_autobahn.yaml`](config/grand_experiment_autobahn.yaml): Autobahn
+
+Examples:
+
+```bash
+python3 scripts/experiment_sweeper.py \
+  --config config/grand_experiment_narwhal.yaml \
+  --experiments scaling,env_latency,offense_fissure,offense_speculative,offense_sluggish,defense_memory,defense_network,defense_gc,defense_header,defense_batching,scaling_workers \
+  --type frontrun \
+  --out experiment_results.csv
+```
+
+```bash
+python3 scripts/experiment_sweeper.py \
+  --config config/grand_experiment_autobahn.yaml \
+  --experiments scaling,env_latency,offense_fissure,offense_speculative,offense_sluggish,offense_exclusion,autobahn_k,autobahn_fast_path \
+  --type frontrun \
+  --out autobahn_results.csv
+```
+
+The sweeper writes one row per repetition into the CSV passed with `--out`, and the Docker-backed protocols also write raw logs under [`results/`](results). If a run is interrupted, rerunning the same command resumes from the existing CSV and skips completed rows.
+
+### 3. Reproduce Backrunning And Sandwiching
+
+The post-victim campaign is intentionally narrower and is driven by a dedicated script:
+
+```bash
+python3 scripts/run_backrun_sandwich_simple_campaign.py --out back_sand_results.csv
+```
+
+By default this runs the simple post-victim campaign for:
+
+- Bullshark
+- Mysticeti
+- AlephBFT
+- Autobahn
+
+You can limit the run to a subset:
+
+```bash
+python3 scripts/run_backrun_sandwich_simple_campaign.py \
+  --protocol bullshark \
+  --protocol mysticeti \
+  --out back_sand_results.csv
+```
+
+This wrapper builds Docker images only for the protocols that need them and forwards the actual work to [`scripts/experiment_sweeper.py`](scripts/experiment_sweeper.py). In dry-run mode it prints the exact `ATTACK_MODE`, protocol config, and output path for every planned command.
+
+### 4. Outputs
+
+The main data products are:
+
+- [`baseline.csv`](baseline.csv)
+- [`experiment_results.csv`](experiment_results.csv)
+- [`autobahn_results.csv`](autobahn_results.csv)
+- [`back_sand_results.csv`](back_sand_results.csv)
+
+These files are the inputs consumed by the plot generator.
+
+## Practical Notes
+
+- The repository already contains the evaluated protocol code under [`code/`](code). You do not need to clone external repositories to regenerate the committed plots.
+- The experiment runners use Docker by default. Some local paths support `--local`, but the artifact’s validated results were produced with the repository’s protocol-specific runners and containerized deployments.
+- The validated paper datasets were produced from the artifact’s containerized campaign setup on CloudLab-style infrastructure. Local reruns are useful for sanity checks, but large campaign timing and throughput behavior should be compared against the committed CSVs.
+- Full reruns are much more expensive than figure regeneration. The published datasets are included precisely so that readers can reproduce the analysis without rerunning every campaign.
+- The authoritative experiment matrix is encoded in [`scripts/experiment_sweeper.py`](scripts/experiment_sweeper.py) and summarized in [`plots/generated/reports/experiment_inventory.md`](plots/generated/reports/experiment_inventory.md).
+
+## Citation
+
+If you use this repository, please cite the paper and the artifact repository once the public record is finalized.

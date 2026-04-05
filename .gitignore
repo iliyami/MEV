@@ -58,4 +58,5 @@ experiment_results.csv
 preview.aux
 preview.fdb_latexmk
 preview.fls
-paper_workspace/
+paper_workspace/*
+backups/*

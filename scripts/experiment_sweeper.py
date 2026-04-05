@@ -408,7 +408,7 @@ def cleanup_protocol_containers(config, reason=None):
         check=False,
     )
 
-def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_path, local_mode=False, no_build=False):
+def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_path, local_mode=False, no_build=False, dry_run=False):
     # 0. Create logs directory in /tmp where we have permissions
     log_dir = "/tmp/mev_logs"
     os.makedirs(log_dir, exist_ok=True)
@@ -509,6 +509,12 @@ def run_experiment(config_override, attack_mode, exp_name, rep_id, base_config_p
     cmd = [sys.executable, "scripts/test_runner.py", temp_config_path]
     if local_mode:
         cmd.append("--local")
+
+    if dry_run:
+        print(f"  [dry-run] cmd={' '.join(cmd)}")
+        if os.path.exists(temp_config_path):
+            os.remove(temp_config_path)
+        return None
     
     start_time = time.time()
     num_nodes = int(config['environment'].get('NUM_NODES', 0))
@@ -655,27 +661,35 @@ def main():
     parser.add_argument("--out", default=DEFAULT_RESULTS_FILE, help=f"Output CSV file for results (default: {DEFAULT_RESULTS_FILE})")
     parser.add_argument("--no-build", action="store_true", help="Skip building binary inside Docker (use existing)")
     parser.add_argument("--type", default="frontrun", choices=["frontrun", "backrun", "sandwich"], help="MEV attack type")
+    parser.add_argument("--dry-run", action="store_true", help="Print planned runs without executing them or writing CSV output")
     args = parser.parse_args()
 
     results_file = args.out
 
     # 0. Clean up and load existing progress
-    ensure_results_header(results_file)
-    deduplicate_results(results_file)
-    existing_results = load_existing_results(results_file)
-    print(f"Loaded {len(existing_results)} existing results. Resuming...")
+    if args.dry_run:
+        existing_results = set()
+        print("Dry run enabled. No CSV output will be written.")
+    else:
+        ensure_results_header(results_file)
+        deduplicate_results(results_file)
+        existing_results = load_existing_results(results_file)
+        print(f"Loaded {len(existing_results)} existing results. Resuming...")
 
     # Determine Repetitions from config
     config = load_base_config(args.config)
     repetitions = int(config.get('test', {}).get('REPETITIONS', 1))
 
-    # Initialize CSV
-    file_exists = os.path.exists(results_file) and os.path.getsize(results_file) > 0
     target_protocol = config['protocol']['name']
-    with open(results_file, 'a', newline='') as csvfile:
+    csvfile = None
+    writer = None
+    if not args.dry_run:
+        file_exists = os.path.exists(results_file) and os.path.getsize(results_file) > 0
+        csvfile = open(results_file, 'a', newline='')
         writer = csv.DictWriter(csvfile, fieldnames=FIELDNAMES, extrasaction='ignore')
         if not file_exists:
             writer.writeheader()
+    try:
 
         # SELECT MODE VIA ENV VAR
         target_attack = os.environ.get("ATTACK_MODE", "fissure")
@@ -779,11 +793,16 @@ def main():
                             args.config,
                             local_mode=args.local,
                             no_build=args.no_build,
+                            dry_run=args.dry_run,
                         )
+                        if data is None:
+                            break
                         if data.get('exit_code') != -124:
                             break
                     
                     # ONLY record if we got a non-zero ASR (0.0 usually means simulation liveness failure)
+                    if data is None:
+                        continue
                     asr_result = str(data.get('asr', '0.0'))
                     exit_code = data.get('exit_code', "")
                     if is_recordable_result(asr_result, exit_code):
@@ -813,6 +832,9 @@ def main():
                     else:
                         # Local mode needs time for sockets to enter TIME_WAIT and clear
                         time.sleep(5)
+    finally:
+        if csvfile is not None:
+            csvfile.close()
 
 if __name__ == "__main__":
     main()

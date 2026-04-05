@@ -23,11 +23,6 @@ This repo provides an implementation of [Narwhal and Tusk](https://arxiv.org/pdf
 - **Performance**: 37K TPS maintained during attack
 - **Exclusions**: 100+ victim parent exclusions
 
-### Documentation
-- **Quick Start**: [QUICK_START.md](QUICK_START.md)
-- **Implementation Guide**: [FISSURE_ATTACK_IMPLEMENTATION_GUIDE.md](FISSURE_ATTACK_IMPLEMENTATION_GUIDE.md)
-- **Documentation Summary**: [ATTACK_DOCUMENTATION_SUMMARY.md](ATTACK_DOCUMENTATION_SUMMARY.md)
-
 ## Quick Start
 The core protocols are written in Rust, but all benchmarking scripts are written in Python and run with [Fabric](http://www.fabfile.org/).
 To deploy and benchmark a testbed of 4 nodes on your local machine, clone the repo and install the python dependencies:

@@ -3,19 +3,21 @@
 
 \begin{tikzpicture}
 \begin{groupplot}[
-  group style={group size=3 by 1, horizontal sep=1.35cm},
+  group style={group size=3 by 1, horizontal sep=0.18cm},
 ]
 
 \nextgroupplot[
   mevAxis,
-  width=0.31\linewidth,
-  height=0.30\linewidth,
+  scale only axis,
+  width=0.285\linewidth,
+  height=0.22\linewidth,
   title={Fissure},
-  ylabel={Share of successful backruns (\%)},
   ymin=0,
   ymax=100,
-  symbolic x coords={bullshark,alephbft,mysticeti,autobahn}, xtick={bullshark,alephbft,mysticeti,autobahn}, xticklabels={Bullshark,AlephBFT,Mysticeti,Autobahn},
-  x tick label style={rotate=25, anchor=east}
+  ytick={0,20,40,60,80,100},
+  symbolic x coords={bullshark,alephbft,mysticeti,autobahn}, xtick={bullshark,alephbft,mysticeti,autobahn},
+  xticklabels={Bull\\shark,Aleph\\BFT,Mysti\\ceti,Auto\\bahn},
+  x tick label style={font=\tiny, align=center}
 ]
 \addplot+[ybar stacked, draw=black!15, fill=GapOne] coordinates {(bullshark,34.88) (alephbft,0.00) (mysticeti,34.93) (autobahn,15.79)};
 \addplot+[ybar stacked, draw=black!15, fill=GapTwo] coordinates {(bullshark,33.33) (alephbft,0.00) (mysticeti,29.28) (autobahn,13.14)};
@@ -26,14 +28,17 @@
 
 \nextgroupplot[
   mevAxis,
-  width=0.31\linewidth,
-  height=0.30\linewidth,
+  scale only axis,
+  width=0.285\linewidth,
+  height=0.22\linewidth,
   title={Speculative},
-  ylabel={Share of successful backruns (\%)},
   ymin=0,
   ymax=100,
-  symbolic x coords={bullshark,alephbft,mysticeti,autobahn}, xtick={bullshark,alephbft,mysticeti,autobahn}, xticklabels={Bullshark,AlephBFT,Mysticeti,Autobahn},
-  x tick label style={rotate=25, anchor=east}
+  ytick={0,20,40,60,80,100},
+  yticklabels={,,,,,},
+  symbolic x coords={bullshark,alephbft,mysticeti,autobahn}, xtick={bullshark,alephbft,mysticeti,autobahn},
+  xticklabels={Bull\\shark,Aleph\\BFT,Mysti\\ceti,Auto\\bahn},
+  x tick label style={font=\tiny, align=center}
 ]
 \addplot+[ybar stacked, draw=black!15, fill=GapOne] coordinates {(bullshark,33.94) (alephbft,0.00) (mysticeti,32.95) (autobahn,20.09)};
 \addplot+[ybar stacked, draw=black!15, fill=GapTwo] coordinates {(bullshark,33.64) (alephbft,0.00) (mysticeti,32.28) (autobahn,11.61)};
@@ -44,14 +49,17 @@
 
 \nextgroupplot[
   mevAxis,
-  width=0.31\linewidth,
-  height=0.30\linewidth,
+  scale only axis,
+  width=0.285\linewidth,
+  height=0.22\linewidth,
   title={Sluggish},
-  ylabel={Share of successful backruns (\%)},
   ymin=0,
   ymax=100,
-  symbolic x coords={bullshark,alephbft,mysticeti,autobahn}, xtick={bullshark,alephbft,mysticeti,autobahn}, xticklabels={Bullshark,AlephBFT,Mysticeti,Autobahn},
-  x tick label style={rotate=25, anchor=east}
+  ytick={0,20,40,60,80,100},
+  yticklabels={,,,,,},
+  symbolic x coords={bullshark,alephbft,mysticeti,autobahn}, xtick={bullshark,alephbft,mysticeti,autobahn},
+  xticklabels={Bull\\shark,Aleph\\BFT,Mysti\\ceti,Auto\\bahn},
+  x tick label style={font=\tiny, align=center}
 ]
 \addplot+[ybar stacked, draw=black!15, fill=GapOne] coordinates {(bullshark,39.15) (alephbft,10.45) (mysticeti,35.03) (autobahn,21.88)};
 \addplot+[ybar stacked, draw=black!15, fill=GapTwo] coordinates {(bullshark,31.22) (alephbft,11.78) (mysticeti,30.95) (autobahn,20.50)};
@@ -61,7 +69,9 @@
 \addplot+[ybar stacked, draw=black!15, fill=GapTenPlus] coordinates {(bullshark,2.65) (alephbft,7.79) (mysticeti,13.95) (autobahn,3.66)};
 
 \end{groupplot}
-\matrix[anchor=north, column sep=0.18cm, row sep=0pt] at ($(group c1r1.south west)!0.5!(group c3r1.south east)+(0,-0.82cm)$) {
-  \node[draw=black!15, fill=GapOne, minimum width=8pt, minimum height=8pt, inner sep=0pt] {}; & \node[font=\scriptsize] {Gap 1}; & \node[draw=black!15, fill=GapTwo, minimum width=8pt, minimum height=8pt, inner sep=0pt] {}; & \node[font=\scriptsize] {Gap 2}; & \node[draw=black!15, fill=GapThree, minimum width=8pt, minimum height=8pt, inner sep=0pt] {}; & \node[font=\scriptsize] {Gap 3}; & \node[draw=black!15, fill=GapFourFive, minimum width=8pt, minimum height=8pt, inner sep=0pt] {}; & \node[font=\scriptsize] {Gap 4--5}; & \node[draw=black!15, fill=GapSixNine, minimum width=8pt, minimum height=8pt, inner sep=0pt] {}; & \node[font=\scriptsize] {Gap 6--9}; & \node[draw=black!15, fill=GapTenPlus, minimum width=8pt, minimum height=8pt, inner sep=0pt] {}; & \node[font=\scriptsize] {Gap 10+}; \\
+\node[rotate=90, anchor=south, font=\tiny] at ($(group c1r1.north west)!0.5!(group c1r1.south west)+(-0.46cm,0)$) {Share of successful backruns (\%)};
+\matrix[anchor=north, column sep=0.14cm, row sep=1pt] at ($(group c1r1.south west)!0.5!(group c3r1.south east)+(0,-0.50cm)$) {
+  \node[draw=black!15, fill=GapOne, minimum width=8pt, minimum height=8pt, inner sep=0pt] {}; & \node[font=\scriptsize] {Gap 1}; & \node[draw=black!15, fill=GapTwo, minimum width=8pt, minimum height=8pt, inner sep=0pt] {}; & \node[font=\scriptsize] {Gap 2}; & \node[draw=black!15, fill=GapThree, minimum width=8pt, minimum height=8pt, inner sep=0pt] {}; & \node[font=\scriptsize] {Gap 3}; \\
+  \node[draw=black!15, fill=GapFourFive, minimum width=8pt, minimum height=8pt, inner sep=0pt] {}; & \node[font=\scriptsize] {Gap 4--5}; & \node[draw=black!15, fill=GapSixNine, minimum width=8pt, minimum height=8pt, inner sep=0pt] {}; & \node[font=\scriptsize] {Gap 6--9}; & \node[draw=black!15, fill=GapTenPlus, minimum width=8pt, minimum height=8pt, inner sep=0pt] {}; & \node[font=\scriptsize] {Gap 10+}; \\
 };
 \end{tikzpicture}
