@@ -1,0 +1,15 @@
+---
+source: crates/move-decompiler/tests/tests.rs
+---
+'loop_0: loop {
+    { 0 }
+    if (1) {
+        continue 'loop_0;
+    }
+    if (2) {
+        break 'loop_0;
+    } else {
+        continue 'loop_0;
+    }
+}
+{ 3 }

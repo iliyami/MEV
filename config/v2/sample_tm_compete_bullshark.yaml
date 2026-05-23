@@ -1,0 +1,56 @@
+# TM-Compete mixed-strategy cell on Bullshark — two independent attacker
+# groups, one running frontrun/fissure, the other backrun/sluggish, both
+# competing for the same victim block. Smoke-test for the multi-policy harness.
+#
+# Invariant (CLAUDE.md): no protocol-core modification.
+
+experiment:
+  name: "v2_tm_compete_bullshark_mixed"
+  description: "TM-Compete Bullshark: g1=frontrun/fissure (2 nodes) vs g2=backrun/sluggish (2 nodes)"
+
+protocol:
+  name: "bullshark"
+  path: "bullshark"
+
+docker:
+  tag: "mev-bullshark:latest"
+  cpus: "2.0"
+  memory: "4g"
+
+environment:
+  NUM_NODES: "13"
+  ATTACKER_RATIO: "0.308"
+  VICTIM_RATIO: "0.231"
+  BYZANTINE_F: "4"
+
+adversary:
+  threat_model: "TM-Compete"
+  topology:
+    policies:
+      - group_id: "g1"
+        members: [3, 5]
+        family: "frontrun"
+        strategy: "fissure"
+        params:
+          p_exclusion: 0.7
+      - group_id: "g2"
+        members: [7, 9]
+        family: "backrun"
+        strategy: "sluggish"
+        params:
+          tau_s: 3.0
+  coordination:
+    enabled: false
+  bribery:
+    enabled: false
+
+victims:
+  workload: "single"
+  count: 1
+  profit:
+    distribution: "uniform"
+
+runtime:
+  invariant_audit: true
+  reps: 5
+  seed: 0

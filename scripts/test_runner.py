@@ -492,6 +492,16 @@ def main():
     else:
         result = run_attack_test(config)
     
+    # v2 harness: when V2_VERBOSE_OUTPUT=1 is exported (set by BullsharkLauncher),
+    # forward the full captured cargo/Docker stdout so the launcher's parent
+    # process can grep for v2-emitted info!() markers (V2_VICTIM_PROFIT,
+    # "v2 coordinator assigned policy", etc.). Paper-1 behavior (suppressed
+    # output on success) is preserved when the env var is unset.
+    if os.environ.get("V2_VERBOSE_OUTPUT") == "1" and result.get("output"):
+        print("--- V2 VERBOSE TEST OUTPUT ---")
+        print(result["output"])
+        print("--- /V2 VERBOSE TEST OUTPUT ---")
+
     if not result['success']:
         print("ERROR: Test execution failed")
         if 'output' in result:

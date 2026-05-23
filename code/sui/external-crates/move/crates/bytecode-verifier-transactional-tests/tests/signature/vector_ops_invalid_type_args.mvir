@@ -1,0 +1,30 @@
+//# run
+mvir 0x42::m {
+
+entry fun foo() {
+label b0:
+    _ = vec_pack_0<u64, bool>();
+    return;
+}
+
+}
+//# run
+mvir 0x42::m {
+
+entry fun foo() {
+label b0:
+    _ = vec_pack_0<>();
+    return;
+}
+
+}
+//# run
+mvir 0x42::m {
+
+entry fun foo() {
+label b0:
+    _ = vec_pack_0<&u64>();
+    return;
+}
+
+}

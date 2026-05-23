@@ -1,0 +1,73 @@
+# P1.X.1 — multi-policy live exercise.
+# Two Byzantine groups attacking the same victim set with different
+# (family, strategy) pairs. Verifies the Coordinator → Bullshark Rust
+# path actually delivers per-node policy correctly.
+#
+# Invariant (CLAUDE.md): no protocol-core modification.
+
+experiment:
+  name: "p1x1_multipolicy_live"
+  description: "Two distinct policies across Byzantine slots; verify per-node assignment via log markers."
+
+protocol:
+  name: "bullshark"
+  path: "bullshark"
+
+docker:
+  tag: "mev-bullshark:latest"
+  cpus: "8.0"
+  memory: "16g"
+
+test:
+  test_name: "test_fissure_attack_asr_dynamic"
+  REPETITIONS: 1
+
+environment:
+  NUM_NODES: "13"
+  ATTACKER_RATIO: "0.308"
+  VICTIM_RATIO: "0.231"
+  SPECULATIVE_P_MAX: "50"
+  SLUGGISH_TIMEOUT_MULTIPLIER: "1.5"
+  DAG_STATE_CACHED_ROUNDS: "5"
+  SYNC_TIMEOUT_MS: "2000"
+  GC_DEPTH: "10"
+  # Default ATTACK_MODE/ATTACK_TYPE the v1 path would use if V2_COORDINATOR_URL
+  # weren't set. With v2 path active, the coordinator overrides per-node.
+  ATTACK_MODE: "fissure"
+  ATTACK_TYPE: "frontrun"
+
+adversary:
+  threat_model: "TM-Compete"
+  topology:
+    policies:
+      # Group g1: nodes 0 and 1 run frontrun/fissure.
+      - group_id: "g1"
+        members: [0, 1]
+        family: "frontrun"
+        strategy: "fissure"
+        params: {}
+      # Group g2: nodes 2 and 3 run frontrun/speculative.
+      # (Keep both groups in `frontrun` so the index-range victim selection
+      # in Bullshark's existing layout remains coherent; the *strategy* axis
+      # is what differs across groups.)
+      - group_id: "g2"
+        members: [2, 3]
+        family: "frontrun"
+        strategy: "speculative"
+        params:
+          speculative_p_max: 50
+  coordination:
+    enabled: false
+  bribery:
+    enabled: false
+
+victims:
+  workload: "single"
+  count: 1
+  profit:
+    distribution: "uniform"
+
+runtime:
+  invariant_audit: true
+  reps: 1
+  seed: 0

@@ -38,6 +38,7 @@ mod threshold_clock;
 mod transaction;
 mod transaction_certifier;
 mod universal_committer;
+mod v2_coordinator_client;
 
 /// Consensus test utilities.
 #[cfg(test)]

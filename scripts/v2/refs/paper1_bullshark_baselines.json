@@ -1,0 +1,54 @@
+{
+  "_meta": {
+    "description": "Reference Bullshark ASRs from paper 1 (Transaction Order Under Attack). Used by experiment_sweeper_v2 to detect contradictions when the new harness re-runs the same cells.",
+    "paper_pdf": "paper_workspace/MEV_on_DAG_based_BFT.pdf",
+    "source_csvs": [
+      "baseline.csv",
+      "experiment_results.csv",
+      "back_sand_results.csv"
+    ],
+    "extraction_date": "2026-05-21",
+    "protocol": "bullshark",
+    "num_nodes": 13,
+    "reps": 5,
+    "default_config_note": "All cells use the default attacker/victim config from paper 1: ATTACKER_RATIO=0.308 (4 Byzantine), VICTIM_RATIO=0.231 (3 victims), single victim per run, no defensive knob change. Medians are over 5 reps unless noted.",
+    "tolerance_default_pct": 10.0,
+    "tolerance_note": "Default tolerance is +/-10pp on the median. Cells with known-high variance (Bullshark sluggish sandwich has a 0.0 outlier among five reps) are flagged with cell-specific tolerance.",
+    "invariant_reference": "CLAUDE.md (no protocol-core modification)."
+  },
+  "pure_baseline": {
+    "value_pct": 51.86,
+    "note": "Single run, attack disabled (paper 1 §5.1: pure baseline; per-protocol fair-order reference).",
+    "source": "baseline.csv row 3 (bullshark; ATTACK_MODE cleared)",
+    "paper_ref": "Abstract: 'measured baseline ASRs span 49.94% to 52.85% across protocols'",
+    "tolerance_pp": 5.0
+  },
+  "frontrun_default_config_n13": {
+    "fissure":    {"median_pct": 92.30, "min_pct": 77.80, "max_pct": 93.10, "n": 5, "source": "experiment_results.csv scaling NUM_NODES=13"},
+    "speculative":{"median_pct": 93.00, "min_pct": 91.00, "max_pct": 93.10, "n": 5, "source": "experiment_results.csv scaling NUM_NODES=13"},
+    "sluggish":   {"median_pct": 91.40, "min_pct": 83.00, "max_pct": 94.10, "n": 5, "source": "experiment_results.csv scaling NUM_NODES=13"}
+  },
+  "frontrun_peak_observed_n13": {
+    "_note": "Best-observed median across the offensive/defensive sweep cells; from paper Figure 3.",
+    "fissure":    {"median_pct": 94.80, "paper_ref": "Fig. 3 (page 6)"},
+    "speculative":{"median_pct": 94.40, "paper_ref": "Fig. 3 (page 6)"},
+    "sluggish":   {"median_pct": 95.80, "paper_ref": "Fig. 3 (page 6)"}
+  },
+  "backrun_cumulative_n13": {
+    "_note": "Default-config medians; L1 = immediate-after-victim rate; L2 = within-two-positions rate. Paper §5.7.1: 'Bullshark and Mysticeti both achieve near-perfect median Cumulative backrun ASR... but only about one third of victim blocks are immediately backrun (L1), and only about two thirds are captured within two positions (L2).'",
+    "fissure":    {"cum_median_pct": 98.50, "l1_median_pct": 33.33, "l2_median_pct": 66.67, "n": 5, "source": "back_sand_results.csv"},
+    "speculative":{"cum_median_pct": 100.00, "l1_median_pct": 33.33, "l2_median_pct": 66.67, "n": 5, "source": "back_sand_results.csv"},
+    "sluggish":   {"cum_median_pct": 98.80, "l1_median_pct": 39.02, "l2_median_pct": 69.62, "n": 5, "source": "back_sand_results.csv"}
+  },
+  "sandwich_triplet_n13": {
+    "_note": "Triplet sandwich ASR per paper §4.3; paper Figure 18 (page 14): 'Bullshark has the highest median sandwich ASR under all three attacks (81.82%, 80.95%, and 100.00%).'",
+    "fissure":    {"median_pct": 81.82, "n": 5, "raw_asrs": [81.82, 81.82, 81.82, 80.95, 81.82], "source": "back_sand_results.csv"},
+    "speculative":{"median_pct": 80.95, "n": 5, "raw_asrs": [81.82, 80.95, 82.40, 75.19, 72.22], "source": "back_sand_results.csv"},
+    "sluggish":   {"median_pct": 100.00, "n": 5, "raw_asrs": [100.0, 100.0, 0.0, 100.0, 100.0], "tolerance_pp": 25.0, "tolerance_note": "One zero outlier in five reps; wider tolerance documented in paper Figure 5 variance discussion.", "source": "back_sand_results.csv"}
+  },
+  "contradictions_to_flag": [
+    "Any new-harness Bullshark frontrun default-config median that drifts more than tolerance_pp from the reference. Flag as either harness drift or environmental change before admitting the data.",
+    "Any Bullshark pure-baseline value outside the 49.94%-52.85% cross-protocol range from the paper abstract. Indicates either fair-order broken or a baseline-collection bug.",
+    "Any L1 / L2 backrun median substantially above the cumulative median is impossible by construction (L1 <= L2 <= cumulative). Treat as ingestion bug."
+  ]
+}

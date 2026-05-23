@@ -130,6 +130,24 @@ pub(crate) struct Core {
     is_attacker: bool,
     is_back_attacker: bool,
     attack_active: bool,
+    /// v3 R-P5.1: adaptive victim targeting. When Some(t), the attacker only
+    /// applies the fissure exclusion to victim blocks whose Coordinator-reported
+    /// profit exceeds `t`. When None (default), all victims are equally
+    /// targeted (paper-1 behavior). Populated from policy.params.profit_threshold.
+    profit_threshold: Option<f64>,
+    /// v3 R-P3.1: role-specialization. Three values:
+    ///   * "exclude"  — default; run fissure ancestor-exclusion (paper-1 behaviour).
+    ///   * "amplify"  — skip ancestor-exclusion; preferentially include
+    ///                   same-group_id parents (helps coalition cohesion;
+    ///                   shares code path with R-P3.2 quorum-shaping).
+    ///   * "passive"  — skip both exclusion and amplification; propose
+    ///                   normally (no attack this slot, ack-only role).
+    /// None (default) = "exclude" (paper-1 path). Populated from
+    /// policy.params.role_action.
+    role_action: Option<String>,
+    /// v3 R-P3.1/R-P3.2: the attacker's own group_id, captured so the
+    /// amplify role can preferentially include same-group parents.
+    own_group_id: Option<String>,
 }
 
 impl Core {
@@ -195,8 +213,12 @@ impl Core {
         ancestor_state_manager.set_propagation_scores(propagation_scores);
 
         // --- Speculative attack configuration from environment ---
-        let attack_mode = env::var("ATTACK_MODE").unwrap_or_default();
-        let attack_type = env::var("ATTACK_TYPE").unwrap_or_else(|_| "frontrun".to_string());
+        // Paper-1 path: values come from environment variables. Mutable
+        // bindings allow the v2 coordinator override block below to swap in
+        // per-node policy when V2_COORDINATOR_URL is set. With that env unset
+        // (the default), this entire block runs unchanged.
+        let mut attack_mode = env::var("ATTACK_MODE").unwrap_or_default();
+        let mut attack_type = env::var("ATTACK_TYPE").unwrap_or_else(|_| "frontrun".to_string());
         let attacker_ratio: f64 = env::var("ATTACKER_RATIO")
             .ok()
             .and_then(|s| s.parse().ok())
@@ -205,8 +227,8 @@ impl Core {
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or(0.22);
-        
-        let speculative_p_max: usize = env::var("SPECULATIVE_P_MAX")
+
+        let mut speculative_p_max: usize = env::var("SPECULATIVE_P_MAX")
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or_else(|| {
@@ -220,7 +242,7 @@ impl Core {
         let attacker_count = ((committee_size as f64) * attacker_ratio).floor() as usize;
         let victim_count = ((committee_size as f64) * victim_ratio).floor() as usize;
         let own_index = context.own_index.value();
-        let (is_attacker, is_back_attacker) = match attack_type.as_str() {
+        let (mut is_attacker, mut is_back_attacker) = match attack_type.as_str() {
             "backrun" => {
                 let back_start = victim_count;
                 let back = own_index >= back_start && own_index < (back_start + attacker_count);
@@ -236,9 +258,9 @@ impl Core {
             }
             _ => (own_index < attacker_count, false),
         };
-        let attack_active = attack_mode == "fissure" || attack_mode == "speculative" || attack_mode == "sluggish";
-        
-        let sluggish_timeout_multiplier: f64 = env::var("SLUGGISH_TIMEOUT_MULTIPLIER")
+        let mut attack_active = attack_mode == "fissure" || attack_mode == "speculative" || attack_mode == "sluggish";
+
+        let mut sluggish_timeout_multiplier: f64 = env::var("SLUGGISH_TIMEOUT_MULTIPLIER")
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or_else(|| {
@@ -247,6 +269,90 @@ impl Core {
                 }
                 2.0
             });
+
+        // v3 R-P5.1: adaptive victim targeting threshold. None means
+        // paper-1 behaviour (all victims equally targeted). Populated
+        // from policy.params.profit_threshold by the v2 branch below.
+        let mut profit_threshold: Option<f64> = None;
+        // v3 R-P3.1: role-specialization action. None = paper-1 path.
+        let mut role_action: Option<String> = None;
+        // v3 R-P3.1/R-P3.2: own group_id captured for preferential-inclusion logic.
+        let mut own_group_id: Option<String> = None;
+
+        // --- v2 coordinator override (paper 2) ---
+        // When V2_COORDINATOR_URL is set, replace this replica's per-node
+        // attack assignment with the value returned by the Byzantine-only
+        // coordinator service. Honest nodes (404 from /policy/lookup) become
+        // is_attacker=false regardless of the env-var-derived value above.
+        // This branch never modifies validity/quorum/signature paths -- it
+        // only changes which legitimate-action attacker hook this replica
+        // will fire (see CLAUDE.md invariant).
+        if let Ok(coord_url) = env::var("V2_COORDINATOR_URL") {
+            match crate::v2_coordinator_client::lookup_policy(&coord_url, own_index) {
+                Ok(Some(policy)) => {
+                    attack_mode = policy.strategy.clone();
+                    attack_type = policy.family.clone();
+                    is_attacker = true;
+                    is_back_attacker = matches!(policy.family.as_str(), "backrun")
+                        || policy
+                            .params
+                            .get("is_back_attacker")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false);
+                    if let Some(v) = policy
+                        .params
+                        .get("speculative_p_max")
+                        .and_then(|v| v.as_u64())
+                    {
+                        speculative_p_max = v as usize;
+                    }
+                    if let Some(v) = policy
+                        .params
+                        .get("sluggish_timeout_multiplier")
+                        .and_then(|v| v.as_f64())
+                    {
+                        sluggish_timeout_multiplier = v;
+                    }
+                    // v3 R-P5.1: capture per-policy profit_threshold for
+                    // adaptive victim targeting (used in the fissure hook).
+                    profit_threshold = policy
+                        .params
+                        .get("profit_threshold")
+                        .and_then(|v| v.as_f64());
+                    // v3 R-P3.1: capture per-policy role_action.
+                    role_action = policy
+                        .params
+                        .get("role_action")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                    // v3 R-P3.1/R-P3.2: capture own group_id for amplify-role's
+                    // preferential-inclusion logic.
+                    own_group_id = Some(policy.group_id.clone());
+                    attack_active = matches!(
+                        attack_mode.as_str(),
+                        "fissure" | "speculative" | "sluggish"
+                    );
+                    info!(
+                        "v2 coordinator assigned policy to node {}: family={}, strategy={}, group={}",
+                        own_index, attack_type, attack_mode, policy.group_id
+                    );
+                }
+                Ok(None) => {
+                    // honest node per coordinator
+                    is_attacker = false;
+                    is_back_attacker = false;
+                    attack_active = false;
+                    info!(
+                        "v2 coordinator marked node {} as honest (no attacker policy)",
+                        own_index
+                    );
+                }
+                Err(e) => panic!(
+                    "v2 coordinator policy lookup failed for node {}: {}",
+                    own_index, e
+                ),
+            }
+        }
 
         Self {
             context,
@@ -272,6 +378,9 @@ impl Core {
             is_back_attacker,
             attack_active,
             sluggish_timeout_multiplier,
+            profit_threshold,
+            role_action,
+            own_group_id,
             last_signaled_round,
             last_included_ancestors,
             last_decided_leader,
@@ -1494,6 +1603,173 @@ impl Core {
         let victim_count = (committee_size as f64 * self.victim_ratio) as usize;
 
         if !self.is_attacker {
+            // v3 R-P4.1: honest-side bribery hook. Honest validator queries
+            // /bribery/pending for any offer addressed to it; if accepted via
+            // the configured response policy, applies the agreed legitimate-
+            // but-favorable infraction. All four actions remain inside the
+            // honest validator's legitimate choice set (see
+            // paper_workspace/p4_bribery_integration.md §3).
+            //
+            // Fast-path: only consult the coordinator when this node is in
+            // V2_BRIBED_HONEST (set by the launcher only when bribery is
+            // active). This avoids ~450 wasted HTTP calls per run on cells
+            // that have no bribery configured.
+            let this_node = self.context.own_index.value();
+            let is_bribed_honest = std::env::var("V2_BRIBED_HONEST")
+                .ok()
+                .map(|s| {
+                    s.split(',')
+                        .filter_map(|x| x.trim().parse::<usize>().ok())
+                        .any(|id| id == this_node)
+                })
+                .unwrap_or(false);
+            if !is_bribed_honest {
+                return (ancestors, FissureAttackMetrics::default());
+            }
+            if let Ok(coord_url) = std::env::var("V2_COORDINATOR_URL") {
+                if let Ok(Some(offer)) = crate::v2_coordinator_client::query_pending_bribery_offer(
+                    &coord_url,
+                    self.context.own_index.value(),
+                ) {
+                    let accept_decision = crate::v2_coordinator_client::bribery_decide(
+                        &coord_url,
+                        &offer.offer_id,
+                        self.context.own_index.value(),
+                    );
+                    if let Ok(true) = accept_decision {
+                        // Record acceptance (synchronous; payment may settle).
+                        let _ = crate::v2_coordinator_client::bribery_accept(
+                            &coord_url,
+                            &offer.offer_id,
+                            self.context.own_index.value(),
+                        );
+                        info!(
+                            "V2_HONEST_ACCEPT: node={} offer_id={} infraction={} payment={:.2}",
+                            self.context.own_index.value(),
+                            offer.offer_id,
+                            offer.infraction,
+                            offer.payment
+                        );
+                        // Apply the infraction.
+                        match offer.infraction.as_str() {
+                            "omit_reference" | "omit_reference_once" => {
+                                if let Some(victim_id) = offer.target_victim_id {
+                                    let before = ancestors.len();
+                                    let filtered: Vec<_> = ancestors
+                                        .into_iter()
+                                        .filter(|a| a.author().value() != victim_id)
+                                        .collect();
+                                    info!(
+                                        "V2_HONEST_OMIT: node={} target_victim_id={} removed={}",
+                                        self.context.own_index.value(),
+                                        victim_id,
+                                        before - filtered.len()
+                                    );
+                                    return (filtered, FissureAttackMetrics::default());
+                                }
+                            }
+                            "select_candidate" | "prefer_attacker_block" => {
+                                // Reorder ancestors so attacker_set authors come first.
+                                let attacker_set: std::collections::HashSet<usize> =
+                                    offer.target_attacker_set.iter().copied().collect();
+                                if !attacker_set.is_empty() {
+                                    let mut reordered = ancestors;
+                                    reordered.sort_by_key(|a| {
+                                        let author = a.author().value();
+                                        !attacker_set.contains(&author)
+                                    });
+                                    info!(
+                                        "V2_HONEST_PREFER: node={} attacker_set_size={}",
+                                        self.context.own_index.value(),
+                                        attacker_set.len()
+                                    );
+                                    return (reordered, FissureAttackMetrics::default());
+                                }
+                            }
+                            "delay_broadcast" | "gas_style_incentive" => {
+                                // gas_style_incentive: behavioural no-op (accounting only).
+                                // delay_broadcast: timing-path infraction — deferred per
+                                // p4_bribery_integration.md §3.3.
+                                info!(
+                                    "V2_BRIBED_NOOP: node={} infraction={}",
+                                    self.context.own_index.value(),
+                                    offer.infraction
+                                );
+                            }
+                            other => {
+                                warn!(
+                                    "V2_BRIBED_UNKNOWN_INFRACTION: node={} infraction={}",
+                                    self.context.own_index.value(),
+                                    other
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+            return (ancestors, FissureAttackMetrics::default());
+        }
+
+        // v3 R-P3.1 + R-P3.3: role-specialization + rr_slot/leader-aware
+        // dispatch + P3 shared exclusion seed.
+        //
+        // Single per-round HTTP call to the coordinator gets BOTH the role
+        // (for per-round dispatch) and the shared_exclusion_seed (for
+        // synchronized exclusion in leader policy).
+        //
+        // Role semantics (operative role = per-round override if any, else startup):
+        //   "passive"  — skip the fissure attack entirely (legitimate quiescent role).
+        //   "amplify"  — skip exclusion; preferentially include same-group parents
+        //                 (handled at the end of this function).
+        //   "exclude"  — default; fall through to paper-1 fissure logic.
+        let startup_role = self.role_action.as_deref();
+        let mut operative_role: Option<String> = startup_role.map(|s| s.to_string());
+        let mut coord_seed: Option<u64> = None;
+
+        if let Ok(coord_url) = std::env::var("V2_COORDINATOR_URL") {
+            match crate::v2_coordinator_client::query_coordinate_decision(
+                &coord_url,
+                self.context.own_index.value(),
+                clock_round as u64,
+            ) {
+                Ok(decision) => {
+                    coord_seed = decision.shared_exclusion_seed;
+                    if let Some(s) = coord_seed {
+                        info!(
+                            "V2_SHARED_EXCLUSION_SEED: round={} node={} seed={}",
+                            clock_round,
+                            self.context.own_index.value(),
+                            s
+                        );
+                    }
+                    if let Some(r) = decision.role {
+                        // rr_slot returns "active"/"passive"; map "active"→"exclude".
+                        let mapped = match r.as_str() {
+                            "active" => Some("exclude".to_string()),
+                            "passive" => Some("passive".to_string()),
+                            // For other roles ("leader", "follower", "front_attacker"
+                            // etc.) we DON'T override startup_role — those signal
+                            // membership status, not per-round behavior.
+                            _ => None,
+                        };
+                        if let Some(m) = mapped {
+                            operative_role = Some(m);
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!("v2 coord decision query failed at round {}: {}", clock_round, e);
+                }
+            }
+        }
+
+        let role: Option<&str> = operative_role.as_deref();
+        if role == Some("passive") {
+            info!(
+                "V3_ROLE_DISPATCH: node={} round={} role=passive (no attack)",
+                self.context.own_index.value(),
+                clock_round
+            );
             return (ancestors, FissureAttackMetrics::default());
         }
 
@@ -1541,7 +1817,67 @@ impl Core {
             
             if is_victim {
                 victim_count_found += 1;
-                
+
+                // P1.X.2 + v3 R-P5.1: VictimGen observability + adaptive
+                // targeting. When the v2 coordinator is configured with a
+                // victim_profile, query the profit for this victim block.
+                // Log the marker (P1.X.2 observability) AND, if this attacker
+                // has profit_threshold set (v3 R-P5.1), capture the value to
+                // gate the exclusion decision below.
+                //
+                // When V2_COORDINATOR_URL is unset OR no victim_profile is
+                // configured for the run OR no profit_threshold is set on
+                // this attacker's policy, victim_profit stays None and the
+                // existing always-target behaviour applies (paper-1 path).
+                let mut victim_profit: Option<f64> = None;
+                if let Ok(coord_url) = env::var("V2_COORDINATOR_URL") {
+                    match crate::v2_coordinator_client::query_victim_profit(
+                        &coord_url,
+                        ancestor.round() as u64,
+                        ancestor.author().value() as u64,
+                    ) {
+                        Ok(Some(profit)) => {
+                            // Marker line consumed by scripts/v2/p1_live.py.
+                            info!(
+                                "V2_VICTIM_PROFIT: round={} author={} profit={:.6}",
+                                ancestor.round(),
+                                ancestor.author().value(),
+                                profit
+                            );
+                            victim_profit = Some(profit);
+                        }
+                        Ok(None) => {
+                            // No victim_profile configured -- silent.
+                        }
+                        Err(e) => {
+                            warn!("v2 victim_profit query failed: {}", e);
+                        }
+                    }
+                }
+
+                // v3 R-P5.1: adaptive targeting gate. If this attacker has a
+                // profit_threshold AND we have the profit value for this
+                // victim block, skip exclusion when profit < threshold
+                // (i.e., don't waste exclusion budget on low-value victims).
+                // When threshold is None or profit is None, the gate is open
+                // (paper-1 behaviour).
+                let adaptive_skip = match (self.profit_threshold, victim_profit) {
+                    (Some(threshold), Some(profit)) => {
+                        let skip = profit < threshold;
+                        if skip {
+                            info!(
+                                "V2_ADAPTIVE_SKIP: round={} author={} profit={:.6} threshold={:.6}",
+                                ancestor.round(),
+                                ancestor.author().value(),
+                                profit,
+                                threshold
+                            );
+                        }
+                        skip
+                    }
+                    _ => false,
+                };
+
                 let ancestor_stake = self.context.committee.stake(ancestor.author());
                 let is_parent_round = ancestor.round() == quorum_round;
                 
@@ -1553,13 +1889,17 @@ impl Core {
                     clock_round,
                 );
                 
-                let should_exclude = if is_parent_round {
+                let should_exclude = if adaptive_skip {
+                    // v3 R-P5.1: adaptive targeting elected to skip this
+                    // low-value victim. Honest-equivalent action (include).
+                    false
+                } else if is_parent_round {
                     // OPTIMIZED: Use running stake tracker for cumulative exclusion
                     // Check if excluding this ancestor would still leave enough stake
                     let remaining_stake_after = parent_round_stake.saturating_sub(ancestor_stake);
                     if remaining_stake_after >= quorum_threshold {
                         // Safe to exclude - probabilistic decision
-                        if self.should_exclude_victim_block(&ancestor, exclusion_prob) {
+                        if self.should_exclude_victim_block(&ancestor, exclusion_prob, coord_seed) {
                             // Update running stake tracker
                             parent_round_stake = remaining_stake_after;
                             true
@@ -1573,7 +1913,7 @@ impl Core {
                 } else {
                     // For non-parent-round ancestors, very aggressive exclusion
                     let aggressive_prob = exclusion_prob.min(0.98);
-                    self.should_exclude_victim_block(&ancestor, aggressive_prob)
+                    self.should_exclude_victim_block(&ancestor, aggressive_prob, coord_seed)
                 };
                 
                 if should_exclude {
@@ -1617,12 +1957,72 @@ impl Core {
             );
         }
 
+        // v3 R-P3.1 amplify / R-P3.2 quorum-shaping: when the attacker has
+        // role_action="amplify", reorder the filtered ancestor list so that
+        // same-group_id Byzantine peers' blocks come first in the parent set.
+        // This is a *preferential ordering*, not a quorum violation —
+        // all ancestors were already valid; we are just choosing among
+        // valid orderings (a legitimate validator choice).
+        if role == Some("amplify") {
+            // Look up peer node_ids that share our group_id via the
+            // V2_BYZ_PEERS env var (set by the launcher when amplify role
+            // is configured). Format: comma-separated indices.
+            let same_group_peers: std::collections::HashSet<usize> =
+                std::env::var("V2_BYZ_PEERS")
+                    .unwrap_or_default()
+                    .split(',')
+                    .filter_map(|s| s.trim().parse::<usize>().ok())
+                    .collect();
+            if !same_group_peers.is_empty() {
+                let amplified_before = filtered_ancestors.len();
+                filtered_ancestors.sort_by_key(|a| {
+                    let author_idx = a.author().value();
+                    // Peers come first (false sorts before true).
+                    !same_group_peers.contains(&author_idx)
+                });
+                info!(
+                    "V3_AMPLIFY: node={} group={:?} reordered {} ancestors; peers preferred",
+                    self.context.own_index.value(),
+                    self.own_group_id.as_deref().unwrap_or("?"),
+                    amplified_before
+                );
+            } else {
+                info!(
+                    "V3_AMPLIFY: node={} group={:?} role=amplify but V2_BYZ_PEERS unset",
+                    self.context.own_index.value(),
+                    self.own_group_id.as_deref().unwrap_or("?"),
+                );
+            }
+        }
+
         (filtered_ancestors, metrics)
     }
 
-    /// Check if a block is from a victim node
+    /// Check if a block is from a victim node.
+    ///
+    /// v3 R-P2.2: when the env var `V2_VICTIM_NODE_IDS` is set (a
+    /// comma-separated list of node indices), it overrides the
+    /// family-based index-range layout with a *canonical victim set*
+    /// shared across all attackers. This enables mixed-family
+    /// experiments (k=2 with one frontrun + one backrun attacker on
+    /// the same victims) where each per-attacker family would
+    /// otherwise compute a different victim set.
+    ///
+    /// When `V2_VICTIM_NODE_IDS` is unset (paper-1 / v2 path), behaviour
+    /// is unchanged: victim layout is derived from this node's own
+    /// `attack_type` family.
     fn is_victim_block(&self, block: &VerifiedBlock, victim_count: usize) -> bool {
         let author = block.author().value();
+
+        // v3 R-P2.2: canonical victim set fast-path.
+        if let Ok(ids_env) = std::env::var("V2_VICTIM_NODE_IDS") {
+            let victim_set: std::collections::HashSet<usize> = ids_env
+                .split(',')
+                .filter_map(|s| s.trim().parse::<usize>().ok())
+                .collect();
+            return victim_set.contains(&author);
+        }
+
         let committee_size = self.context.committee.size();
         match self.attack_type.as_str() {
             "backrun" => author < victim_count,
@@ -1669,13 +2069,28 @@ impl Core {
         final_prob
     }
 
-    /// Determine if a victim block should be excluded based on probability
-    fn should_exclude_victim_block(&self, block: &VerifiedBlock, exclusion_prob: f64) -> bool {
+    /// Determine if a victim block should be excluded based on probability.
+    ///
+    /// P3 coordination hook: when `coord_seed` is Some, we XOR it into the
+    /// block-derived seed. This preserves per-block variation (so the attack
+    /// is not all-or-nothing within a round) while letting the coordinator
+    /// shift the exclusion *pattern* across reps via `run_seed XOR round`.
+    /// All Byzantine nodes in the same Collude group receive the same
+    /// `coord_seed`, so they remain synchronized -- this is the synchronicity
+    /// the H2 mechanism rests on. (See `paper_workspace/p3_preregistration.md`
+    /// for the methodological note about the baseline already being implicitly
+    /// synchronized via the block-derived seed.)
+    fn should_exclude_victim_block(
+        &self,
+        block: &VerifiedBlock,
+        exclusion_prob: f64,
+        coord_seed: Option<u64>,
+    ) -> bool {
         // Improved pseudo-random decision using block digest for better distribution
         let block_ref = block.reference();
         // Use block digest hash for more random distribution (BlockDigest implements AsRef<[u8]>)
         let digest_bytes: &[u8] = block_ref.digest.as_ref();
-        
+
         // Create seed from digest bytes for better randomness
         let mut seed: u64 = 0;
         for (i, &byte) in digest_bytes.iter().take(8).enumerate() {
@@ -1683,9 +2098,14 @@ impl Core {
         }
         seed = seed.wrapping_add(block_ref.round as u64 * 31);
         seed = seed.wrapping_add(block_ref.author.value() as u64 * 17);
-        
+
+        // P3: mix in the coordinator-provided per-round shared seed if present.
+        if let Some(cs) = coord_seed {
+            seed ^= cs;
+        }
+
         let random_factor = (seed % 10000) as f64 / 10000.0;
-        
+
         random_factor < exclusion_prob
     }
 }

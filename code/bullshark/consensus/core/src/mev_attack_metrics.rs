@@ -151,6 +151,24 @@ pub fn calculate_attack_score(
 
     info!("Global order contains {} blocks", records.len());
 
+    // v3 R-P2.1: emit committed-order records as JSON so the v2 harness
+    // can compute per-policy ASR in Python (using the run's policy
+    // vector from coordinator metrics). Built as a JSON string by hand
+    // to avoid pulling serde_derive into consensus-core just for this
+    // marker. The Python-side parser is
+    // scripts/v2/benchmark.py::parse_committed_order.
+    let order_json: String = records
+        .iter()
+        .map(|r| {
+            format!(
+                "{{\"creator\":{},\"position\":{},\"round\":{}}}",
+                r.creator, r.position, r.round
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    println!("FINAL_COMMITTED_ORDER: [{}]", order_json);
+
     let front_attackers = records
         .iter()
         .copied()

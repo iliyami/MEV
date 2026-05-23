@@ -1,0 +1,50 @@
+# TM-Solo regression cell on Bullshark — equivalent to paper-1 frontrun/fissure
+# at the default (n=13, alpha=0.308) config. The new harness should reproduce
+# paper-1's median ASR within the tolerance declared in
+# scripts/v2/refs/paper1_bullshark_baselines.json.
+#
+# Invariant (CLAUDE.md): no protocol-core modification.
+
+experiment:
+  name: "v2_tm_solo_bullshark_regression"
+  description: "TM-Solo Bullshark frontrun/fissure n=13 regression vs. paper 1"
+
+protocol:
+  name: "bullshark"
+  path: "bullshark"
+
+docker:
+  tag: "mev-bullshark:latest"
+  cpus: "2.0"
+  memory: "4g"
+
+environment:
+  ATTACK_MODE: "fissure"     # paper-1 convention: ATTACK_MODE = DAG strategy
+  ATTACK_FAMILY: "frontrun"  # v2 explicit family
+  DAG_STRATEGY: "fissure"
+  NUM_NODES: "13"
+  ATTACKER_RATIO: "0.308"
+  VICTIM_RATIO: "0.231"
+  BYZANTINE_F: "4"
+
+adversary:
+  threat_model: "TM-Solo"
+  archetype: "homogeneous"
+  # Concrete policies will be materialized from the archetype at expand time.
+  # Equivalent: a single policy with members = the 4 Byzantine nodes,
+  #             family=frontrun, strategy=fissure.
+  coordination:
+    enabled: false
+  bribery:
+    enabled: false
+
+victims:
+  workload: "single"
+  count: 1
+  profit:
+    distribution: "uniform"
+
+runtime:
+  invariant_audit: true
+  reps: 5
+  seed: 0

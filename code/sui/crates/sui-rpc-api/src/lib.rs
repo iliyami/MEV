@@ -1,0 +1,331 @@
+// Copyright (c) Mysten Labs, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
+use std::convert::Infallible;
+use std::sync::Arc;
+
+use mysten_network::callback::CallbackLayer;
+use reader::StateReader;
+use subscription::SubscriptionServiceHandle;
+use sui_types::storage::RpcStateReader;
+use sui_types::transaction_executor::TransactionExecutor;
+use tap::Pipe;
+use tonic::server::NamedService;
+use tower::Service;
+
+pub mod client;
+mod config;
+mod error;
+pub mod grpc;
+pub mod ledger_history;
+mod metrics;
+pub mod read_mask_defaults;
+mod reader;
+mod response;
+mod service;
+pub mod subscription;
+
+pub use client::Client;
+pub use config::Config;
+pub use error::{
+    CheckpointNotFoundError, ErrorDetails, ErrorReason, ObjectNotFoundError, Result, RpcError,
+};
+pub use metrics::{
+    GrpcMethodAllowlist, RpcMetrics, RpcMetricsMakeCallbackHandler,
+    grpc_method_paths_from_file_descriptor_sets,
+};
+pub use reader::TransactionNotFoundError;
+pub use sui_rpc::proto;
+
+#[derive(Clone)]
+pub struct ServerVersion {
+    pub bin: &'static str,
+    pub version: &'static str,
+}
+
+impl ServerVersion {
+    pub fn new(bin: &'static str, version: &'static str) -> Self {
+        Self { bin, version }
+    }
+}
+
+impl std::fmt::Display for ServerVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.bin)?;
+        f.write_str("/")?;
+        f.write_str(self.version)
+    }
+}
+
+#[derive(Clone)]
+pub struct RpcService {
+    reader: StateReader,
+    executor: Option<Arc<dyn TransactionExecutor>>,
+    subscription_service_handle: Option<SubscriptionServiceHandle>,
+    chain_id: sui_types::digests::ChainIdentifier,
+    server_version: Option<ServerVersion>,
+    metrics: Option<Arc<RpcMetrics>>,
+    config: Config,
+    extra_routes: axum::Router,
+    extra_service_names: Vec<&'static str>,
+    extra_file_descriptor_sets: Vec<&'static [u8]>,
+}
+
+impl RpcService {
+    pub fn new(reader: Arc<dyn RpcStateReader>) -> Self {
+        let chain_id = reader.get_chain_identifier().unwrap();
+        Self {
+            reader: StateReader::new(reader),
+            executor: None,
+            subscription_service_handle: None,
+            chain_id,
+            server_version: None,
+            metrics: None,
+            config: Config::default(),
+            extra_routes: axum::Router::new(),
+            extra_service_names: Vec::new(),
+            extra_file_descriptor_sets: Vec::new(),
+        }
+    }
+
+    pub fn with_server_version(&mut self, server_version: ServerVersion) -> &mut Self {
+        self.server_version = Some(server_version);
+        self
+    }
+
+    pub fn with_config(&mut self, config: Config) {
+        self.config = config;
+    }
+
+    pub fn with_executor(&mut self, executor: Arc<dyn TransactionExecutor + Send + Sync>) {
+        self.executor = Some(executor);
+    }
+
+    pub fn with_subscription_service(
+        &mut self,
+        subscription_service_handle: SubscriptionServiceHandle,
+    ) {
+        self.subscription_service_handle = Some(subscription_service_handle);
+    }
+
+    pub fn with_metrics(&mut self, metrics: RpcMetrics) {
+        self.metrics = Some(Arc::new(metrics));
+    }
+
+    pub fn with_custom_service<S>(&mut self, svc: S)
+    where
+        S: Service<
+                axum::extract::Request,
+                Response: axum::response::IntoResponse,
+                Error = Infallible,
+            > + NamedService
+            + Clone
+            + Send
+            + Sync
+            + 'static,
+        S::Future: Send + 'static,
+        S::Error: Into<grpc::BoxError> + Send,
+    {
+        self.extra_service_names.push(S::NAME);
+        self.extra_routes = std::mem::take(&mut self.extra_routes)
+            .route_service(&format!("/{}/{{*rest}}", S::NAME), svc);
+    }
+
+    pub fn with_file_descriptor_set(&mut self, encoded_fds: &'static [u8]) {
+        self.extra_file_descriptor_sets.push(encoded_fds);
+    }
+
+    pub fn chain_id(&self) -> sui_types::digests::ChainIdentifier {
+        self.chain_id
+    }
+
+    pub fn server_version(&self) -> Option<&ServerVersion> {
+        self.server_version.as_ref()
+    }
+
+    pub async fn into_router(mut self) -> axum::Router {
+        let metrics = self.metrics.clone();
+        let extra_routes = std::mem::take(&mut self.extra_routes);
+        let extra_service_names = std::mem::take(&mut self.extra_service_names);
+
+        // Single source of truth for every encoded FileDescriptorSet that
+        // backs a gRPC service mounted below. Consumed by both the
+        // reflection services and the metrics allowlist so they cannot drift
+        // out of sync.
+        let file_descriptor_sets: Vec<&[u8]> = [
+            crate::proto::google::protobuf::FILE_DESCRIPTOR_SET,
+            crate::proto::google::rpc::FILE_DESCRIPTOR_SET,
+            sui_rpc::proto::sui::rpc::v2::FILE_DESCRIPTOR_SET,
+            sui_rpc::proto::sui::rpc::v2alpha::FILE_DESCRIPTOR_SET,
+            tonic_health::pb::FILE_DESCRIPTOR_SET,
+        ]
+        .into_iter()
+        .chain(std::mem::take(&mut self.extra_file_descriptor_sets))
+        .collect();
+
+        // Allowlist of `/Service/Method` paths used by the metrics middleware
+        // to bound prometheus label cardinality.
+        let grpc_method_allowlist = Arc::new(
+            metrics::grpc_method_paths_from_file_descriptor_sets(&file_descriptor_sets)
+                .expect("registered FileDescriptorSet bytes must be valid protobuf"),
+        );
+
+        let router = {
+            let ledger_service =
+                sui_rpc::proto::sui::rpc::v2::ledger_service_server::LedgerServiceServer::new(
+                    self.clone(),
+                )
+                .send_compressed(tonic::codec::CompressionEncoding::Zstd);
+            let ledger_service_v2alpha =
+                sui_rpc::proto::sui::rpc::v2alpha::ledger_service_server::LedgerServiceServer::new(
+                    self.clone(),
+                )
+                .send_compressed(tonic::codec::CompressionEncoding::Zstd);
+            let transaction_execution_service = sui_rpc::proto::sui::rpc::v2::transaction_execution_service_server::TransactionExecutionServiceServer::new(self.clone())
+                .send_compressed(tonic::codec::CompressionEncoding::Zstd);
+            let state_service =
+                sui_rpc::proto::sui::rpc::v2::state_service_server::StateServiceServer::new(
+                    self.clone(),
+                )
+                .send_compressed(tonic::codec::CompressionEncoding::Zstd);
+            let signature_verification_service = sui_rpc::proto::sui::rpc::v2::signature_verification_service_server::SignatureVerificationServiceServer::new(self.clone())
+                .send_compressed(tonic::codec::CompressionEncoding::Zstd);
+            let move_package_service = sui_rpc::proto::sui::rpc::v2::move_package_service_server::MovePackageServiceServer::new(self.clone())
+                .send_compressed(tonic::codec::CompressionEncoding::Zstd);
+            let name_service =
+                sui_rpc::proto::sui::rpc::v2::name_service_server::NameServiceServer::new(
+                    self.clone(),
+                )
+                .send_compressed(tonic::codec::CompressionEncoding::Zstd);
+
+            let event_service_alpha =
+                crate::grpc::alpha::event_service_proto::event_service_server::EventServiceServer::new(
+                    self.clone(),
+                );
+            let proof_service_alpha =
+                crate::grpc::alpha::proof_service_proto::proof_service_server::ProofServiceServer::new(
+                    crate::grpc::alpha::proof_service::ProofServiceImpl::new(self.clone()),
+                );
+
+            let (health_reporter, health_service) = tonic_health::server::health_reporter();
+
+            let mut reflection_v1_builder = tonic_reflection::server::Builder::configure();
+            let mut reflection_v1alpha_builder = tonic_reflection::server::Builder::configure();
+            for fds in &file_descriptor_sets {
+                reflection_v1_builder =
+                    reflection_v1_builder.register_encoded_file_descriptor_set(fds);
+                reflection_v1alpha_builder =
+                    reflection_v1alpha_builder.register_encoded_file_descriptor_set(fds);
+            }
+
+            let reflection_v1 = reflection_v1_builder.build_v1().unwrap();
+            let reflection_v1alpha = reflection_v1alpha_builder.build_v1alpha().unwrap();
+
+            fn service_name<S: tonic::server::NamedService>(_service: &S) -> &'static str {
+                S::NAME
+            }
+
+            for service_name in [
+                service_name(&ledger_service),
+                service_name(&transaction_execution_service),
+                service_name(&state_service),
+                service_name(&signature_verification_service),
+                service_name(&move_package_service),
+                service_name(&name_service),
+                service_name(&ledger_service_v2alpha),
+                service_name(&event_service_alpha),
+                service_name(&proof_service_alpha),
+                service_name(&reflection_v1),
+                service_name(&reflection_v1alpha),
+            ] {
+                health_reporter
+                    .set_service_status(service_name, tonic_health::ServingStatus::Serving)
+                    .await;
+            }
+
+            let mut services = grpc::Services::new()
+                // V2
+                .add_service(ledger_service)
+                .add_service(transaction_execution_service)
+                .add_service(state_service)
+                .add_service(signature_verification_service)
+                .add_service(move_package_service)
+                .add_service(name_service)
+                // V2alpha
+                .add_service(ledger_service_v2alpha)
+                // alpha
+                .add_service(event_service_alpha)
+                .add_service(proof_service_alpha)
+                // Reflection
+                .add_service(reflection_v1)
+                .add_service(reflection_v1alpha);
+
+            if self.subscription_service_handle.is_some() {
+                let subscription_service =
+sui_rpc::proto::sui::rpc::v2::subscription_service_server::SubscriptionServiceServer::new(self.clone());
+                health_reporter
+                    .set_service_status(
+                        service_name(&subscription_service),
+                        tonic_health::ServingStatus::Serving,
+                    )
+                    .await;
+
+                services = services.add_service(subscription_service);
+            }
+
+            for name in &extra_service_names {
+                health_reporter
+                    .set_service_status(*name, tonic_health::ServingStatus::Serving)
+                    .await;
+            }
+
+            services
+                .merge_router(extra_routes)
+                .add_service(health_service)
+                .into_router()
+        };
+
+        let health_endpoint = axum::Router::new()
+            .route("/health", axum::routing::get(service::health::health))
+            .with_state(self.clone());
+
+        router
+            .merge(health_endpoint)
+            .layer(axum::middleware::map_response_with_state(
+                self,
+                response::append_info_headers,
+            ))
+            .pipe(|router| {
+                if let Some(metrics) = metrics {
+                    router.layer(CallbackLayer::new(
+                        metrics::RpcMetricsMakeCallbackHandler::with_grpc_method_allowlist(
+                            metrics,
+                            grpc_method_allowlist,
+                        ),
+                    ))
+                } else {
+                    router
+                }
+            })
+    }
+
+    pub async fn start_service(self, socket_address: std::net::SocketAddr) {
+        let listener = tokio::net::TcpListener::bind(socket_address).await.unwrap();
+        axum::serve(listener, self.into_router().await)
+            .await
+            .unwrap();
+    }
+}
+
+#[derive(Debug, Copy, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Direction {
+    Ascending,
+    Descending,
+}
+
+impl Direction {
+    pub fn is_descending(self) -> bool {
+        matches!(self, Self::Descending)
+    }
+}

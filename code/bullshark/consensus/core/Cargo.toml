@@ -40,6 +40,7 @@ prost.workspace = true
 rand.workspace = true
 rustls.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 shared-crypto.workspace = true
 strum_macros.workspace = true
 sui-macros.workspace = true
@@ -57,6 +58,7 @@ tower-http.workspace = true
 tracing.workspace = true
 typed-store.workspace = true
 tonic-rustls.workspace = true
+ureq.workspace = true
 sui-http.workspace = true
 
 [dev-dependencies]
