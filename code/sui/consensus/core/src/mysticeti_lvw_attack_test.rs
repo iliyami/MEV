@@ -183,6 +183,20 @@ async fn test_mysticeti_lvw_attack_asr_dynamic() {
         }
     }
 
+    // Emit committed order for v2 launcher per-policy ASR computation.
+    {
+        let mut pos = 0usize;
+        let entries: Vec<String> = all_commits.iter()
+            .flat_map(|c| c.blocks.iter())
+            .map(|b| {
+                let s = format!(r#"{{"creator":{},"position":{},"round":{}}}"#, b.author().value(), pos, b.round());
+                pos += 1;
+                s
+            })
+            .collect();
+        println!("FINAL_COMMITTED_ORDER: [{}]", entries.join(","));
+    }
+
     let metrics = calculate_asr(&all_commits, num_validators, num_attacker, num_victim);
     println!("FINAL_ASR_RESULT: {:.1}%", metrics.same_round);
     println!("FINAL_ALL_PAIRS_ASR: {:.1}%", metrics.all_pairs);

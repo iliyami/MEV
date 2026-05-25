@@ -6,5 +6,6 @@ protocol core logic** (see CLAUDE.md). They are pure shims.
 """
 
 from .bullshark import BullsharkLauncher
+from .sui import SuiLauncher
 
-__all__ = ["BullsharkLauncher"]
+__all__ = ["BullsharkLauncher", "SuiLauncher"]

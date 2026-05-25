@@ -56,6 +56,8 @@ tracing.workspace = true
 typed-store.workspace = true
 tonic-rustls.workspace = true
 sui-http.workspace = true
+serde_json.workspace = true
+ureq.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true

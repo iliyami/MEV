@@ -90,6 +90,13 @@ pub(crate) struct ValidatorProposer {
     attack_active: bool,
     speculative_p_max: usize,
     sluggish_timeout_multiplier: f64,
+
+    // Paper-2 v2 coordinator integration. When V2_COORDINATOR_URL is set,
+    // per-node policy comes from the coordinator instead of global env vars.
+    coordinator_url: Option<String>,
+    profit_threshold: Option<f64>,
+    role_action: Option<String>,
+    own_group_id: Option<String>,
 }
 
 impl ValidatorProposer {
@@ -109,13 +116,13 @@ impl ValidatorProposer {
         // Read attack config from environment. SPECULATIVE_P_MAX and
         // SLUGGISH_TIMEOUT_MULTIPLIER are required only when the
         // corresponding ATTACK_MODE is requested.
-        let attack_mode = env::var("ATTACK_MODE").unwrap_or_default();
-        let attack_type = env::var("ATTACK_TYPE").unwrap_or_else(|_| "frontrun".to_string());
+        let mut attack_mode = env::var("ATTACK_MODE").unwrap_or_default();
+        let mut attack_type = env::var("ATTACK_TYPE").unwrap_or_else(|_| "frontrun".to_string());
         let attacker_ratio: f64 = env::var("ATTACKER_RATIO")
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or(0.33);
-        let speculative_p_max: usize = env::var("SPECULATIVE_P_MAX")
+        let mut speculative_p_max: usize = env::var("SPECULATIVE_P_MAX")
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or_else(|| {
@@ -126,7 +133,7 @@ impl ValidatorProposer {
                 }
                 50
             });
-        let sluggish_timeout_multiplier: f64 = env::var("SLUGGISH_TIMEOUT_MULTIPLIER")
+        let mut sluggish_timeout_multiplier: f64 = env::var("SLUGGISH_TIMEOUT_MULTIPLIER")
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or_else(|| {
@@ -137,7 +144,7 @@ impl ValidatorProposer {
                 }
                 2.0
             });
-        let attack_active = matches!(
+        let mut attack_active = matches!(
             attack_mode.as_str(),
             "fissure" | "speculative" | "sluggish" | "mysticeti_lvw" | "mysticeti_lvw_fissure" | "mysticeti_eclipse" | "mysticeti_eclipse_lvw"
         );
@@ -145,7 +152,53 @@ impl ValidatorProposer {
         let mlvw_active_for_init = attack_mode.contains("lvw") || attack_mode.contains("eclipse");
         let committee_size = context.committee.size();
         let attacker_count = ((committee_size as f64) * attacker_ratio).floor() as usize;
-        let is_attacker = attack_active && context.own_index.value() < attacker_count;
+        let mut is_attacker = attack_active && context.own_index.value() < attacker_count;
+
+        // v2 coordinator override: when V2_COORDINATOR_URL is set, per-node
+        // policy comes from the HTTP coordinator instead of global env vars.
+        let coordinator_url = env::var("V2_COORDINATOR_URL").ok();
+        let mut profit_threshold: Option<f64> = None;
+        let mut role_action: Option<String> = None;
+        let mut own_group_id: Option<String> = None;
+
+        if let Some(ref url) = coordinator_url {
+            match crate::v2_coordinator_client::lookup_policy(url, context.own_index.value()) {
+                Ok(Some(policy)) => {
+                    attack_mode = policy.strategy.clone();
+                    attack_type = policy.family.clone();
+                    is_attacker = true;
+                    attack_active = matches!(
+                        attack_mode.as_str(),
+                        "fissure" | "speculative" | "sluggish" | "mysticeti_lvw" | "mysticeti_lvw_fissure" | "mysticeti_eclipse" | "mysticeti_eclipse_lvw"
+                    );
+                    if let Some(v) = policy.params.get("speculative_p_max").and_then(|v| v.as_u64()) {
+                        speculative_p_max = v as usize;
+                    }
+                    if let Some(v) = policy.params.get("sluggish_timeout_multiplier").and_then(|v| v.as_f64()) {
+                        sluggish_timeout_multiplier = v;
+                    }
+                    profit_threshold = policy.params.get("profit_threshold").and_then(|v| v.as_f64());
+                    role_action = policy.params.get("role_action").and_then(|v| v.as_str()).map(|s| s.to_string());
+                    own_group_id = Some(policy.group_id.clone());
+                    info!(
+                        "v2 coordinator: node {} assigned policy group={} family={} strategy={}",
+                        context.own_index.value(), policy.group_id, policy.family, policy.strategy
+                    );
+                }
+                Ok(None) => {
+                    is_attacker = false;
+                    attack_active = false;
+                    info!(
+                        "v2 coordinator: node {} is honest (404)",
+                        context.own_index.value()
+                    );
+                }
+                Err(e) => panic!(
+                    "v2 coordinator policy lookup failed for node {}: {}",
+                    context.own_index.value(), e
+                ),
+            }
+        }
 
         Self {
             context,
@@ -165,6 +218,10 @@ impl ValidatorProposer {
             attack_active,
             speculative_p_max,
             sluggish_timeout_multiplier,
+            coordinator_url,
+            profit_threshold,
+            role_action,
+            own_group_id,
         }
     }
 
@@ -468,8 +525,46 @@ impl ValidatorProposer {
             })
             .unwrap_or_default();
         let am_fissure_bribed = fissure_bribed.contains(&self.context.own_index.value());
+
+        // v2 honest-side bribery: if this node is listed in V2_BRIBED_HONEST,
+        // check the coordinator for pending bribery offers and apply infractions.
+        if let Some(ref url) = self.coordinator_url {
+            let bribed_honest: Vec<usize> = env::var("V2_BRIBED_HONEST")
+                .ok()
+                .map(|s| s.split(',').filter_map(|t| t.trim().parse().ok()).collect())
+                .unwrap_or_default();
+            if !self.is_attacker && bribed_honest.contains(&self.context.own_index.value()) {
+                if let Ok(Some(offer)) = crate::v2_coordinator_client::query_pending_bribery_offer(url, self.context.own_index.value()) {
+                    if let Ok(true) = crate::v2_coordinator_client::bribery_decide(url, &offer.offer_id, self.context.own_index.value()) {
+                        let _ = crate::v2_coordinator_client::bribery_accept(url, &offer.offer_id, self.context.own_index.value());
+                        if offer.infraction == "omit_reference" || offer.infraction == "omit_reference_once" {
+                            let committee_size = self.context.committee.size();
+                            let victim_ratio: f64 = env::var("VICTIM_RATIO").ok().and_then(|s| s.parse().ok()).unwrap_or(0.2);
+                            let victim_count = (committee_size as f64 * victim_ratio) as usize;
+                            let orig_len = ancestors.len();
+                            let filtered: Vec<VerifiedBlock> = ancestors.into_iter().filter(|a| !self.is_victim_block(a, victim_count)).collect();
+                            debug!("v2 bribery: honest node {} applied omit_reference, dropped {} ancestors", self.context.own_index.value(), orig_len - filtered.len());
+                            return filtered;
+                        }
+                    }
+                }
+            }
+        }
+
         if !fissure_active || (!self.is_attacker && !am_fissure_bribed) {
             return ancestors;
+        }
+
+        // v2 coordinator: per-round coordination decision (role dispatch +
+        // shared exclusion seed for P3 collusion experiments).
+        if let Some(ref url) = self.coordinator_url {
+            if let Ok(decision) = crate::v2_coordinator_client::query_coordinate_decision(url, self.context.own_index.value(), clock_round as u64) {
+                if let Some(ref role) = decision.role {
+                    if role == "passive" {
+                        return ancestors;
+                    }
+                }
+            }
         }
 
         let committee_size = self.context.committee.size();
@@ -615,6 +710,17 @@ impl ValidatorProposer {
             || self.attack_mode.contains("eclipse");
         if !mlvw_active || (!self.is_attacker && !am_bribed) {
             return ancestors;
+        }
+
+        // v2 coordinator: per-round role dispatch for MLVW.
+        if let Some(ref url) = self.coordinator_url {
+            if let Ok(decision) = crate::v2_coordinator_client::query_coordinate_decision(url, own_idx, clock_round as u64) {
+                if let Some(ref role) = decision.role {
+                    if role == "passive" {
+                        return ancestors;
+                    }
+                }
+            }
         }
 
         // The leader round being voted on is clock_round - 1.

@@ -155,6 +155,19 @@ async fn test_speculative_attack_asr_dynamic() {
         }
     }
 
+    {
+        let mut pos = 0usize;
+        let entries: Vec<String> = all_commits.iter()
+            .flat_map(|c| c.blocks.iter())
+            .map(|b| {
+                let s = format!(r#"{{"creator":{},"position":{},"round":{}}}"#, b.author().value(), pos, b.round());
+                pos += 1;
+                s
+            })
+            .collect();
+        println!("FINAL_COMMITTED_ORDER: [{}]", entries.join(","));
+    }
+
     let (sr_asr, ap_asr) = calculate_asr(&all_commits, num_validators, num_attacker, num_victim);
     println!("FINAL_ASR_RESULT: {:.1}%", sr_asr);
     println!("FINAL_ALL_PAIRS_ASR: {:.1}%", ap_asr);

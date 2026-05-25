@@ -32,6 +32,7 @@ mod observer_service;
 mod observer_subscriber;
 mod peers_pool;
 mod proposer;
+mod v2_coordinator_client;
 mod round_prober;
 mod round_tracker;
 mod stake_aggregator;
