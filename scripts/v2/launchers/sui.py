@@ -257,8 +257,11 @@ class SuiLauncher:
             except (TypeError, ValueError):
                 return None
 
+        # Primary ASR = all-pairs (the ~50% baseline metric used in paper-1
+        # for Mysticeti). Same-round is stored as asr_same_round for reference.
         return {
-            "asr": _f(asr),
+            "asr": _f(all_pairs),
+            "asr_same_round": _f(asr),
             "asr_all_pairs": _f(all_pairs),
             "asr_near1": _f(near1),
             "asr_near2": _f(near2),
