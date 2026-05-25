@@ -82,6 +82,7 @@ class Cell:
     marker_extractor: Optional[MarkerExtractor] = None
     paper1_lookup: Optional[Paper1Lookup] = None
     on_coord_ready: Optional[OnCoordinatorReady] = None
+    launcher: Optional[Any] = None  # Override: pass a pre-built launcher instance (e.g. SuiLauncher)
 
 
 @dataclass
@@ -255,10 +256,13 @@ def _run_one_rep(
     cfg = cell.config
     seed = cfg.runtime.seed + rep
     run_id = make_run_id(cfg, rep)
-    launcher = BullsharkLauncher(
-        on_coordinator_ready=cell.on_coord_ready,
-        **(launcher_kwargs or {}),
-    )
+    if cell.launcher is not None:
+        launcher = cell.launcher
+    else:
+        launcher = BullsharkLauncher(
+            on_coordinator_ready=cell.on_coord_ready,
+            **(launcher_kwargs or {}),
+        )
     req = RunRequest(config=cfg, rep=rep, seed=seed, run_id=run_id)
     rr = launcher.run(req)
 
