@@ -381,8 +381,42 @@ impl<C: CoreThreadDispatcher> ValidatorNetworkService for AuthorityService<C> {
             self.subscription_counter.clone(),
         );
 
+        // CROSS-ROUND WITHHOLDING ATTACK: when this attacker node serves
+        // blocks to a victim subscriber, delay each block delivery by
+        // WITHHOLD_DELAY_MS. The victim's threshold clock advances later,
+        // causing the victim to propose at higher rounds relative to the
+        // attacker. This shifts cross-round pairs in the attacker's favor.
+        // Gated by ATTACK_MODE containing "withhold".
+        let withhold_delay_ms: u64 = {
+            let mode = std::env::var("ATTACK_MODE").unwrap_or_default();
+            if mode.contains("withhold") {
+                let attacker_ratio: f64 = std::env::var("ATTACKER_RATIO")
+                    .ok().and_then(|s| s.parse().ok()).unwrap_or(0.308);
+                let victim_ratio: f64 = std::env::var("VICTIM_RATIO")
+                    .ok().and_then(|s| s.parse().ok()).unwrap_or(0.231);
+                let n = self.context.committee.size();
+                let atk_count = (n as f64 * attacker_ratio).floor() as usize;
+                let vic_first = n.saturating_sub((n as f64 * victim_ratio).round() as usize);
+                let is_atk = self.context.own_index.value() < atk_count;
+                let bribed_nodes: Vec<usize> = std::env::var("WITHHOLD_BRIBED_NODES")
+                    .ok()
+                    .map(|s| s.split(',').filter_map(|t| t.trim().parse().ok()).collect())
+                    .unwrap_or_default();
+                let is_colluding = is_atk || bribed_nodes.contains(&self.context.own_index.value());
+                let peer_is_victim = peer.value() >= vic_first;
+                if is_colluding && peer_is_victim {
+                    std::env::var("WITHHOLD_DELAY_MS")
+                        .ok().and_then(|s| s.parse().ok()).unwrap_or(200)
+                } else {
+                    0
+                }
+            } else {
+                0
+            }
+        };
+
         // Return a stream of blocks that first yields missed blocks as requested, then new blocks.
-        Ok(Box::pin(past_proposed_blocks.chain(
+        let block_stream = past_proposed_blocks.chain(
             broadcasted_blocks.flat_map(|items| {
                 debug_assert!(
                     items.len() <= MAX_BLOCKS_PER_POLL,
@@ -390,7 +424,17 @@ impl<C: CoreThreadDispatcher> ValidatorNetworkService for AuthorityService<C> {
                 );
                 stream::iter(items.into_iter().map(ExtendedSerializedBlock::from))
             }),
-        )))
+        );
+
+        if withhold_delay_ms > 0 {
+            let delay = Duration::from_millis(withhold_delay_ms);
+            Ok(Box::pin(block_stream.then(move |item| async move {
+                tokio::time::sleep(delay).await;
+                item
+            })))
+        } else {
+            Ok(Box::pin(block_stream))
+        }
     }
 
     // Handles 3 types of requests:

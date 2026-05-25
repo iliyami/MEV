@@ -38,9 +38,10 @@ async fn make_authority(
     keypairs: Vec<(NetworkKeyPair, ProtocolKeyPair)>,
     boot_counter: u64,
     protocol_config: ConsensusProtocolConfig,
+    min_round_delay: Option<Duration>,
 ) -> (ConsensusAuthority, UnboundedReceiver<CommittedSubDag>) {
     let registry = Registry::new();
-    let parameters = Parameters {
+    let mut parameters = Parameters {
         db_path: db_dir.path().to_path_buf(),
         dag_state_cached_rounds: 5,
         commit_sync_parallel_fetches: 2,
@@ -48,6 +49,9 @@ async fn make_authority(
         sync_last_known_own_block_timeout: Duration::from_millis(2_000),
         ..Default::default()
     };
+    if let Some(delay) = min_round_delay {
+        parameters.min_round_delay = delay;
+    }
     let protocol_keypair = keypairs[index.value()].1.clone();
     let network_keypair = keypairs[index.value()].0.clone();
     let (commit_consumer, commit_receiver) = CommitConsumerArgs::new(0, 0);
@@ -135,7 +139,23 @@ async fn test_mysticeti_lvw_attack_asr_dynamic() {
         .collect::<Vec<_>>();
     let mut commit_receivers = Vec::with_capacity(committee.size());
     let mut authorities = Vec::with_capacity(committee.size());
+    // TEMPORAL FRONTRUNNING ATTACK: attacker nodes propose with zero
+    // delay (min_round_delay=0ms) while honest/victim nodes use the
+    // default (250ms). This gives the attacker a consistent timing
+    // advantage — its blocks arrive at honest nodes first, getting
+    // referenced and committed in earlier subdags. Controlled by
+    // ATTACKER_FAST_PROPOSE env var.
+    let attacker_fast = env::var("ATTACKER_FAST_PROPOSE").ok().filter(|v| v != "0").is_some();
+    let attacker_delay_ms: u64 = env::var("ATTACKER_ROUND_DELAY_MS")
+        .ok().and_then(|s| s.parse().ok()).unwrap_or(0);
+
     for (index, _) in committee.authorities() {
+        let is_atk_node = !no_attack && index.value() < num_attacker;
+        let delay = if attacker_fast && is_atk_node {
+            Some(Duration::from_millis(attacker_delay_ms))
+        } else {
+            None // use default (250ms in test mode)
+        };
         let (a, r) = make_authority(
             index,
             &temp_dirs[index.value()],
@@ -143,6 +163,7 @@ async fn test_mysticeti_lvw_attack_asr_dynamic() {
             keypairs.clone(),
             0,
             protocol_config.clone(),
+            delay,
         )
         .await;
         commit_receivers.push(r);
@@ -195,6 +216,53 @@ async fn test_mysticeti_lvw_attack_asr_dynamic() {
             })
             .collect();
         println!("FINAL_COMMITTED_ORDER: [{}]", entries.join(","));
+    }
+
+    // Emit per-subdag info for sandwich analysis.
+    {
+        let mut offset = 0usize;
+        for (i, c) in all_commits.iter().enumerate() {
+            let leader_auth = c.leader.author.value();
+            let leader_round = c.leader.round;
+            let size = c.blocks.len();
+            println!("SUBDAG_INFO: {{\"idx\":{i},\"leader_auth\":{leader_auth},\"leader_round\":{leader_round},\"size\":{size},\"offset\":{offset}}}");
+            offset += size;
+        }
+    }
+
+    // Compute within-subdag sandwich ASR.
+    {
+        let atk_end = num_attacker;
+        let vic_start = num_validators.saturating_sub(num_victim);
+        let mut sandwiched = 0usize;
+        let mut total_victim_blocks = 0usize;
+        let mut atk_leader_subdags = 0usize;
+        let mut atk_leader_sandwich = 0usize;
+
+        for c in &all_commits {
+            let blocks: Vec<(usize, u32)> = c.blocks.iter().map(|b| (b.author().value(), b.round())).collect();
+            let leader_auth = c.leader.author.value();
+            let is_atk_leader = leader_auth < atk_end;
+            if is_atk_leader { atk_leader_subdags += 1; }
+
+            let mut any_sandwich_in_subdag = false;
+            for (vi, (vauth, _vround)) in blocks.iter().enumerate() {
+                if *vauth < vic_start { continue; }
+                total_victim_blocks += 1;
+                let has_front = blocks[..vi].iter().any(|(a, _)| *a < atk_end);
+                let has_back = blocks[vi+1..].iter().any(|(a, _)| *a < atk_end);
+                if has_front && has_back {
+                    sandwiched += 1;
+                    any_sandwich_in_subdag = true;
+                }
+            }
+            if is_atk_leader && any_sandwich_in_subdag { atk_leader_sandwich += 1; }
+        }
+        let sw_asr = if total_victim_blocks > 0 { sandwiched as f64 / total_victim_blocks as f64 * 100.0 } else { 0.0 };
+        let leader_sw = if atk_leader_subdags > 0 { atk_leader_sandwich as f64 / atk_leader_subdags as f64 * 100.0 } else { 0.0 };
+        println!("FINAL_SANDWICH_ASR: {sw_asr:.1}%");
+        println!("FINAL_LEADER_SANDWICH_ASR: {leader_sw:.1}%");
+        println!("  Victim blocks: {total_victim_blocks}, sandwiched: {sandwiched}, atk-leader subdags: {atk_leader_subdags}, atk-leader sandwiches: {atk_leader_sandwich}");
     }
 
     let metrics = calculate_asr(&all_commits, num_validators, num_attacker, num_victim);

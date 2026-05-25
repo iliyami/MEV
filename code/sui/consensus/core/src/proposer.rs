@@ -146,7 +146,7 @@ impl ValidatorProposer {
             });
         let mut attack_active = matches!(
             attack_mode.as_str(),
-            "fissure" | "speculative" | "sluggish" | "mysticeti_lvw" | "mysticeti_lvw_fissure" | "mysticeti_eclipse" | "mysticeti_eclipse_lvw"
+            "fissure" | "speculative" | "sluggish" | "mysticeti_lvw" | "mysticeti_lvw_fissure" | "mysticeti_eclipse" | "mysticeti_eclipse_lvw" | "mysticeti_withhold" | "mysticeti_withhold_lvw" | "mysticeti_slw" | "mysticeti_slw_fissure"
         );
         // Eclipse modes also activate MLVW
         let mlvw_active_for_init = attack_mode.contains("lvw") || attack_mode.contains("eclipse");
@@ -169,7 +169,7 @@ impl ValidatorProposer {
                     is_attacker = true;
                     attack_active = matches!(
                         attack_mode.as_str(),
-                        "fissure" | "speculative" | "sluggish" | "mysticeti_lvw" | "mysticeti_lvw_fissure" | "mysticeti_eclipse" | "mysticeti_eclipse_lvw"
+                        "fissure" | "speculative" | "sluggish" | "mysticeti_lvw" | "mysticeti_lvw_fissure" | "mysticeti_eclipse" | "mysticeti_eclipse_lvw" | "mysticeti_withhold" | "mysticeti_withhold_lvw" | "mysticeti_slw" | "mysticeti_slw_fissure"
                     );
                     if let Some(v) = policy.params.get("speculative_p_max").and_then(|v| v.as_u64()) {
                         speculative_p_max = v as usize;
@@ -859,6 +859,28 @@ impl Proposer for ValidatorProposer {
                 base_timeout_ms,
             );
             std::thread::sleep(Duration::from_millis(delay_ms));
+        }
+
+        // STRATEGIC LEADER WITHHOLDING (SLW): when this attacker IS the
+        // leader for the current round, SKIP proposing entirely. Other
+        // validators will timeout (leader_timeout) and propose at the
+        // next round with force=true. The attacker's leader round gets
+        // skipped via indirect decision → blocks from that wave merge
+        // into the next leader's subdag, changing subdag boundaries.
+        // Non-leader rounds are proposed normally.
+        if self.attack_active && self.is_attacker
+            && (self.attack_mode.contains("slw"))
+        {
+            let clock_round = self.dag_state.read().threshold_clock_round();
+            let committee_size = self.context.committee.size();
+            let is_my_leader_round = (clock_round as usize % committee_size) == self.context.own_index.value();
+            if is_my_leader_round {
+                debug!(
+                    "SLW: node {} SKIPPING leader proposal at round {}",
+                    self.context.own_index.value(), clock_round
+                );
+                return None;
+            }
         }
 
         if !self.should_propose() {
