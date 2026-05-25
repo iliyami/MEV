@@ -66,6 +66,8 @@ mod fissure_attack_test;
 mod speculative_attack_test;
 #[cfg(test)]
 mod sluggish_attack_test;
+#[cfg(test)]
+mod mysticeti_lvw_attack_test;
 
 /// Exported Consensus API.
 pub use authority_node::{ConsensusAuthority, NetworkType};

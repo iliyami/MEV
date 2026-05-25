@@ -155,17 +155,24 @@ async fn test_speculative_attack_asr_dynamic() {
         }
     }
 
-    let asr = calculate_asr(&all_commits, num_validators, num_attacker, num_victim);
-    println!("FINAL_ASR_RESULT: {:.1}%", asr);
+    let (sr_asr, ap_asr) = calculate_asr(&all_commits, num_validators, num_attacker, num_victim);
+    println!("FINAL_ASR_RESULT: {:.1}%", sr_asr);
+    println!("FINAL_ALL_PAIRS_ASR: {:.1}%", ap_asr);
     println!(
         "  Mode: speculative  n={num_validators}  p_max={p_max}  commits={}",
         all_commits.len()
+    );
+    println!("  Same-round ASR (paper-1 attack metric): {:.1}%", sr_asr);
+    println!(
+        "  All-pairs ASR (paper-1 baseline metric, neutral ~50%): {:.1}%",
+        ap_asr
     );
 
     for a in authorities {
         a.stop().await;
     }
-    assert!(asr >= 0.0 && asr <= 100.0, "ASR out of range: {asr}");
+    assert!(sr_asr >= 0.0 && sr_asr <= 100.0);
+    assert!(ap_asr >= 0.0 && ap_asr <= 100.0);
 }
 
 fn calculate_asr(
@@ -173,10 +180,10 @@ fn calculate_asr(
     num_validators: usize,
     num_attacker: usize,
     num_victim: usize,
-) -> f64 {
+) -> (f64, f64) {
     if commits.is_empty() {
         warn!("No commits to score");
-        return 0.0;
+        return (0.0, 0.0);
     }
     let mut order = Vec::new();
     for c in commits {
@@ -194,21 +201,25 @@ fn calculate_asr(
         }
     }
     if atts.is_empty() || vics.is_empty() {
-        return 0.0;
+        return (0.0, 0.0);
     }
-    let (mut succ, mut total) = (0usize, 0usize);
+    let (mut sr_s, mut sr_t, mut ap_s, mut ap_t) = (0usize, 0usize, 0usize, 0usize);
     for (ap, ar) in &atts {
         for (vp, vr) in &vics {
+            ap_t += 1;
+            if ap < vp {
+                ap_s += 1;
+            }
             if ar == vr {
-                total += 1;
+                sr_t += 1;
                 if ap < vp {
-                    succ += 1;
+                    sr_s += 1;
                 }
             }
         }
     }
-    if total == 0 {
-        return 0.0;
-    }
-    (succ as f64 / total as f64) * 100.0
+    (
+        if sr_t > 0 { sr_s as f64 / sr_t as f64 * 100.0 } else { 0.0 },
+        if ap_t > 0 { ap_s as f64 / ap_t as f64 * 100.0 } else { 0.0 },
+    )
 }

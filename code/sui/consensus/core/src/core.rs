@@ -368,6 +368,42 @@ impl Core {
             .core_add_blocks_batch_size
             .observe(blocks.len() as f64);
 
+        // ECLIPSING ATTACK: attacker nodes DROP victim blocks entirely.
+        // Victim blocks still propagate through honest nodes (who
+        // accept them normally), but the attacker's DAG state never
+        // contains the victim blocks. When this attacker is leader,
+        // its subdag excludes victim blocks (they weren't in this
+        // node's DAG). Victim blocks then commit in a LATER leader's
+        // subdag, shifting them to higher positions in the global
+        // commit order.
+        let blocks = if std::env::var("ATTACK_MODE")
+            .unwrap_or_default()
+            .contains("eclipse")
+        {
+            let attacker_ratio: f64 = std::env::var("ATTACKER_RATIO")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0.308);
+            let victim_ratio: f64 = std::env::var("VICTIM_RATIO")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0.231);
+            let n = self.context.committee.size();
+            let atk_count = (n as f64 * attacker_ratio).floor() as usize;
+            let vic_first = n.saturating_sub((n as f64 * victim_ratio).round() as usize);
+            let is_atk = self.context.own_index.value() < atk_count;
+            if is_atk {
+                blocks
+                    .into_iter()
+                    .filter(|b| b.author().value() < vic_first)
+                    .collect()
+            } else {
+                blocks
+            }
+        } else {
+            blocks
+        };
+
         let (accepted_blocks, missing_block_refs) = self.accept_blocks(blocks);
 
         if !accepted_blocks.is_empty() {

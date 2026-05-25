@@ -139,8 +139,10 @@ impl ValidatorProposer {
             });
         let attack_active = matches!(
             attack_mode.as_str(),
-            "fissure" | "speculative" | "sluggish"
+            "fissure" | "speculative" | "sluggish" | "mysticeti_lvw" | "mysticeti_lvw_fissure" | "mysticeti_eclipse" | "mysticeti_eclipse_lvw"
         );
+        // Eclipse modes also activate MLVW
+        let mlvw_active_for_init = attack_mode.contains("lvw") || attack_mode.contains("eclipse");
         let committee_size = context.committee.size();
         let attacker_count = ((committee_size as f64) * attacker_ratio).floor() as usize;
         let is_attacker = attack_active && context.own_index.value() < attacker_count;
@@ -267,6 +269,16 @@ impl ValidatorProposer {
         // *after* the victim).
         let included_ancestors =
             self.preprocess_ancestors_for_fissure_attack(included_ancestors, clock_round);
+
+        // MYSTICETI-LVW ATTACK: when this attacker proposes at R+1 and
+        // the leader at R is in the victim authority range, drop the
+        // victim leader's R block from this attacker's parents. The
+        // attacker's R+1 block thereby becomes a "blame" for that
+        // leader. The remaining quorum-round ancestors still cover
+        // 2f+1 stake (we drop one validator's block out of up to n).
+        // See proposer.rs::preprocess_ancestors_for_mysticeti_lvw_attack.
+        let included_ancestors =
+            self.preprocess_ancestors_for_mysticeti_lvw_attack(included_ancestors, clock_round);
 
         // When backrun/sandwich is asked to wait for a victim parent
         // and none exists, return empty to defer this round entirely.
@@ -438,7 +450,25 @@ impl ValidatorProposer {
         ancestors: Vec<VerifiedBlock>,
         clock_round: Round,
     ) -> Vec<VerifiedBlock> {
-        if self.attack_mode != "fissure" || !self.is_attacker {
+        let fissure_active = matches!(
+            self.attack_mode.as_str(),
+            "fissure" | "mysticeti_lvw_fissure"
+        );
+        // Bribed nodes can also run fissure (exclude victim blocks) if
+        // listed in FISSURE_BRIBED_NODES. Combined with MLVW bribery
+        // this means bribed validators both blame victim leaders AND
+        // exclude victim ancestors — double-whammy reducing victim
+        // causal-cone inclusion.
+        let fissure_bribed = env::var("FISSURE_BRIBED_NODES")
+            .ok()
+            .map(|s| {
+                s.split(',')
+                    .filter_map(|t| t.trim().parse::<usize>().ok())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let am_fissure_bribed = fissure_bribed.contains(&self.context.own_index.value());
+        if !fissure_active || (!self.is_attacker && !am_fissure_bribed) {
             return ancestors;
         }
 
@@ -539,6 +569,132 @@ impl ValidatorProposer {
         let author = block.author().value();
         let n = self.context.committee.size();
         victim_count > 0 && author >= n.saturating_sub(victim_count)
+    }
+
+    /// MYSTICETI Leader-Vote Withholding (MLVW) preprocess.
+    ///
+    /// Mysticeti's direct-commit rule for a leader L at round R needs at
+    /// least one block at decision_round (R + wave_length - 1) whose
+    /// causal history contains 2f+1 distinct authority "votes" for L.
+    /// A "vote" is a R+1 block that includes L's R block transitively
+    /// as the first (author, round) match in its ancestor set
+    /// (base_committer::find_supported_block, is_vote).
+    ///
+    /// When this attacker proposes its own block at round R+1 and the
+    /// leader at R is in the victim authority range, dropping the
+    /// victim leader's R block from this attacker's parent set makes
+    /// the resulting block a "blame" for that leader. The remaining
+    /// round-R ancestors still satisfy the parent-round quorum
+    /// (12 of 13 authorities, well above 2f+1 = 9).
+    ///
+    /// Honest validators are unmodified; this stays inside the
+    /// honest-action set (a slow validator could legitimately miss
+    /// the leader's block and propose without it). Inert unless
+    /// ATTACK_MODE=mysticeti_lvw AND this node is in the attacker
+    /// prefix.
+    fn preprocess_ancestors_for_mysticeti_lvw_attack(
+        &self,
+        ancestors: Vec<VerifiedBlock>,
+        clock_round: Round,
+    ) -> Vec<VerifiedBlock> {
+        // The hook fires for the attacker prefix OR for nodes explicitly
+        // listed in MLVW_BRIBED_NODES (comma-separated authority
+        // indices). Bribery simulation: a bribed honest validator's
+        // R+1 block also withholds its vote from victim leaders.
+        let bribed = env::var("MLVW_BRIBED_NODES")
+            .ok()
+            .map(|s| {
+                s.split(',')
+                    .filter_map(|t| t.trim().parse::<usize>().ok())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let own_idx = self.context.own_index.value();
+        let am_bribed = bribed.contains(&own_idx);
+        let mlvw_active = self.attack_mode.contains("lvw")
+            || self.attack_mode.contains("eclipse");
+        if !mlvw_active || (!self.is_attacker && !am_bribed) {
+            return ancestors;
+        }
+
+        // The leader round being voted on is clock_round - 1.
+        let leader_round = clock_round.saturating_sub(1);
+        if leader_round == 0 {
+            return ancestors;
+        }
+
+        let committee_size = self.context.committee.size();
+        let victim_ratio: f64 = env::var("VICTIM_RATIO")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0.231);
+        let victim_count = (committee_size as f64 * victim_ratio).round() as usize;
+        if victim_count == 0 {
+            return ancestors;
+        }
+        let victim_first_idx = committee_size.saturating_sub(victim_count);
+
+        // Pipelined commit uses up to wave_length committers, each with
+        // a different leader_offset. Build the candidate victim-leader
+        // authorities for this leader_round under the for_testing
+        // round-robin scheme: authority = (leader_round + offset) %
+        // committee_size for offset in 0..wave_length.
+        let wave_length = crate::commit::DEFAULT_WAVE_LENGTH as usize;
+        let attacker_ratio: f64 = env::var("ATTACKER_RATIO")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0.308);
+        let attacker_count = (committee_size as f64 * attacker_ratio).floor() as usize;
+        // MLVW_BLAME_ALL_NON_ATTACKER: when set, attackers blame ALL
+        // non-attacker leaders (not just victim-authority leaders).
+        // With f > n/3 this monopolizes commit certification for
+        // attacker-led rounds only. Models "full Byzantine bribery"
+        // where the bribed validator acts as a complete attacker.
+        let blame_all = env::var("MLVW_BLAME_ALL_NON_ATTACKER")
+            .ok()
+            .filter(|v| v != "0")
+            .is_some();
+        let mut victim_authorities: Vec<usize> = Vec::with_capacity(wave_length);
+        for offset in 0..wave_length {
+            let auth = (leader_round as usize + offset) % committee_size;
+            let is_target = if blame_all {
+                auth >= attacker_count
+            } else {
+                auth >= victim_first_idx
+            };
+            if is_target {
+                victim_authorities.push(auth);
+            }
+        }
+        if victim_authorities.is_empty() {
+            return ancestors;
+        }
+
+        let mut dropped = 0usize;
+        let filtered: Vec<VerifiedBlock> = ancestors
+            .into_iter()
+            .filter(|a| {
+                let is_victim_leader_at_leader_round = a.round() == leader_round
+                    && victim_authorities.contains(&a.author().value());
+                if is_victim_leader_at_leader_round {
+                    dropped += 1;
+                    trace!(
+                        "MLVW: dropping victim-leader block {} from parent set at clock_round {}",
+                        a.reference(),
+                        clock_round
+                    );
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect();
+        if dropped > 0 {
+            debug!(
+                "MLVW: dropped {dropped} victim-leader ancestor(s) at clock_round {clock_round} (leader_round {leader_round}, victim_authorities={victim_authorities:?})"
+            );
+        }
+        filtered
     }
 
     /// Paper-1 baseline equation: Pfis0 = 1/2 + fa / (2 (n - fl)),
@@ -798,7 +954,7 @@ impl Proposer for ValidatorProposer {
         // action — the candidates are all individually well-formed.
         let mut final_transactions = transactions;
         if self.attack_active && self.is_attacker && self.attack_mode == "speculative" {
-            use crate::block::BlockDigest;
+            use consensus_types::block::BlockDigest;
             let p_max = self.speculative_p_max.min(50);
             let mut best_digest: Option<BlockDigest> = None;
             let mut best_transactions = final_transactions.clone();
