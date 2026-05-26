@@ -133,6 +133,30 @@ def build_cells(reps: int = DEFAULT_REPS) -> list[benchmark.Cell]:
         launcher=SuiLauncher(use_coordinator=True),
     ))
 
+    # Collusion + bribery combo: coordinated attackers + bribed honest nodes.
+    # Uses TM-Bribe (schema requires it for bribery.enabled=True). The
+    # coordination effect comes from all attackers sharing the same
+    # fissure exclusion logic (deterministic in block data) plus the
+    # bribed honest nodes applying omit_reference. This is the strongest
+    # combined attack: coordinated exclusion + honest-side omission.
+    cells.append(benchmark.Cell(
+        name="c_coll_bribed",
+        config=_cfg([
+            {"group_id": "g0", "members": [0, 1, 2, 3], "family": "frontrun",
+             "strategy": "fissure", "params": {}}
+        ], reps, threat_model="TM-Bribe",
+            bribery={
+                "enabled": True,
+                "type": "effective",
+                "settlement": "simulated",
+                "budget": 50,
+                "response_policy": "always_above_X",
+                "response_policy_params": {"threshold": 0},
+                "bribed_honest": [4, 5],
+            }),
+        launcher=SuiLauncher(use_coordinator=True),
+    ))
+
     # Best response: f=4 + bribery $100 + omit (best config from Bullshark P4)
     cells.append(benchmark.Cell(
         name="c_best_response",

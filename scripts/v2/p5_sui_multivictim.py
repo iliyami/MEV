@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
+import statistics as st
 import sys
 from pathlib import Path
 from typing import Any, Iterable, Optional
@@ -20,6 +22,48 @@ if __package__ in (None, ""):
 
 from scripts.v2 import benchmark, schema, sweeper
 from scripts.v2.launchers.sui import SuiLauncher
+
+_RE_VICTIM_PROFIT = re.compile(
+    r"V2_VICTIM_PROFIT: round=(\d+) author=(\d+) profit=([\d.eE+-]+)"
+)
+_RE_ADAPTIVE_SKIP = re.compile(
+    r"V2_ADAPTIVE_SKIP: round=(\d+) author=(\d+) profit=([\d.eE+-]+) threshold=([\d.eE+-]+)"
+)
+
+
+def _extract(raw_output: str, _run_result) -> dict:
+    profits = []
+    skips = []
+    for line in raw_output.splitlines():
+        m = _RE_VICTIM_PROFIT.search(line)
+        if m:
+            profits.append({"round": int(m.group(1)), "author": int(m.group(2)), "profit": float(m.group(3))})
+        m = _RE_ADAPTIVE_SKIP.search(line)
+        if m:
+            skips.append({"round": int(m.group(1)), "author": int(m.group(2)), "profit": float(m.group(3))})
+    skipped_keys = {(s["round"], s["author"]) for s in skips}
+    attacked = [p for p in profits if (p["round"], p["author"]) not in skipped_keys]
+    asr = _run_result.metrics.get("asr") if _run_result else None
+    median_profit = st.median([p["profit"] for p in attacked]) if attacked else None
+    expected_mev = (asr * median_profit / 100.0) if (asr is not None and median_profit is not None) else None
+    return {
+        "victim_profit_markers": len(profits),
+        "adaptive_skip_markers": len(skips),
+        "median_attacked_profit": median_profit,
+        "mean_attacked_profit": st.mean([p["profit"] for p in attacked]) if attacked else None,
+        "skip_rate": (len(skips) / len(profits)) if profits else 0.0,
+        "expected_mev": round(expected_mev, 4) if expected_mev is not None else None,
+    }
+
+
+_EXTRA_COLS = (
+    "victim_profit_markers",
+    "adaptive_skip_markers",
+    "median_attacked_profit",
+    "mean_attacked_profit",
+    "skip_rate",
+    "expected_mev",
+)
 
 DEFAULT_CSV = "results/sui_p5_multivictim_results.csv"
 DEFAULT_SUMMARY = "results/sui_p5_multivictim_summary.json"
@@ -75,13 +119,17 @@ def _fissure_with_threshold(threshold: float) -> list[dict]:
 def build_cells(reps: int = DEFAULT_REPS) -> list[benchmark.Cell]:
     cells = []
 
+    _launcher = SuiLauncher(use_coordinator=True)
+
     # Uniform baseline (Pareto victims, no threshold)
     cells.append(benchmark.Cell(
         name="mv_uniform_baseline",
         config=_cfg(_FISSURE, reps, victim_profile={
             "distribution": "pareto", "params": {"alpha": 1.5, "scale": 1.0}
         }),
-        launcher=SuiLauncher(use_coordinator=True),
+        extra_columns=_EXTRA_COLS,
+        marker_extractor=_extract,
+        launcher=_launcher,
     ))
 
     # Threshold sweep
@@ -91,7 +139,9 @@ def build_cells(reps: int = DEFAULT_REPS) -> list[benchmark.Cell]:
             config=_cfg(_fissure_with_threshold(thresh), reps, victim_profile={
                 "distribution": "pareto", "params": {"alpha": 1.5, "scale": 1.0}
             }),
-            launcher=SuiLauncher(use_coordinator=True),
+            extra_columns=_EXTRA_COLS,
+            marker_extractor=_extract,
+            launcher=_launcher,
         ))
 
     # Uniform distribution baseline
@@ -100,7 +150,9 @@ def build_cells(reps: int = DEFAULT_REPS) -> list[benchmark.Cell]:
         config=_cfg(_FISSURE, reps, victim_profile={
             "distribution": "uniform", "params": {"low": 0.0, "high": 10.0}
         }),
-        launcher=SuiLauncher(use_coordinator=True),
+        extra_columns=_EXTRA_COLS,
+        marker_extractor=_extract,
+        launcher=_launcher,
     ))
 
     return cells

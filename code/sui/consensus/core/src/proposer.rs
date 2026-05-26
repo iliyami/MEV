@@ -620,6 +620,28 @@ impl ValidatorProposer {
                 continue;
             }
 
+            // v2 P5: query victim profit and apply adaptive targeting gate.
+            if let Some(ref url) = self.coordinator_url {
+                if let Ok(Some(profit)) = crate::v2_coordinator_client::query_victim_profit(
+                    url, ancestor.round() as u64, ancestor.author().value() as u64,
+                ) {
+                    info!(
+                        "V2_VICTIM_PROFIT: round={} author={} profit={:.6}",
+                        ancestor.round(), ancestor.author().value(), profit
+                    );
+                    if let Some(threshold) = self.profit_threshold {
+                        if profit < threshold {
+                            info!(
+                                "V2_ADAPTIVE_SKIP: round={} author={} profit={:.6} threshold={:.6}",
+                                ancestor.round(), ancestor.author().value(), profit, threshold
+                            );
+                            filtered.push(ancestor);
+                            continue;
+                        }
+                    }
+                }
+            }
+
             let ancestor_stake = self.context.committee.stake(ancestor.author());
             let is_parent_round = ancestor.round() == quorum_round;
             let should_exclude = if is_parent_round {
