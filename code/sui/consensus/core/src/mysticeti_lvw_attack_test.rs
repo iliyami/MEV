@@ -133,6 +133,20 @@ async fn test_mysticeti_lvw_attack_asr_dynamic() {
         protocol_config.set_enable_v3_for_testing(false);
         info!("MLVW test: v3 leader scoring DISABLED");
     }
+    // REPUTATION SABOTAGE ATTACK: enable v3 scoring with short windows
+    // so that scoring kicks in within the test duration.
+    if env::var("ENABLE_V3_LEADER_SCORING").ok().filter(|v| v != "0").is_some() {
+        protocol_config.set_enable_v3_for_testing(true);
+        if let Some(ws) = env::var("V3_WINDOW_SIZE").ok().and_then(|s| s.parse::<u32>().ok()) {
+            protocol_config.set_leader_schedule_window_size_for_testing(ws);
+        }
+        if let Some(ui) = env::var("V3_UPDATE_INTERVAL").ok().and_then(|s| s.parse::<u32>().ok()) {
+            protocol_config.set_leader_schedule_update_interval_for_testing(ui);
+        }
+        info!("MLVW test: v3 leader scoring ENABLED (window={}, interval={})",
+            protocol_config.leader_schedule_window_size(),
+            protocol_config.leader_schedule_update_interval());
+    }
 
     let temp_dirs = (0..num_validators)
         .map(|_| TempDir::new().unwrap())
