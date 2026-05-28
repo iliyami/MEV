@@ -224,6 +224,17 @@ impl LeaderScheduleV3 {
         let cutoff = (self.context.protocol_config.bad_nodes_stake_threshold()
             * self.context.committee.total_stake())
             / 100;
+        // V2 EXPERIMENT MARKER: print scores at schedule update time
+        let scores_str: Vec<String> = self.total_scores_per_authority.iter()
+            .enumerate()
+            .map(|(i, s)| format!("a{}={}", i, s))
+            .collect();
+        println!(
+            "V2_V3_SCORES: cutoff={} scores=[{}]",
+            cutoff,
+            scores_str.join(",")
+        );
+
         while let Some((idx, _)) = by_score.last() {
             let stake = self.context.committee.stake(*idx);
             if accumulated_bad_stake + stake > cutoff {
@@ -232,6 +243,15 @@ impl LeaderScheduleV3 {
             accumulated_bad_stake += stake;
             by_score.pop();
         }
+
+        // V2 EXPERIMENT MARKER: print allowed leaders after filtering
+        let allowed_str: Vec<String> = by_score.iter()
+            .map(|(idx, score)| format!("a{}={}", idx.value(), score))
+            .collect();
+        println!(
+            "V2_V3_ALLOWED_LEADERS: [{}]",
+            allowed_str.join(",")
+        );
 
         by_score.into_iter().map(|(idx, _)| idx).collect()
     }

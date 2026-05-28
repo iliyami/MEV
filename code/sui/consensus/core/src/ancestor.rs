@@ -251,6 +251,16 @@ impl AncestorStateManager {
         let lock_until_round = current_clock_round + Self::STATE_LOCK_CLOCK_ROUNDS;
         ancestor_info.set_lock(lock_until_round);
 
+        // V2 EXPERIMENT MARKER: detect ancestor state transitions in baseline tests.
+        let state_str = match new_state {
+            AncestorState::Include => "INCLUDE",
+            AncestorState::Exclude(_) => "EXCLUDE",
+        };
+        println!(
+            "V2_ANCESTOR_STATE_CHANGE: round={} authority={} new_state={} score={}",
+            current_clock_round, transition.authority_id.value(), state_str, transition.score
+        );
+
         info!(
             "Authority {} moved to {new_state:?} state with score {} & quorum_round {} and locked until round {lock_until_round}. Total excluded stake: {}",
             transition.authority_id,

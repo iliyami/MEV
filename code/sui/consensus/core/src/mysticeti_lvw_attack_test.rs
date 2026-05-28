@@ -143,6 +143,9 @@ async fn test_mysticeti_lvw_attack_asr_dynamic() {
         if let Some(ui) = env::var("V3_UPDATE_INTERVAL").ok().and_then(|s| s.parse::<u32>().ok()) {
             protocol_config.set_leader_schedule_update_interval_for_testing(ui);
         }
+        if let Some(bnst) = env::var("BAD_NODES_STAKE_THRESHOLD").ok().and_then(|s| s.parse::<u64>().ok()) {
+            protocol_config.set_bad_nodes_stake_threshold_for_testing(bnst);
+        }
         info!("MLVW test: v3 leader scoring ENABLED (window={}, interval={})",
             protocol_config.leader_schedule_window_size(),
             protocol_config.leader_schedule_update_interval());
