@@ -3853,6 +3853,39 @@ mod tests {
         );
     }
 
+    // PAPER-2: prove that PostConsensusTxReorder is a *stable* sort. When two
+    // transactions tie at the same gas price, the consensus-supplied order is
+    // preserved. The consensus order is `sort_sub_dag_blocks(round, author)`,
+    // so the validator with the lower author index always wins gas-price ties.
+    #[test]
+    fn test_order_by_gas_price_stable_tiebreaker() {
+        let attacker_low_idx = user_txn(1000);
+        let victim_high_idx = user_txn(1000);
+
+        let attacker_digest = *attacker_low_idx.tx().digest();
+        let victim_digest = *victim_high_idx.tx().digest();
+        assert_ne!(attacker_digest, victim_digest);
+
+        // Consensus delivers them in (round, author) order: attacker (low
+        // index) first, victim (high index) second. Same gas price.
+        let mut v = vec![attacker_low_idx, victim_high_idx];
+        PostConsensusTxReorder::reorder(&mut v, ConsensusTransactionOrdering::ByGasPrice);
+        assert_eq!(*v[0].tx().digest(), attacker_digest);
+        assert_eq!(*v[1].tx().digest(), victim_digest);
+
+        // Independent of gas-price reorder, if attacker pays one wei MORE,
+        // attacker still wins (this is the expected, intended behavior).
+        let mut v = vec![user_txn(1001), {
+            let t = user_txn(1000);
+            let d = *t.tx().digest();
+            assert_ne!(d, *v[0].tx().digest());
+            t
+        }];
+        let high_first = *v[0].tx().digest();
+        PostConsensusTxReorder::reorder(&mut v, ConsensusTransactionOrdering::ByGasPrice);
+        assert_eq!(*v[0].tx().digest(), high_first);
+    }
+
     #[tokio::test(flavor = "current_thread")]
     async fn test_checkpoint_signature_dedup() {
         telemetry_subscribers::init_for_testing();

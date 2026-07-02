@@ -97,6 +97,10 @@ pub(crate) struct ValidatorProposer {
     profit_threshold: Option<f64>,
     role_action: Option<String>,
     own_group_id: Option<String>,
+
+    // Paper-2 burst-and-hide attack: count of successful proposals from
+    // this validator. Gated by MAX_ATTACKER_PROPOSES env var.
+    bh_propose_count: u32,
 }
 
 impl ValidatorProposer {
@@ -146,7 +150,7 @@ impl ValidatorProposer {
             });
         let mut attack_active = matches!(
             attack_mode.as_str(),
-            "fissure" | "speculative" | "sluggish" | "mysticeti_lvw" | "mysticeti_lvw_fissure" | "mysticeti_eclipse" | "mysticeti_eclipse_lvw" | "mysticeti_withhold" | "mysticeti_withhold_lvw" | "mysticeti_slw" | "mysticeti_slw_fissure"
+            "fissure" | "speculative" | "sluggish" | "mysticeti_lvw" | "mysticeti_lvw_fissure" | "mysticeti_eclipse" | "mysticeti_eclipse_lvw" | "mysticeti_withhold" | "mysticeti_withhold_lvw" | "mysticeti_withhold_fissure" | "mysticeti_slw" | "mysticeti_slw_fissure"
         );
         // Eclipse modes also activate MLVW
         let mlvw_active_for_init = attack_mode.contains("lvw") || attack_mode.contains("eclipse");
@@ -169,7 +173,7 @@ impl ValidatorProposer {
                     is_attacker = true;
                     attack_active = matches!(
                         attack_mode.as_str(),
-                        "fissure" | "speculative" | "sluggish" | "mysticeti_lvw" | "mysticeti_lvw_fissure" | "mysticeti_eclipse" | "mysticeti_eclipse_lvw" | "mysticeti_withhold" | "mysticeti_withhold_lvw" | "mysticeti_slw" | "mysticeti_slw_fissure"
+                        "fissure" | "speculative" | "sluggish" | "mysticeti_lvw" | "mysticeti_lvw_fissure" | "mysticeti_eclipse" | "mysticeti_eclipse_lvw" | "mysticeti_withhold" | "mysticeti_withhold_lvw" | "mysticeti_withhold_fissure" | "mysticeti_slw" | "mysticeti_slw_fissure"
                     );
                     if let Some(v) = policy.params.get("speculative_p_max").and_then(|v| v.as_u64()) {
                         speculative_p_max = v as usize;
@@ -222,6 +226,7 @@ impl ValidatorProposer {
             profit_threshold,
             role_action,
             own_group_id,
+            bh_propose_count: 0,
         }
     }
 
@@ -507,10 +512,13 @@ impl ValidatorProposer {
         ancestors: Vec<VerifiedBlock>,
         clock_round: Round,
     ) -> Vec<VerifiedBlock> {
+        // PAPER-2: allow "fissure" sub-mode in any compound name like
+        // "mysticeti_withhold_fissure" so we can compose layer-different
+        // attacks (parent exclusion + per-peer delivery delay).
         let fissure_active = matches!(
             self.attack_mode.as_str(),
             "fissure" | "mysticeti_lvw_fissure"
-        );
+        ) || self.attack_mode.contains("fissure");
         // Bribed nodes can also run fissure (exclude victim blocks) if
         // listed in FISSURE_BRIBED_NODES. Combined with MLVW bribery
         // this means bribed validators both blame victim leaders AND
@@ -867,6 +875,49 @@ impl ValidatorProposer {
 
 impl Proposer for ValidatorProposer {
     fn try_new_block(&mut self, force: bool) -> Option<ExtendedBlock> {
+        // BURST-AND-HIDE ATTACK (paper-2): cap the number of blocks each
+        // attacker is allowed to produce in this run. Once
+        // MAX_ATTACKER_PROPOSES is reached, the proposer refuses every
+        // subsequent call (including force=true). Pins all attacker
+        // blocks to early rounds and maximally breaks the all-pairs
+        // cross-round symmetry. We track via the local propose_count
+        // counter so we never need to acquire a shared lock here.
+        if let Ok(cap_str) = std::env::var("MAX_ATTACKER_PROPOSES") {
+            if let Ok(cap) = cap_str.parse::<u32>() {
+                let num_atk: usize = std::env::var("NUM_ATTACKERS")
+                    .ok().and_then(|s| s.parse().ok()).unwrap_or(0);
+                if self.context.own_index.value() < num_atk {
+                    if self.bh_propose_count >= cap {
+                        let _ = force;
+                        return None;
+                    }
+                }
+            }
+        }
+
+        // BUG-FREE WITHHOLDING ATTACK (paper-2 §9): the attacker proposes
+        // ONLY on the rounds where it is the leader (clock_round % n ==
+        // own_index) and stays silent on every other round. This is the
+        // legitimate "choose when to broadcast" action -- no protocol rule is
+        // bent and no timestamp is spoofed. It reproduces the same early-
+        // clustered block pattern as the §8 timestamp attack without relying
+        // on the missing-timestamp-validation flaw. force=true (leader
+        // timeout) is still honored so liveness is preserved.
+        if !force
+            && std::env::var("SILENT_EXCEPT_LEADER").ok().filter(|v| v != "0").is_some()
+        {
+            let num_atk: usize = std::env::var("NUM_ATTACKERS")
+                .ok().and_then(|s| s.parse().ok()).unwrap_or(0);
+            if self.context.own_index.value() < num_atk {
+                let clock_round = self.dag_state.read().threshold_clock_round();
+                let committee_size = self.context.committee.size();
+                let is_my_leader_round =
+                    (clock_round as usize % committee_size) == self.context.own_index.value();
+                if !is_my_leader_round {
+                    return None;
+                }
+            }
+        }
         // SLUGGISH ATTACK: deliberately delay proposal for attackers.
         // The delay is a multiple of leader_timeout, which is a knob an
         // honest validator with a slow link could legitimately match.
@@ -1054,7 +1105,31 @@ impl Proposer for ValidatorProposer {
                 .observe(clock_round.saturating_sub(ancestor.round()).into());
         }
 
-        let now = self.context.clock.timestamp_utc_ms();
+        // TIMESTAMP ATTACK HOOK (paper-2): Byzantine attacker overrides its
+        // block timestamp with BYZANTINE_TIMESTAMP_OFFSET_MS milliseconds added
+        // to local clock. Set to e.g. 31536000000 (~365 days) for far-future,
+        // or i64::MIN-ish for far-past. ATTACK_TIMESTAMP=1 must also be set to
+        // arm. Default: no-op.
+        let mut now = self.context.clock.timestamp_utc_ms();
+        if std::env::var("ATTACK_TIMESTAMP").ok().filter(|v| v != "0").is_some() {
+            let num_atk: usize = std::env::var("NUM_ATTACKERS")
+                .ok().and_then(|s| s.parse().ok()).unwrap_or(0);
+            if self.context.own_index.value() < num_atk {
+                if let Ok(offset_str) = std::env::var("BYZANTINE_TIMESTAMP_OFFSET_MS") {
+                    if let Ok(off) = offset_str.parse::<i64>() {
+                        if off >= 0 {
+                            now = now.saturating_add(off as u64);
+                        } else {
+                            now = now.saturating_sub((-off) as u64);
+                        }
+                        println!(
+                            "V2_TIMESTAMP_ATTACK: round={} authority={} offset_ms={} new_ts_ms={}",
+                            clock_round, self.context.own_index.value(), off, now
+                        );
+                    }
+                }
+            }
+        }
         ancestors.iter().for_each(|block| {
             if block.timestamp_ms() > now {
                 trace!("Ancestor block {:?} has timestamp {}, greater than current timestamp {now}. Proposing for round {}.", block, block.timestamp_ms(), clock_round);
@@ -1255,6 +1330,11 @@ impl Proposer for ValidatorProposer {
         self.round_tracker
             .write()
             .update_from_verified_block(&extended_block);
+
+        // Paper-2 burst-and-hide: bump the propose counter so the
+        // MAX_ATTACKER_PROPOSES gate at the top of try_new_block can
+        // refuse future proposals once the budget is exhausted.
+        self.bh_propose_count = self.bh_propose_count.saturating_add(1);
 
         Some(extended_block)
     }
