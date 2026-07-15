@@ -401,6 +401,18 @@ impl CommittedSubDag {
 // Sort the blocks of the sub-dag blocks by round number then authority index. Any
 // deterministic & stable algorithm works.
 pub(crate) fn sort_sub_dag_blocks(blocks: &mut [VerifiedBlock]) {
+    // PAPER-2 defense evaluation (env-gated; the default path below is unchanged).
+    // FIX_TIEBREAK=1 replaces the author-index tiebreak with the block digest, a
+    // deterministic key that is independent of validator index, so we can measure
+    // whether the same-round ordering bias (flaw F1) disappears.
+    if std::env::var("FIX_TIEBREAK")
+        .ok()
+        .filter(|v| v != "0")
+        .is_some()
+    {
+        blocks.sort_by(|a, b| a.round().cmp(&b.round()).then_with(|| a.digest().cmp(&b.digest())));
+        return;
+    }
     blocks.sort_by(|a, b| {
         a.round()
             .cmp(&b.round())
