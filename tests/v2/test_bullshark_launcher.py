@@ -166,7 +166,7 @@ def test_run_invokes_test_runner_and_parses_output(tmp_path):
     """End-to-end with mocked subprocess: launcher invokes test_runner, parses ASR, returns RunResult."""
     captured: dict = {}
 
-    def fake_run(cmd, capture_output, text, cwd, timeout, check, env=None):
+    def fake_run_capture(cmd, cwd, env, timeout):
         # Verify command shape.
         assert cmd[0].endswith("python") or cmd[0].endswith("python3") or "python" in cmd[0]
         assert cmd[1].endswith("test_runner.py")
@@ -176,12 +176,12 @@ def test_run_invokes_test_runner_and_parses_output(tmp_path):
             v1 = _yaml.safe_load(fh)
         captured["yaml"] = v1
         captured["cmd"] = cmd
-        return _fake_completed("FINAL_ASR_RESULT: 92.30\n", returncode=0)
+        return "FINAL_ASR_RESULT: 92.30\n", 0
 
     launcher = BullsharkLauncher(local_mode=True)
     cfg = _make_cfg(family="frontrun", strategy="fissure")
 
-    with mock.patch("scripts.v2.launchers.bullshark.subprocess.run", side_effect=fake_run):
+    with mock.patch("scripts.v2.launchers.bullshark.run_capture", side_effect=fake_run_capture):
         result = launcher.run(_request(cfg))
 
     assert result.exit_code == 0
@@ -198,11 +198,66 @@ def test_run_handles_timeout_gracefully():
     launcher = BullsharkLauncher()
     cfg = _make_cfg()
 
-    def fake_run(cmd, **kwargs):
-        _ = kwargs  # accept env=, capture_output=, etc.
-        raise subprocess.TimeoutExpired(cmd=cmd, timeout=1, output="partial\n")
+    def fake_run_capture(cmd, cwd, env, timeout):
+        # run_capture group-kills on timeout and returns the -124 convention.
+        return "partial\n[TIMEOUT: process group killed after 1s]\n", -124
 
-    with mock.patch("scripts.v2.launchers.bullshark.subprocess.run", side_effect=fake_run):
+    with mock.patch("scripts.v2.launchers.bullshark.run_capture", side_effect=fake_run_capture):
         result = launcher.run(_request(cfg))
     assert result.exit_code == -124  # timeout marker
     assert result.metrics["asr"] is None
+
+
+def test_all_pairs_asr_headlines_when_present():
+    """Withholding cells emit FINAL_ALL_PAIRS_ASR -> that neutral-baseline metric
+    is the headline `asr`; same-round is kept as a diagnostic."""
+    out = "FINAL_ASR_RESULT: 95.0%\nFINAL_ALL_PAIRS_ASR: 52.0%\n"
+    m = BullsharkLauncher._parse_markers(out, "frontrun")
+    assert m["asr"] == 52.0
+    assert m["asr_same_round"] == 95.0
+    assert m["asr_all_pairs"] == 52.0
+
+
+def test_same_round_asr_when_no_all_pairs():
+    """Paper-1 attack cells emit only same-round -> asr stays same-round."""
+    m = BullsharkLauncher._parse_markers("FINAL_ASR_RESULT: 92.3%\n", "frontrun")
+    assert m["asr"] == 92.3
+    assert m["asr_all_pairs"] is None
+
+
+def test_compute_all_pairs_asr():
+    from scripts.v2 import schema, sweeper
+    from scripts.v2.launchers.bullshark import _compute_all_pairs_asr
+
+    raw = {
+        "protocol": {"name": "bullshark", "path": "bullshark"},
+        "environment": {"NUM_NODES": "13", "ATTACKER_RATIO": "0.308", "VICTIM_RATIO": "0.231"},
+        "adversary": {"threat_model": "TM-Solo", "topology": {"policies": [
+            {"group_id": "g0", "members": [0, 1, 2, 3], "family": "frontrun",
+             "strategy": "fissure", "params": {}}]}},
+        "victims": {"workload": "single", "count": 1},
+        "runtime": {"reps": 1, "seed": 0},
+    }
+    cfg = sweeper.expand_policy_vector(schema.parse_config(raw))  # attackers {0..3}, victims {10,11,12}
+    assert _compute_all_pairs_asr(None, cfg) is None
+    assert _compute_all_pairs_asr([], cfg) is None
+    # < 2 attacker blocks is degenerate -> None (the sluggish-low-alpha guard)
+    assert _compute_all_pairs_asr(
+        [{"creator": 0, "position": 1, "round": 1},
+         {"creator": 10, "position": 2, "round": 1}], cfg) is None
+    # attackers @5,6 vs victims @3,8: (5<8),(6<8) win; (5<3),(6<3) lose = 2/4 = 50%
+    order = [
+        {"creator": 10, "position": 3, "round": 1},
+        {"creator": 0, "position": 5, "round": 2},
+        {"creator": 1, "position": 6, "round": 2},
+        {"creator": 11, "position": 8, "round": 3},
+    ]
+    assert _compute_all_pairs_asr(order, cfg) == 50.0
+    # attackers before both victims -> 100%
+    order2 = [
+        {"creator": 0, "position": 0, "round": 1},
+        {"creator": 1, "position": 1, "round": 1},
+        {"creator": 10, "position": 2, "round": 1},
+        {"creator": 11, "position": 3, "round": 2},
+    ]
+    assert _compute_all_pairs_asr(order2, cfg) == 100.0

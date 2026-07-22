@@ -37,9 +37,16 @@ impl LeaderSchedule {
     const CONSENSUS_COMMITS_PER_SCHEDULE: u64 = 10;
 
     pub(crate) fn new(context: Arc<Context>, leader_swap_table: LeaderSwapTable) -> Self {
+        // PAPER-2 (env-gated; default byte-identical). SCHEDULE_INTERVAL shrinks the
+        // 300-commit reputation/swap interval so a test can observe the swap fire.
+        let num_commits_per_schedule = std::env::var("SCHEDULE_INTERVAL")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .filter(|&n| n > 0)
+            .unwrap_or(Self::CONSENSUS_COMMITS_PER_SCHEDULE);
         Self {
             context,
-            num_commits_per_schedule: Self::CONSENSUS_COMMITS_PER_SCHEDULE,
+            num_commits_per_schedule,
             leader_swap_table: Arc::new(RwLock::new(leader_swap_table)),
         }
     }
@@ -127,6 +134,28 @@ impl LeaderSchedule {
             .node_metrics
             .num_of_bad_nodes
             .set(self.leader_swap_table.read().bad_nodes.len() as i64);
+
+        // PAPER-2 observability (env-gated, print-only; no logic change): emit the
+        // reputation scores + resulting bad_nodes so a harness can detect targeted
+        // leadership eviction (an honest rival pushed into bad_nodes by peers who
+        // legally declined to reference its blocks).
+        if std::env::var("EMIT_REPUTATION")
+            .ok()
+            .filter(|v| v != "0")
+            .is_some()
+        {
+            let bad: Vec<usize> = self
+                .leader_swap_table
+                .read()
+                .bad_nodes
+                .keys()
+                .map(|a| a.value())
+                .collect();
+            println!(
+                "FINAL_REP_SCORES: {:?} BAD_NODES: {:?}",
+                reputation_scores.scores_per_authority, bad
+            );
+        }
     }
 
     pub(crate) fn elect_leader(&self, round: u32, leader_offset: u32) -> AuthorityIndex {
@@ -134,7 +163,15 @@ impl LeaderSchedule {
             // TODO: we need to differentiate the leader strategy in tests, so for
             // some type of testing (ex sim tests) we can use the staked approach.
             if #[cfg(test)] {
-                let leader = AuthorityIndex::new_for_test((round + leader_offset) % self.context.committee.size() as u32);
+                // PAPER-2 (env-gated; implements the upstream TODO above). Default
+                // test path = round-robin (unchanged). STAKE_BASED_LEADER=1 selects
+                // the production stake-weighted schedule so we can measure how skewed
+                // stake interacts with the same-round ordering bias.
+                let leader = if std::env::var("STAKE_BASED_LEADER").ok().filter(|v| v != "0").is_some() {
+                    self.elect_leader_stake_based(round, leader_offset)
+                } else {
+                    AuthorityIndex::new_for_test((round + leader_offset) % self.context.committee.size() as u32)
+                };
                 let table = self.leader_swap_table.read();
                 table.swap(leader, round, leader_offset).unwrap_or(leader)
             } else {

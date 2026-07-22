@@ -122,6 +122,16 @@ async fn test_mysticeti_lvw_attack_asr_dynamic() {
         .and_then(|s| s.parse().ok())
         .unwrap_or(10);
     protocol_config.set_gc_depth_for_testing(gc_depth);
+    // PAPER-2 reputation-eviction: set the bad-nodes stake threshold for the LIVE
+    // V2 path too (the V3 block below also sets it, but we want it for V2 when V3
+    // is disabled). Combined with SCHEDULE_INTERVAL (leader_schedule.rs) this lets
+    // the V2 swap table populate + fire within a short run.
+    if let Some(bnst) = env::var("BAD_NODES_STAKE_THRESHOLD")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+    {
+        protocol_config.set_bad_nodes_stake_threshold_for_testing(bnst);
+    }
     if let Some(nl) = env::var("NUM_LEADERS_PER_ROUND")
         .ok()
         .and_then(|s| s.parse::<usize>().ok())

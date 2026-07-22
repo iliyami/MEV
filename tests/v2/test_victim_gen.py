@@ -150,7 +150,15 @@ def test_profit_weighted_asr_empty_blocks():
 
 def test_unknown_distribution_rejected():
     with pytest.raises(ValueError, match="unknown distribution"):
-        VictimProfile(distribution="lognormal", seed=0)
+        VictimProfile(distribution="gaussian", seed=0)
+
+
+def test_lognormal_accepted_deterministic_and_heavy_tailed():
+    vp = VictimProfile(distribution="lognormal", params={"mu": 1.1, "sigma": 2.5}, seed=42)
+    assert vp.profit_for_block(5, 2) == vp.profit_for_block(5, 2)  # deterministic
+    vals = sorted(vp.profit_for_block(r, a) for r in range(60) for a in range(10, 13))
+    assert all(v > 0 for v in vals)
+    assert vals[-1] > 10 * vals[len(vals) // 2]  # heavy-tailed
 
 
 def test_negative_scale_rejected():

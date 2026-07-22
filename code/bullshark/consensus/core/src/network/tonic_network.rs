@@ -111,6 +111,20 @@ impl NetworkClient for TonicClient {
             block: block.serialized().clone(),
         });
         request.set_timeout(timeout);
+        // D3 (WAN latency): env-gated per-send delay. Delay ONLY — the block is
+        // still sent, unchanged and in order, after the sleep; no reorder/drop
+        // and honest handling is untouched, so it stays within the invariant.
+        // ASYMMETRIC_LATENCY doubles it for high-index peers (a regional split).
+        if let Ok(ms) = std::env::var("LATENCY_MS") {
+            if let Ok(mut delay) = ms.parse::<u64>() {
+                if delay > 0 {
+                    if std::env::var("ASYMMETRIC_LATENCY").is_ok() && peer.value() >= 9 {
+                        delay = delay.saturating_mul(2);
+                    }
+                    tokio::time::sleep(Duration::from_millis(delay)).await;
+                }
+            }
+        }
         client
             .send_block(request)
             .await

@@ -8,9 +8,10 @@ Generation is:
     therefore serve it without holding per-block state, and the Python metrics
     layer can re-derive it from the run's seed alone.
   * **distribution-driven** — `uniform` (control: every block worth the same
-    constant) and `pareto` (heavy-tailed; matches the heterogeneous-profit
-    workload paper 2 §H4 cares about). Real DEX-replay traces are deferred to
-    the Sui phase per `paper_workspace/plan_v2.md` §8.
+    constant), `pareto` (heavy-tailed; the primary heterogeneous-profit model),
+    and `lognormal` (a second heavy-tailed model for the value-distribution
+    robustness sweep — guide T3/T4). Real DEX-replay traces are deferred to the
+    Sui phase per `paper_workspace/plan_v2.md` §8.
 
 Profit is treated as an abstract positive scalar. Comparisons across runs are
 only meaningful when the same `seed` + `params` are used; this matches the
@@ -26,6 +27,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import math
+import statistics
 import struct
 from dataclasses import dataclass
 from typing import Any
@@ -33,7 +35,8 @@ from typing import Any
 
 _UNIFORM = "uniform"
 _PARETO = "pareto"
-ALLOWED_DISTRIBUTIONS = (_UNIFORM, _PARETO)
+_LOGNORMAL = "lognormal"
+ALLOWED_DISTRIBUTIONS = (_UNIFORM, _PARETO, _LOGNORMAL)
 
 
 def _u_in_unit(seed: int, round_: int, author: int) -> float:
@@ -66,6 +69,24 @@ def _profit_pareto(u: float, shape: float, scale: float) -> float:
     return float(scale) * math.pow(1.0 - u_safe, -1.0 / float(shape))
 
 
+def _profit_lognormal(u: float, mu: float, sigma: float, scale: float) -> float:
+    """Log-normal draw via inverse-CDF: P = scale * exp(mu + sigma * z),
+    where z = Phi^{-1}(u) is the standard-normal quantile.
+
+    A second heavy-tailed model alongside Pareto, used for the value-distribution
+    robustness sweep (guide T3/T4). Defaults mu=1.1, sigma=2.5 follow one empirical
+    MEV fit; the exact source is to be confirmed before final (plan Q1 / C.7b).
+    """
+    if sigma <= 0:
+        raise ValueError(f"lognormal sigma must be positive, got {sigma}")
+    if scale <= 0:
+        raise ValueError(f"lognormal scale must be positive, got {scale}")
+    # Clamp u into the open unit interval so the probit is finite.
+    u_safe = min(max(u, 1e-12), 1.0 - 1e-12)
+    z = statistics.NormalDist(0.0, 1.0).inv_cdf(u_safe)
+    return float(scale) * math.exp(float(mu) + float(sigma) * z)
+
+
 @dataclass(frozen=True)
 class VictimProfile:
     """Frozen configuration for a run's victim-profit assignment."""
@@ -90,6 +111,14 @@ class VictimProfile:
             return _profit_pareto(
                 u,
                 shape=float(self.params.get("shape", 1.16)),
+                scale=float(self.params.get("scale", 1.0)),
+            )
+        if self.distribution == _LOGNORMAL:
+            u = _u_in_unit(self.seed, round_, author)
+            return _profit_lognormal(
+                u,
+                mu=float(self.params.get("mu", 1.1)),
+                sigma=float(self.params.get("sigma", 2.5)),
                 scale=float(self.params.get("scale", 1.0)),
             )
         raise RuntimeError(f"unhandled distribution {self.distribution!r}")

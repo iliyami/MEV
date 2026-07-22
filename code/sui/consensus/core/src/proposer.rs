@@ -802,7 +802,21 @@ impl ValidatorProposer {
                 victim_authorities.push(auth);
             }
         }
-        if victim_authorities.is_empty() {
+        // PAPER-2 targeted reputation suppression: REP_TARGET=<idx,...> makes the
+        // attacker drop ALL blocks by those authorities from its parent set (every
+        // round, not just leader rounds), starving their reputation "votes" so the
+        // live V2 scorer pushes them into bad_nodes -> swapped out of leadership.
+        // Legal: 2f+1 parent quorum preserved; looks like consistently missing that
+        // peer's block.
+        let rep_targets: Vec<usize> = env::var("REP_TARGET")
+            .ok()
+            .map(|s| {
+                s.split(',')
+                    .filter_map(|t| t.trim().parse::<usize>().ok())
+                    .collect()
+            })
+            .unwrap_or_default();
+        if victim_authorities.is_empty() && rep_targets.is_empty() {
             return ancestors;
         }
 
@@ -812,7 +826,9 @@ impl ValidatorProposer {
             .filter(|a| {
                 let is_victim_leader_at_leader_round = a.round() == leader_round
                     && victim_authorities.contains(&a.author().value());
-                if is_victim_leader_at_leader_round {
+                let is_rep_target = a.round() == leader_round
+                    && rep_targets.contains(&a.author().value());
+                if is_victim_leader_at_leader_round || is_rep_target {
                     dropped += 1;
                     trace!(
                         "MLVW: dropping victim-leader block {} from parent set at clock_round {}",

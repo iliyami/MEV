@@ -258,7 +258,7 @@ impl Core {
             }
             _ => (own_index < attacker_count, false),
         };
-        let mut attack_active = attack_mode == "fissure" || attack_mode == "speculative" || attack_mode == "sluggish";
+        let mut attack_active = attack_mode == "fissure" || attack_mode == "speculative" || attack_mode == "sluggish" || attack_mode.contains("slw");
 
         let mut sluggish_timeout_multiplier: f64 = env::var("SLUGGISH_TIMEOUT_MULTIPLIER")
             .ok()
@@ -701,6 +701,37 @@ impl Core {
             }
             clock_round
         };
+
+        // ── Withholding attacks (DS4/DS5): legitimate "when to broadcast" choices.
+        // Both decide *whether* to emit this round's own block from whether this
+        // validator leads `clock_round` under Bullshark's real stake-based schedule
+        // (committer.get_leaders), not a fixed modulo. No honest node's handling
+        // changes — a missing proposal is the ordinary slow-link / leader-skip case
+        // — so the proposal path stays byte-identical when neither hook is armed.
+        //
+        // DS4 — silent-except-leader (bug-free withholding): speak ONLY on our own
+        // leader rounds, so every block we emit is an early leader/anchor block.
+        // Gated by SILENT_EXCEPT_LEADER (mirrors the Sui proposer.rs hook); a forced
+        // (leader-timeout) proposal is still allowed, preserving liveness.
+        if !force
+            && self.is_attacker
+            && std::env::var("SILENT_EXCEPT_LEADER")
+                .ok()
+                .filter(|v| v != "0")
+                .is_some()
+            && !self.is_leader_at(clock_round)
+        {
+            return None;
+        }
+        // DS5 — strategic leader withholding (SLW): skip our OWN leader-round
+        // proposal (the mirror of DS4), gated by ATTACK_MODE containing "slw".
+        if self.attack_active
+            && self.is_attacker
+            && self.attack_mode.contains("slw")
+            && self.is_leader_at(clock_round)
+        {
+            return None;
+        }
 
         // There must be a quorum of blocks from the previous round.
         let quorum_round = clock_round.saturating_sub(1);
@@ -1568,6 +1599,17 @@ impl Core {
     /// Returns the 1st leader of the round.
     fn first_leader(&self, round: Round) -> AuthorityIndex {
         self.leaders(round).first().unwrap().authority
+    }
+
+    /// True if this validator is a leader for `round` under the stake-based
+    /// schedule + swap table. Used by the DS4/DS5 withholding attacks to decide
+    /// whether the current round is a "leader round" for this node.
+    fn is_leader_at(&self, round: Round) -> bool {
+        let me = self.context.own_index.value();
+        self.committer
+            .get_leaders(round)
+            .into_iter()
+            .any(|a| a.value() == me)
     }
 
     fn last_proposed_timestamp_ms(&self) -> BlockTimestampMs {

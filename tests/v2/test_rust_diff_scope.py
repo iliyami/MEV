@@ -31,6 +31,27 @@ ALLOWED_MODIFIED: set[str] = {
     "code/bullshark/consensus/core/src/lib.rs",  # adds the mod declaration
     "code/bullshark/consensus/core/src/v2_coordinator_client.rs",  # new module
     "code/bullshark/consensus/core/src/mev_attack_metrics.rs",  # v3 R-P2.1 marker
+    # DS4/DS5 withholding: env-gated proposer hooks (SILENT_EXCEPT_LEADER / slw)
+    # in core.rs (already listed) + a test-only driver file. Both are within the
+    # legitimate action set (a withheld proposal is the ordinary slow-link case)
+    # and byte-identical to upstream when neither env trigger is set.
+    "code/bullshark/consensus/core/src/withholding_attack_test.rs",  # DS4/DS5 ASR tests
+    # DS13 skewed stake (env-gated STAKE_PROFILE, config-only committee build)
+    # + DS14 WAN latency (env-gated LATENCY_MS delay-only send). Both stay in the
+    # legitimate deployment/config space; byte-identical to upstream when unset.
+    "code/bullshark/consensus/core/src/fissure_attack_test.rs",  # DS13 STAKE_PROFILE
+    "code/bullshark/consensus/core/src/network/tonic_network.rs",  # DS14 LATENCY_MS
+    # Index-tax defense eval: env-gated FIX_TIEBREAK in the sub-dag block sort
+    # (digest tiebreak instead of author index). This is a DEFENSE knob, not an
+    # attack; the upstream comment already sanctions "any deterministic & stable
+    # algorithm"; default path is byte-identical when FIX_TIEBREAK is unset. It
+    # touches no validity/quorum/signature predicate. Mirrors the Sui fork's gate.
+    "code/bullshark/consensus/core/src/commit.rs",  # FIX_TIEBREAK (index-tax fix)
+    # Index-tax leader-mode eval: env-gated STAKE_BASED_LEADER in elect_leader's
+    # #[cfg(test)] arm — implements the file's own upstream TODO (use the staked
+    # schedule in tests). Test-build only, default path (round-robin) byte-identical
+    # when unset; production arm untouched. Touches no validity/quorum predicate.
+    "code/bullshark/consensus/core/src/leader_schedule.rs",  # STAKE_BASED_LEADER
 }
 
 # Known orphan deletions that existed before P1a started. These are not

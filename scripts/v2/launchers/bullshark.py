@@ -31,6 +31,7 @@ from ..auditor import RuntimeViolation
 from ..coordinator import CoordinatorServer, CoordinatorState
 from ..coordinator_client import CoordinatorClient
 from ..schema import V2Config
+from ..proc_util import run_capture
 from ..sweeper import Launcher, RunRequest, RunResult
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -39,6 +40,10 @@ _BULLSHARK_TEST_NAMES = {
     "fissure": "test_fissure_attack_asr_dynamic",
     "speculative": "test_speculative_attack_asr_dynamic",
     "sluggish": "test_sluggish_attack_asr_dynamic",
+    # DS4/DS5 withholding attacks (env-gated proposer hooks ported into core.rs).
+    "withhold_baseline": "test_withhold_baseline_asr_dynamic",
+    "withhold_silent": "test_withhold_silent_attack_asr_dynamic",
+    "slw": "test_slw_attack_asr_dynamic",
 }
 
 
@@ -302,27 +307,10 @@ class BullsharkLauncher:
                 side_thread = self.on_coordinator_ready(coord, cfg, request.rep)
 
         start = time.time()
-        try:
-            completed = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                cwd=self.cwd,
-                timeout=self._compute_timeout(cfg),
-                check=False,
-                env=subprocess_env,
-            )
-            output = completed.stdout + completed.stderr
-            exit_code = completed.returncode
-        except subprocess.TimeoutExpired as te:
-            stdout_b = te.stdout or b""
-            stderr_b = te.stderr or b""
-            if isinstance(stdout_b, bytes):
-                stdout_b = stdout_b.decode("utf-8", "replace")
-            if isinstance(stderr_b, bytes):
-                stderr_b = stderr_b.decode("utf-8", "replace")
-            output = stdout_b + stderr_b
-            exit_code = -124  # standard timeout
+        # Group-killed timeout so a cargo timeout can't orphan the test binary.
+        output, exit_code = run_capture(
+            cmd, self.cwd, subprocess_env, self._compute_timeout(cfg)
+        )
         # Coordinator metrics snapshot (briber ledger + victim_profile config
         # + decisions made) — fetched BEFORE teardown so it lands in
         # RunResult.metrics["coordinator_metrics"]. This is the canonical
@@ -355,6 +343,18 @@ class BullsharkLauncher:
                 committed_order=metrics["committed_order"],
                 cfg=cfg,
             )
+        # All-pairs ASR from the committed order (neutral ~50% baseline). Always
+        # stored as a diagnostic; promoted to the headline `asr` ONLY when the
+        # cell opts in via env V2_ALL_PAIRS_ASR (the alpha-sweep). Same-round
+        # stays the default so the paper-1 contradiction checks on the
+        # competition/collusion cells (which reference same-round) are intact.
+        ap = _compute_all_pairs_asr(metrics.get("committed_order"), cfg)
+        if ap is not None:
+            metrics["asr_all_pairs"] = ap
+            env = (cfg.raw or {}).get("environment", {}) or {}
+            if str(env.get("V2_ALL_PAIRS_ASR", "")).lower() in ("1", "true", "yes"):
+                metrics["asr_same_round"] = metrics.get("asr")
+                metrics["asr"] = ap
         return RunResult(
             raw_output=output,
             run_id=request.run_id,
@@ -376,9 +376,12 @@ class BullsharkLauncher:
     @staticmethod
     def _parse_markers(output: str, attack_family: str) -> dict:
         """Extract FINAL_*_RESULT / FINAL_*_STATS / FINAL_COMMITTED_ORDER markers."""
-        asr = _grep_last("FINAL_ASR_RESULT:", output)
+        asr = _grep_last("FINAL_ASR_RESULT:", output)  # same-round (head start)
         if asr is not None:
             asr = asr.rstrip("%").strip()
+        all_pairs = _grep_last("FINAL_ALL_PAIRS_ASR:", output)  # neutral ~50% baseline
+        if all_pairs is not None:
+            all_pairs = all_pairs.rstrip("%").strip()
         backrun = _grep_last_json("FINAL_BACKRUN_STATS:", output)
         sandwich = _grep_last_json("FINAL_SANDWICH_STATS:", output)
         # v3 R-P2.1: committed-order JSON emitted by mev_attack_metrics.rs.
@@ -390,6 +393,11 @@ class BullsharkLauncher:
         # the headline ASR. We preserve that convention.
         if attack_family == "sandwich" and sandwich:
             asr_val = sandwich.get("sesr", asr)
+        elif all_pairs is not None:
+            # When the test emits all-pairs (the withholding cells), that is the
+            # headline: neutral ~50% baseline, so a cross-round lift is visible.
+            # Same-round ASR is kept as a diagnostic (asr_same_round).
+            asr_val = all_pairs
         else:
             asr_val = asr
 
@@ -401,6 +409,8 @@ class BullsharkLauncher:
 
         return {
             "asr": _f(asr_val),
+            "asr_same_round": _f(asr),
+            "asr_all_pairs": _f(all_pairs),
             "asr_l1": _f(backrun.get("l1_asr")) if backrun else None,
             "asr_l2": _f(backrun.get("l2_asr")) if backrun else None,
             "asr_histogram": json.dumps(backrun.get("histogram"), sort_keys=True)
@@ -441,6 +451,46 @@ def _grep_last_json_array(marker: str, output: str) -> Optional[list]:
         return parsed if isinstance(parsed, list) else None
     except json.JSONDecodeError:
         return None
+
+
+def _compute_all_pairs_asr(committed_order, cfg) -> Optional[float]:
+    """All-pairs frontrun ASR from the committed order: over every attacker×
+    victim pair (any round), the fraction where the attacker is ordered first.
+    Neutral ~50% with no attack, so it distinguishes attack impact on Bullshark
+    where same-round ASR is saturated by the low-index head start. Attackers =
+    first round(n*ATTACKER_RATIO) indices, victims = last round(n*VICTIM_RATIO).
+    Returns None on empty order / empty role set (malformed records skipped)."""
+    if not committed_order:
+        return None
+    env = (cfg.raw or {}).get("environment", {}) or {}
+    try:
+        n = int(env.get("NUM_NODES", cfg.num_nodes))
+        ar = float(env.get("ATTACKER_RATIO", 0.308))
+        vr = float(env.get("VICTIM_RATIO", 0.231))
+    except (TypeError, ValueError):
+        return None
+    attackers = set(range(round(n * ar)))
+    victims = set(range(n - round(n * vr), n))
+    att_pos: list[int] = []
+    vic_pos: list[int] = []
+    for e in committed_order:
+        try:
+            creator = int(e["creator"])
+            position = int(e["position"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if creator in attackers:
+            att_pos.append(position)
+        elif creator in victims:
+            vic_pos.append(position)
+    # Guard degenerate cases: with <2 attacker blocks the ratio is 0/100 noise,
+    # not attack impact (e.g. sluggish at low alpha starves the delayed attacker
+    # so it barely commits). Report None (n/a) rather than a misleading number.
+    if len(att_pos) < 2 or not vic_pos:
+        return None
+    successes = sum(1 for a in att_pos for v in vic_pos if a < v)
+    total = len(att_pos) * len(vic_pos)
+    return round(successes / total * 100.0, 2) if total else None
 
 
 def _compute_per_policy_asr(committed_order: list[dict], cfg) -> dict[str, float]:

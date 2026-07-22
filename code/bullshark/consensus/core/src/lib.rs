@@ -64,6 +64,10 @@ mod fissure_attack_test;
 #[cfg(test)]
 mod speculative_attack_test;
 
+/// Withholding attacks (DS4 silent-except-leader, DS5 SLW) with 13 nodes.
+#[cfg(test)]
+mod withholding_attack_test;
+
 #[cfg(test)]
 mod mev_attack_metrics;
 

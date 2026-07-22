@@ -142,7 +142,15 @@ impl LeaderSchedule {
             // TODO: we need to differentiate the leader strategy in tests, so for
             // some type of testing (ex sim tests) we can use the staked approach.
             if #[cfg(test)] {
-                let leader = AuthorityIndex::new_for_test((round + leader_offset) % self.context.committee.size() as u32);
+                // PAPER-2 (env-gated; implements the upstream TODO above). Default
+                // test path = round-robin (unchanged). STAKE_BASED_LEADER=1 selects
+                // the production stake-weighted schedule so we can measure how skewed
+                // stake interacts with the same-round ordering bias.
+                let leader = if std::env::var("STAKE_BASED_LEADER").ok().filter(|v| v != "0").is_some() {
+                    self.elect_leader_stake_based(round, leader_offset)
+                } else {
+                    AuthorityIndex::new_for_test((round + leader_offset) % self.context.committee.size() as u32)
+                };
                 let table = self.leader_swap_table.read();
                 table.swap(leader, round, leader_offset).unwrap_or(leader)
             } else {

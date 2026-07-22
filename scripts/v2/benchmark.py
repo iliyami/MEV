@@ -41,7 +41,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
 
 from . import baselines as paper1_baselines
-from . import schema, sweeper
+from . import schema, sweeper, victim_gen
 from .coordinator import CoordinatorServer
 from .launchers.bullshark import BullsharkLauncher
 from .sweeper import RunRequest, RunResult, V2_FIELDNAMES, make_run_id
@@ -101,6 +101,7 @@ class CellRepResult:
     timestamp: str
     extras: dict[str, Any]  # populated by marker_extractor
     run_result: RunResult
+    profit: Optional[dict[str, Any]] = None  # realized-profit metric (T4)
 
 
 @dataclass
@@ -127,6 +128,10 @@ class CellSummary:
     coord_metrics_last: Optional[dict[str, Any]]
     extras_aggregated: dict[str, Any]
     all_exit_codes: list[int]
+    # Realized-profit metric (T4) — the campaign's primary metric.
+    profit_weighted_asr_mean: Optional[float] = None
+    profit_weighted_asr_median: Optional[float] = None
+    realized_mev_mean: Optional[float] = None
 
 
 def _iqr(xs: list[float]) -> Optional[float]:
@@ -182,7 +187,73 @@ _CSV_FIXED = list(V2_FIELDNAMES) + [
     "paper1_tolerance_pp",
     "paper1_within_tolerance",
     "coord_metrics_json",
+    # Realized-profit metric (T4) — the campaign's primary metric.
+    "realized_mev",
+    "profit_weighted_asr",
+    "profit_total",
+    "profit_n_victims",
 ]
+
+
+def _compute_realized_profit(
+    committed_order: Optional[list[dict[str, Any]]],
+    cfg: schema.V2Config,
+    seed: int,
+) -> Optional[dict[str, float]]:
+    """Realized-profit metric (T4) computed from the committed order.
+
+    Every VICTIM block is weighted by a deterministic per-block profit
+    (`victim_gen.VictimProfile`, seeded by the run seed) and marked "attacked"
+    when some attacker block shares its round at an earlier position (the
+    frontrun predicate). Returns `victim_gen.profit_weighted_asr`'s dict, or
+    None when there is no committed order / no victim blocks (defensive: a
+    malformed record is skipped, never fatal).
+    """
+    if not committed_order:
+        return None
+    attackers: set[int] = set()
+    for p in cfg.adversary.policies:
+        attackers |= {int(m) for m in p.members}
+    n = cfg.num_nodes
+    if cfg.victims.victim_node_ids:
+        victims = {int(x) for x in cfg.victims.victim_node_ids}
+    else:
+        env = (cfg.raw or {}).get("environment", {}) or {}
+        try:
+            vr = float(env.get("VICTIM_RATIO", 0.231))
+        except (TypeError, ValueError):
+            vr = 0.231
+        victims = set(range(n - round(n * vr), n))
+
+    def _rec(e: dict) -> Optional[tuple[int, int, int]]:
+        try:
+            return int(e["creator"]), int(e["position"]), int(e["round"])
+        except (KeyError, TypeError, ValueError):
+            return None
+
+    att_pos_by_round: dict[int, list[int]] = {}
+    for e in committed_order:
+        r = _rec(e)
+        if r is not None and r[0] in attackers:
+            att_pos_by_round.setdefault(r[2], []).append(r[1])
+
+    blocks: list[dict[str, Any]] = []
+    for e in committed_order:
+        r = _rec(e)
+        if r is not None and r[0] in victims:
+            creator, pos, rnd = r
+            attacked = any(ap < pos for ap in att_pos_by_round.get(rnd, ()))
+            blocks.append({"round": rnd, "author": creator, "attacked": attacked})
+    if not blocks:
+        return None
+    profile = victim_gen.VictimProfile.from_config(
+        {
+            "distribution": cfg.victims.profit.distribution,
+            "params": dict(cfg.victims.profit.params),
+        },
+        seed=seed,
+    )
+    return victim_gen.profit_weighted_asr(blocks, profile)
 
 
 def _row_from_rep(
@@ -238,6 +309,15 @@ def _row_from_rep(
         "paper1_tolerance_pp": paper1_ref.tolerance_pp if paper1_ref is not None else "",
         "paper1_within_tolerance": "" if within is None else within,
         "coord_metrics_json": json.dumps(coord_metrics, default=str),
+        # Realized-profit metric (T4). profit_weighted_asr is scaled to a percent
+        # here (victim_gen returns a 0..1 fraction) so it lines up with `asr`.
+        "realized_mev": (rep_result.profit or {}).get("realized_mev", ""),
+        "profit_weighted_asr": (
+            round(rep_result.profit["profit_weighted_asr"] * 100.0, 4)
+            if rep_result.profit else ""
+        ),
+        "profit_total": (rep_result.profit or {}).get("total_profit", ""),
+        "profit_n_victims": (rep_result.profit or {}).get("n_victims", ""),
     }
     # Cell-specific extras:
     for k in cell.extra_columns:
@@ -274,6 +354,8 @@ def _run_one_rep(
         except Exception as e:  # extractor bugs shouldn't kill the run
             extras = {"_marker_extractor_error": f"{type(e).__name__}: {e}"}
 
+    profit = _compute_realized_profit(rr.metrics.get("committed_order"), cfg, seed)
+
     return CellRepResult(
         cell_name=cell.name,
         rep=rep,
@@ -287,6 +369,7 @@ def _run_one_rep(
         timestamp=datetime.datetime.now(datetime.timezone.utc).isoformat(),
         extras=extras,
         run_result=rr,
+        profit=profit,
     )
 
 
@@ -368,6 +451,9 @@ def run_benchmark(
                 [r.extras for r in rep_results], cell.extra_columns
             )
             last_coord = rep_results[-1].run_result.metrics.get("coordinator_metrics") if rep_results else None
+            # profit_weighted_asr -> percent, to match `asr`.
+            pwasrs = [r.profit["profit_weighted_asr"] * 100.0 for r in rep_results if r.profit]
+            realized = [r.profit["realized_mev"] for r in rep_results if r.profit]
 
             summary = CellSummary(
                 cell_name=cell.name,
@@ -390,13 +476,17 @@ def run_benchmark(
                 coord_metrics_last=last_coord,
                 extras_aggregated=extras_agg,
                 all_exit_codes=[r.exit_code for r in rep_results],
+                profit_weighted_asr_mean=st.mean(pwasrs) if pwasrs else None,
+                profit_weighted_asr_median=st.median(pwasrs) if pwasrs else None,
+                realized_mev_mean=st.mean(realized) if realized else None,
             )
             summaries[cell.name] = summary
             if progress_callback:
                 progress_callback(
-                    f"[{cell.name}] done: median={summary.asr_median} "
-                    f"(n={summary.reps}) "
-                    f"paper1_within_tolerance={summary.paper1_within_tolerance}"
+                    f"[{cell.name}] done: asr_median={summary.asr_median} "
+                    f"pwasr_median={summary.profit_weighted_asr_median} "
+                    f"realized_mev_mean={summary.realized_mev_mean} "
+                    f"(n={summary.reps})"
                 )
     finally:
         csv_fh.close()

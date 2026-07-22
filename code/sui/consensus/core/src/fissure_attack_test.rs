@@ -114,7 +114,13 @@ async fn test_fissure_attack_asr_dynamic() {
         "Fissure attack ASR test: n={num_validators} attackers={num_attacker} victims={num_victim}"
     );
 
-    let (committee, keypairs) = local_committee_and_keys(0, vec![1; num_validators]);
+    // D2 (skewed stake): env-gated stake vector (comma-separated). Config-only.
+    let stake_vector: Vec<u64> = std::env::var("STAKE_PROFILE")
+        .ok()
+        .map(|s| s.split(',').filter_map(|x| x.trim().parse::<u64>().ok()).collect::<Vec<u64>>())
+        .filter(|v| v.len() == num_validators && v.iter().all(|&s| s > 0))
+        .unwrap_or_else(|| vec![1; num_validators]);
+    let (committee, keypairs) = local_committee_and_keys(0, stake_vector);
     let mut protocol_config = ConsensusProtocolConfig::for_testing();
     let gc_depth: u32 = env::var("GC_DEPTH")
         .ok()

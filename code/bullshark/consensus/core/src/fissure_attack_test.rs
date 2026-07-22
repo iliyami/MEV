@@ -120,8 +120,17 @@ async fn test_fissure_attack_asr_dynamic() {
     info!("  Victims: {} nodes (indices {}-{})", num_victim, num_validators - num_victim, num_validators - 1);
     info!("  Honest: {} nodes (indices {}-{})", num_honest, num_attacker, num_validators - num_victim - 1);
 
-    // Create committee and keypairs
-    let (committee, keypairs) = local_committee_and_keys(0, vec![1; num_validators]);
+    // Create committee and keypairs.
+    // D2 (skewed stake): env-gated stake vector (comma-separated, one per
+    // validator). Config-only — the committee builder already accepts arbitrary
+    // stake and leader election is stake-weighted; BFT validity (attacker total
+    // < 1/3) is enforced by the driver that builds STAKE_PROFILE.
+    let stake_vector: Vec<u64> = std::env::var("STAKE_PROFILE")
+        .ok()
+        .map(|s| s.split(',').filter_map(|x| x.trim().parse::<u64>().ok()).collect::<Vec<u64>>())
+        .filter(|v| v.len() == num_validators && v.iter().all(|&s| s > 0))
+        .unwrap_or_else(|| vec![1; num_validators]);
+    let (committee, keypairs) = local_committee_and_keys(0, stake_vector);
     let mut protocol_config = ProtocolConfig::get_for_max_version_UNSAFE();
     
     let gc_depth: u64 = env::var("GC_DEPTH")

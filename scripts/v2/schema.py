@@ -16,12 +16,18 @@ from typing import Any, Optional
 THREAT_MODELS = ("TM-Solo", "TM-Compete", "TM-Collude", "TM-Bribe")
 ATTACK_FAMILIES = ("frontrun", "backrun", "sandwich")
 DAG_STRATEGIES = ("fissure", "speculative", "sluggish")
+# DS4/DS5 withholding attacks (env-gated proposer hooks). Kept OUT of
+# DAG_STRATEGIES so the competition archetypes in policy.py keep rotating only
+# the three core strategies; these are valid strategy values but never part of an
+# auto-generated split. `ALL_STRATEGIES` is the union used for enum validation.
+WITHHOLDING_STRATEGIES = ("withhold_baseline", "withhold_silent", "slw")
+ALL_STRATEGIES = DAG_STRATEGIES + WITHHOLDING_STRATEGIES
 COORDINATION_POLICIES = ("leader", "role_specialization", "rr_slot")
 COORDINATION_INFO = ("own_dag_only", "local_dag_union")
 BRIBERY_TYPES = ("guided", "effective")
 BRIBERY_SETTLEMENTS = ("simulated", "move")
 VICTIM_WORKLOADS = ("single", "single_with_profit", "multi_pareto", "dex_replay")
-PROFIT_DISTRIBUTIONS = ("uniform", "pareto")
+PROFIT_DISTRIBUTIONS = ("uniform", "pareto", "lognormal")
 RESPONSE_POLICIES = ("always_above_X", "prob_p", "reject_all")
 ASSIGNMENT_ARCHETYPES = (
     "homogeneous",
@@ -141,7 +147,7 @@ def _parse_policy(d: dict, path: str) -> PolicySpec:
         members=tuple(members_raw),
         family=_check_enum(_require(d, "family", path), ATTACK_FAMILIES, f"{path}.family"),
         strategy=_check_enum(
-            _require(d, "strategy", path), DAG_STRATEGIES, f"{path}.strategy"
+            _require(d, "strategy", path), ALL_STRATEGIES, f"{path}.strategy"
         ),
         params=dict(d.get("params") or {}),
     )
@@ -298,7 +304,7 @@ def _infer_family_and_strategy(raw: dict, adversary: AdversarySpec) -> tuple[str
         strategy = strategy or "fissure"
         family = family or "frontrun"
     _check_enum(family, ATTACK_FAMILIES, "environment.ATTACK_FAMILY")
-    _check_enum(strategy, DAG_STRATEGIES, "environment.DAG_STRATEGY")
+    _check_enum(strategy, ALL_STRATEGIES, "environment.DAG_STRATEGY")
     return family, strategy
 
 

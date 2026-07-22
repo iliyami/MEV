@@ -21,6 +21,7 @@ from typing import Callable, Optional
 from ..coordinator import CoordinatorServer, CoordinatorState
 from ..coordinator_client import CoordinatorClient
 from ..schema import V2Config
+from ..proc_util import run_capture
 from ..sweeper import Launcher, RunRequest, RunResult
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -34,6 +35,19 @@ _SUI_TEST_NAMES = {
     "mysticeti_lvw_fissure": "mysticeti_lvw_attack_test::test_mysticeti_lvw_attack_asr_dynamic",
     "mysticeti_eclipse": "mysticeti_lvw_attack_test::test_mysticeti_lvw_attack_asr_dynamic",
     "mysticeti_eclipse_lvw": "mysticeti_lvw_attack_test::test_mysticeti_lvw_attack_asr_dynamic",
+    # DS4/DS5 withholding attacks. The hooks already live in proposer.rs; these
+    # tests just drive them. DS5's campaign label is "slw" (uniform with
+    # Bullshark); the ATTACK_MODE it needs is translated below.
+    "withhold_baseline": "withholding_attack_test::test_withhold_baseline_asr_dynamic",
+    "withhold_silent": "withholding_attack_test::test_withhold_silent_attack_asr_dynamic",
+    "slw": "withholding_attack_test::test_slw_attack_asr_dynamic",
+}
+
+# Campaign strategy label -> Sui-recognized ATTACK_MODE. Only DS5 differs: the
+# proposer.rs slw hook requires "mysticeti_slw" to flip attack_active/is_attacker
+# (bare "slw" is not in the recognized set). Everything else passes through.
+_SUI_ATTACK_MODE = {
+    "slw": "mysticeti_slw",
 }
 
 
@@ -124,12 +138,17 @@ class SuiLauncher:
             "cargo", "test",
             "--manifest-path", SUI_MANIFEST,
             "--package", "consensus-core",
-            "--lib", test_name,
-            "--", "--nocapture",
         ]
+        # Env-gated release build (harness-only, not protocol). Debug is too slow
+        # for large committees (n=49 times out); a pre-built release binary runs
+        # fast. Pre-build with `cargo test --release --no-run` so this call just
+        # runs the already-linked binary.
+        if os.environ.get("SUI_RELEASE"):
+            cmd.append("--release")
+        cmd += ["--lib", test_name, "--", "--nocapture"]
 
         subprocess_env = os.environ.copy()
-        subprocess_env["ATTACK_MODE"] = strategy
+        subprocess_env["ATTACK_MODE"] = _SUI_ATTACK_MODE.get(strategy, strategy)
         subprocess_env["ATTACK_TYPE"] = cfg.attack_family
         subprocess_env["NUM_NODES"] = str(cfg.num_nodes)
         subprocess_env["ATTACKER_RATIO"] = str(
@@ -155,6 +174,11 @@ class SuiLauncher:
         subprocess_env.setdefault("COLLECTION_DURATION", "45")
         subprocess_env.setdefault("MIN_COMMITS", str(cfg.num_nodes + 10))
         subprocess_env.setdefault("GC_DEPTH", "10")
+        # Forward any extra env the cell declares (STAKE_PROFILE, LATENCY_MS,
+        # ASYMMETRIC_LATENCY, etc.) so deployment/knob cells reach the Sui test.
+        # setdefault so it never overrides the specific keys set above.
+        for _k, _v in (cfg.raw.get("environment", {}) or {}).items():
+            subprocess_env.setdefault(_k, str(_v))
 
         # Coordinator sidecar
         coord: Optional[CoordinatorServer] = None
@@ -177,27 +201,11 @@ class SuiLauncher:
         subprocess_env.pop("NO_ATTACK", None)
 
         start = time.time()
-        try:
-            completed = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                cwd=str(REPO_ROOT),
-                timeout=self._compute_timeout(cfg),
-                check=False,
-                env=subprocess_env,
-            )
-            output = completed.stdout + completed.stderr
-            exit_code = completed.returncode
-        except subprocess.TimeoutExpired as te:
-            stdout_b = te.stdout or b""
-            stderr_b = te.stderr or b""
-            if isinstance(stdout_b, bytes):
-                stdout_b = stdout_b.decode("utf-8", "replace")
-            if isinstance(stderr_b, bytes):
-                stderr_b = stderr_b.decode("utf-8", "replace")
-            output = stdout_b + stderr_b
-            exit_code = -124
+        # Group-killed timeout: a cargo timeout must not orphan the test binary
+        # (the amd008 Sui-n=49 incident). See proc_util.run_capture.
+        output, exit_code = run_capture(
+            cmd, str(REPO_ROOT), subprocess_env, self._compute_timeout(cfg)
+        )
 
         coord_metrics: Optional[dict] = None
         if coord is not None:
@@ -231,6 +239,13 @@ class SuiLauncher:
         )
 
     def _compute_timeout(self, cfg: V2Config) -> int:
+        # Env override for large-committee / slow cells (e.g. n=49 fill).
+        override = os.environ.get("SUI_TEST_TIMEOUT")
+        if override:
+            try:
+                return max(60, int(override))
+            except ValueError:
+                pass
         if cfg.dag_strategy == "sluggish":
             return 600
         return 300
