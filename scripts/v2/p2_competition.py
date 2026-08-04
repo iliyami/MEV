@@ -61,8 +61,31 @@ _BASE_ENV = {
     "ATTACK_TYPE": "frontrun",
 }
 
+# Opt-in all-pairs re-run: when V2_ALL_PAIRS_ASR is set in the process env, promote
+# the neutral-baseline all-pairs metric to the headline `asr` for every cell. Default
+# (env unset) keeps same-round so the paper-1 contradiction checks stay intact.
+import os as _os
+if _os.environ.get("V2_ALL_PAIRS_ASR"):
+    _BASE_ENV["V2_ALL_PAIRS_ASR"] = _os.environ["V2_ALL_PAIRS_ASR"]
+
+# REVERSE_LAYOUT: measure off the index-tax ceiling. Reflect every attacker index with
+# r(i)=N-1-i so the competing groups sit at the HIGH (disadvantaged) block and the victim
+# at the LOW block, matching the binary's REVERSE_LAYOUT. Default path is byte-identical.
+_N_NODES = 13
+_REV = bool(_os.environ.get("REVERSE_LAYOUT"))
+def _r(i: int) -> int:
+    return (_N_NODES - 1 - i) if _REV else i
+def _rl(xs) -> list[int]:
+    return sorted(_r(i) for i in xs) if _REV else list(xs)
+for _k in ("REVERSE_LAYOUT", "V2_VICTIM_NODE_IDS"):
+    if _os.environ.get(_k):
+        _BASE_ENV[_k] = _os.environ[_k]
+
 
 def _cfg(threat_model: str, archetype: str, policies: list[dict], reps: int) -> schema.V2Config:
+    if _REV:
+        policies = [{**p, "members": _rl(p["members"])} if "members" in p else p
+                    for p in policies]
     raw = {
         "protocol": {"name": "bullshark", "path": "bullshark"},
         "docker": {"tag": "mev-bullshark:latest", "cpus": "8.0", "memory": "16g"},

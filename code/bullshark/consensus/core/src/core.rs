@@ -256,7 +256,16 @@ impl Core {
                 let back = own_index >= back_start && own_index < (back_start + back_count);
                 (front || back, back)
             }
-            _ => (own_index < attacker_count, false),
+            _ => {
+                // REVERSE_LAYOUT: attacker at HIGH (index-tax-disadvantaged) indices, to isolate
+                // the attack's lift from the index bias. Default path unchanged.
+                let front = if std::env::var("REVERSE_LAYOUT").ok().filter(|v| v != "0").is_some() {
+                    own_index >= committee_size - attacker_count
+                } else {
+                    own_index < attacker_count
+                };
+                (front, false)
+            }
         };
         let mut attack_active = attack_mode == "fissure" || attack_mode == "speculative" || attack_mode == "sluggish" || attack_mode.contains("slw");
 
@@ -2073,7 +2082,14 @@ impl Core {
                 let front_count = attacker_count / 2;
                 author >= front_count && author < (front_count + victim_count)
             }
-            _ => author >= committee_size - victim_count,
+            _ => {
+                // REVERSE_LAYOUT: victims at LOW indices (mirror of the reversed attacker set).
+                if std::env::var("REVERSE_LAYOUT").ok().filter(|v| v != "0").is_some() {
+                    author < victim_count
+                } else {
+                    author >= committee_size - victim_count
+                }
+            }
         }
     }
 

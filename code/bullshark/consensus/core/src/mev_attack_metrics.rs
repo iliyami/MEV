@@ -47,11 +47,24 @@ impl AttackType {
 impl AttackLayout {
     fn new(num_nodes: usize, num_attackers: usize, num_victims: usize, attack_type: AttackType) -> Self {
         match attack_type {
-            AttackType::Frontrun => Self {
-                front_attackers: 0..num_attackers,
-                victims: num_nodes.saturating_sub(num_victims)..num_nodes,
-                back_attackers: 0..0,
-            },
+            AttackType::Frontrun => {
+                // REVERSE_LAYOUT (paper-faithful fair/disadvantaged baseline): put attackers at
+                // HIGH indices and victims at LOW, so the attacker does NOT start at the index-tax
+                // ceiling. Isolates the attack's own lift from the structural index bias.
+                if std::env::var("REVERSE_LAYOUT").ok().filter(|v| v != "0").is_some() {
+                    Self {
+                        front_attackers: num_nodes.saturating_sub(num_attackers)..num_nodes,
+                        victims: 0..num_victims,
+                        back_attackers: 0..0,
+                    }
+                } else {
+                    Self {
+                        front_attackers: 0..num_attackers,
+                        victims: num_nodes.saturating_sub(num_victims)..num_nodes,
+                        back_attackers: 0..0,
+                    }
+                }
+            }
             AttackType::Backrun => Self {
                 front_attackers: 0..0,
                 victims: 0..num_victims,

@@ -57,16 +57,26 @@ _RE_ADAPTIVE_SKIP = re.compile(
 )
 
 
+import os as _os
+_N_NODES = 13
+_REV = bool(_os.environ.get("REVERSE_LAYOUT"))
+def _rl(xs) -> list[int]:
+    return sorted((_N_NODES - 1 - i) for i in xs) if _REV else list(xs)
+_FWD_ENV = {k: _os.environ[k] for k in ("REVERSE_LAYOUT", "V2_VICTIM_NODE_IDS") if _os.environ.get(k)}
+
+
 def _cfg(profit_threshold: Optional[float], distribution: str = "pareto",
          dist_params: Optional[dict] = None, reps: int = DEFAULT_REPS) -> schema.V2Config:
     params: dict = {}
     if profit_threshold is not None:
         params["profit_threshold"] = profit_threshold
+    env = dict(_BASE_ENV)
+    env.update(_FWD_ENV)
     raw = {
         "protocol": {"name": "bullshark", "path": "bullshark"},
         "docker": {"tag": "mev-bullshark:latest", "cpus": "8.0", "memory": "16g"},
         "test": {"test_name": "test_fissure_attack_asr_dynamic", "REPETITIONS": 1},
-        "environment": dict(_BASE_ENV),
+        "environment": env,
         "adversary": {
             "threat_model": "TM-Solo",
             "archetype": "homogeneous",
@@ -74,7 +84,7 @@ def _cfg(profit_threshold: Optional[float], distribution: str = "pareto",
                 "policies": [
                     {
                         "group_id": "g0",
-                        "members": [0, 1, 2, 3],
+                        "members": _rl([0, 1, 2, 3]),
                         "family": "frontrun",
                         "strategy": "fissure",
                         "params": params,

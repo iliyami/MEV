@@ -62,13 +62,27 @@ _BASE_ENV = {
 }
 
 
+import os as _os
+_N_NODES = 13
+_REV = bool(_os.environ.get("REVERSE_LAYOUT"))
+def _r(i: int) -> int:
+    return (_N_NODES - 1 - i) if _REV else i
+def _rl(xs) -> list[int]:
+    return sorted(_r(i) for i in xs) if _REV else list(xs)
+_FWD_ENV = {k: _os.environ[k] for k in ("REVERSE_LAYOUT", "V2_VICTIM_NODE_IDS") if _os.environ.get(k)}
+
+
 def _cfg(name: str, policies: list[dict], reps: int,
          threat_model: str = "TM-Compete",
          archetype: str = "same_family_split",
          env_overrides: Optional[dict] = None) -> schema.V2Config:
     env = dict(_BASE_ENV)
+    env.update(_FWD_ENV)
     if env_overrides:
         env.update(env_overrides)
+    if _REV:
+        policies = [{**p, "members": _rl(p["members"])} if "members" in p else p
+                    for p in policies]
     raw = {
         "protocol": {"name": "bullshark", "path": "bullshark"},
         "docker": {"tag": "mev-bullshark:latest", "cpus": "8.0", "memory": "16g"},

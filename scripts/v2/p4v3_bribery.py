@@ -23,6 +23,29 @@ from scripts.v2 import benchmark, schema, stats, sweeper
 from scripts.v2.coordinator import CoordinatorServer
 from scripts.v2.coordinator_client import CoordinatorClient
 
+# REVERSE_LAYOUT: measure OFF the index-tax ceiling. The binary's REVERSE_LAYOUT places
+# attackers at the HIGH (disadvantaged) index block and victims at the LOW block. We mirror
+# every driver-side index with the reflection r(i) = N-1-i, which maps attackers {0..f-1} ->
+# {N-f..N-1}, victims {N-3..N-1} -> {0..2}, honest middle -> honest middle, preserving the
+# original bribery semantics (including bribed-honest placement relative to the victim).
+import os as _os
+_N_NODES = 13
+_REV = bool(_os.environ.get("REVERSE_LAYOUT"))
+def _r(i: int) -> int:
+    return (_N_NODES - 1 - i) if _REV else i
+def _rl(xs) -> list[int]:
+    return sorted(_r(i) for i in xs) if _REV else list(xs)
+_FWD_ENV = {k: _os.environ[k] for k in ("REVERSE_LAYOUT", "V2_VICTIM_NODE_IDS") if _os.environ.get(k)}
+
+# Bug fix: the original harness bribed nodes [10,12] / [10,11,12], which sit INSIDE the
+# victim set {10,11,12} (VICTIM_RATIO 0.231 -> 3 victims). Bribing a victim to omit
+# references to itself is degenerate. Under REVERSE we bribe genuinely honest nodes
+# (not attacker, not victim), preserving the requested COUNT of bribed nodes.
+def _honest_nodes(f: int) -> list[int]:
+    attackers = set(_rl(range(f)))
+    victims = set(range(3))  # REVERSE: victims occupy the low block {0,1,2}
+    return [i for i in range(_N_NODES) if i not in attackers and i not in victims]
+
 
 DEFAULT_CSV = "results/v2_p4v3_results.csv"
 DEFAULT_SUMMARY = "results/v2_p4v3_summary.json"
@@ -39,6 +62,8 @@ def _attacker_ratio(f: int, n: int = 13) -> str:
 def _cfg(f: int, bribed_honest: list[int], budget: float, action: Optional[str],
          response_policy: str, response_policy_params: Optional[dict] = None,
          reps: int = DEFAULT_REPS) -> schema.V2Config:
+    if _REV:
+        bribed_honest = _honest_nodes(f)[:len(bribed_honest)]
     env = {
         "NUM_NODES": "13",
         "ATTACKER_RATIO": _attacker_ratio(f),
@@ -51,7 +76,8 @@ def _cfg(f: int, bribed_honest: list[int], budget: float, action: Optional[str],
         "ATTACK_MODE": "fissure",
         "ATTACK_TYPE": "frontrun",
     }
-    members = list(range(f))
+    env.update(_FWD_ENV)
+    members = _rl(range(f))
     bribery_block: dict = {"enabled": False}
     if bribed_honest:
         bribery_block = {
@@ -84,7 +110,7 @@ def _cfg(f: int, bribed_honest: list[int], budget: float, action: Optional[str],
     return sweeper.expand_policy_vector(schema.parse_config(raw))
 
 
-def _make_publisher(action: str, victim_id: int = 12):
+def _make_publisher(action: str, victim_id: int = _r(12)):
     """Build an on_coord_ready that pre-publishes one offer per bribed-honest node."""
     def _on_ready(coord: CoordinatorServer, cfg: schema.V2Config, rep: int):
         if not cfg.adversary.bribery.enabled:
@@ -100,7 +126,7 @@ def _make_publisher(action: str, victim_id: int = 12):
                 recipient_node_id=node,
                 infraction=action,
                 target={"target_victim_id": victim_id,
-                        "target_attacker_set": list(range(cfg.adversary.bribery.budget and 4 or 0))},
+                        "target_attacker_set": _rl(range(cfg.adversary.bribery.budget and 4 or 0))},
                 payment=per_offer,
             )
         return None

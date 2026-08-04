@@ -57,6 +57,24 @@ _BASE_ENV = {
     "ATTACK_TYPE": "frontrun",
 }
 
+# Opt-in all-pairs re-run: when V2_ALL_PAIRS_ASR is set in the process env, promote
+# the neutral-baseline all-pairs metric to the headline `asr` for every cell. Default
+# (env unset) keeps same-round so the paper-1 contradiction checks stay intact.
+import os as _os
+if _os.environ.get("V2_ALL_PAIRS_ASR"):
+    _BASE_ENV["V2_ALL_PAIRS_ASR"] = _os.environ["V2_ALL_PAIRS_ASR"]
+
+# REVERSE_LAYOUT: place the coordinating attackers at HIGH (index-tax-disadvantaged) indices so
+# the coordination effect is measured off the index-tax ceiling. Reverses policy members and
+# forwards the env so core.rs is_attacker/coordinator + the metric layout agree; victims go low.
+_N, _NA = 13, 4
+_REV = bool(_os.environ.get("REVERSE_LAYOUT"))
+def _rev(ms):
+    return [_N - _NA + m for m in ms] if _REV else ms
+for _k in ("REVERSE_LAYOUT", "V2_VICTIM_NODE_IDS"):
+    if _os.environ.get(_k):
+        _BASE_ENV[_k] = _os.environ[_k]
+
 
 def _cfg_independent(reps: int) -> schema.V2Config:
     """4 independent Byzantine attackers; coordinator does /policy/lookup but
@@ -71,7 +89,7 @@ def _cfg_independent(reps: int) -> schema.V2Config:
             "archetype": "same_family_split",
             "topology": {
                 "policies": [
-                    {"group_id": f"g{i}", "members": [i], "family": "frontrun",
+                    {"group_id": f"g{i}", "members": _rev([i]), "family": "frontrun",
                      "strategy": "fissure", "params": {}}
                     for i in range(4)
                 ]
@@ -96,7 +114,7 @@ def _cfg_coordinated(reps: int) -> schema.V2Config:
             "archetype": "homogeneous",
             "topology": {
                 "policies": [
-                    {"group_id": "g0", "members": [0, 1, 2, 3],
+                    {"group_id": "g0", "members": _rev([0, 1, 2, 3]),
                      "family": "frontrun", "strategy": "fissure", "params": {}}
                 ]
             },
