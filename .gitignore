@@ -73,3 +73,19 @@ code/*/CLAUDE.md
 config/tmp*.yaml
 config/tmp*.json
 Sui_Interview_*.*
+
+# Nested clone of the Flash Boys artifact (real Narwhal-Bullshark). It carries its
+# own git history and is committed there, not here.
+code/bullshark-flashboys/
+
+# Session scratch space
+scratchpad/
+
+# One-off experiment outputs and helper scripts kept outside the campaign
+bugfree_results.txt
+bugfree_sweep.sh
+ttca_silence_results.txt
+ttca_silence_test.sh
+ttca_verify.sh
+ttca_verify_results.txt
+interview_prep_birdai_sui.md
