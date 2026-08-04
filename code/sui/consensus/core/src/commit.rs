@@ -413,6 +413,19 @@ pub(crate) fn sort_sub_dag_blocks(blocks: &mut [VerifiedBlock]) {
         blocks.sort_by(|a, b| a.round().cmp(&b.round()).then_with(|| a.digest().cmp(&b.digest())));
         return;
     }
+    // PAPER-2 experiment (env-gated; default path below unchanged). ROUND_ONLY=1 sorts by
+    // round only (stable), reproducing the academic DAG-BFT linearization that leaves the
+    // intra-round order to DAG traversal (the upstream comment sanctions "any deterministic &
+    // stable algorithm"). Used to measure whether the underspecified round-only ordering is
+    // more exploitable by parent-graph manipulation than production (round, author).
+    if std::env::var("ROUND_ONLY")
+        .ok()
+        .filter(|v| v != "0")
+        .is_some()
+    {
+        blocks.sort_by(|a, b| a.round().cmp(&b.round()));
+        return;
+    }
     blocks.sort_by(|a, b| {
         a.round()
             .cmp(&b.round())

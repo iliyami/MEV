@@ -102,6 +102,69 @@ fn extract_units(finalized_units: &[OrderedUnit<Data, Hasher64>]) -> Vec<UnitRec
         .collect()
 }
 
+/// Measurement-only instrumentation (no protocol effect). Emits the neutral
+/// all-pairs ASR: over every attacker x victim pair, the fraction where the
+/// attacker unit finalizes before the victim unit (att position < vic position).
+/// Fair, unbiased ordering scores ~50%. Also dumps the raw attacker/victim
+/// finalization positions so an external harness can recompute it independently.
+fn print_neutral_all_pairs(
+    finalized_units: &[OrderedUnit<Data, Hasher64>],
+    num_nodes: usize,
+    num_attackers: usize,
+    num_victims: usize,
+) {
+    let layout = AttackLayout::new(num_nodes, num_attackers, num_victims, AttackType::Frontrun);
+    let all_units = extract_units(finalized_units);
+    // (round, finalization-position) per role.
+    let mut att: Vec<(u64, usize)> = Vec::new();
+    let mut vic: Vec<(u64, usize)> = Vec::new();
+    for u in &all_units {
+        match layout.role(u.creator) {
+            NodeRole::FrontAttacker => att.push((u.round as u64, u.height)),
+            NodeRole::Victim => vic.push((u.round as u64, u.height)),
+            _ => {}
+        }
+    }
+    if att.len() < 2 || vic.is_empty() {
+        println!("FINAL_ALL_PAIRS_ASR: n/a (att={}, vic={})", att.len(), vic.len());
+        return;
+    }
+    // Neutral all-pairs: over every attacker x victim pair, fraction att pos < vic pos.
+    let mut ap_succ: u64 = 0;
+    let mut ap_tot: u64 = 0;
+    // Same-round ASR (classical frontrun): among pairs in the SAME commit round,
+    // fraction where the attacker finalizes before the victim. Clean 50% null.
+    let mut sr_succ: u64 = 0;
+    let mut sr_tot: u64 = 0;
+    for &(ar, ah) in &att {
+        for &(vr, vh) in &vic {
+            ap_tot += 1;
+            if ah < vh {
+                ap_succ += 1;
+            }
+            if ar == vr {
+                sr_tot += 1;
+                if ah < vh {
+                    sr_succ += 1;
+                }
+            }
+        }
+    }
+    println!(
+        "FINAL_ALL_PAIRS_ASR: {:.2}%",
+        ap_succ as f64 / ap_tot as f64 * 100.0
+    );
+    if sr_tot > 0 {
+        println!(
+            "FINAL_SAME_ROUND_ASR: {:.2}% (n_pairs={})",
+            sr_succ as f64 / sr_tot as f64 * 100.0,
+            sr_tot
+        );
+    } else {
+        println!("FINAL_SAME_ROUND_ASR: n/a (no same-round att/vic pairs)");
+    }
+}
+
 fn histogram_json(histogram: &BTreeMap<String, usize>) -> String {
     let parts = histogram
         .iter()
@@ -145,6 +208,9 @@ pub fn calculate_asr_paper_aligned(
 
     let layout = AttackLayout::new(num_nodes, num_attackers, num_victims, AttackType::Frontrun);
     let all_units = extract_units(finalized_units);
+
+    // Measurement-only: emit the neutral 50%-null all-pairs ASR + raw positions.
+    print_neutral_all_pairs(finalized_units, num_nodes, num_attackers, num_victims);
 
     let mut victim_blocks = Vec::new();
     let mut attacker_blocks = Vec::new();

@@ -352,7 +352,9 @@ class BullsharkLauncher:
         if ap is not None:
             metrics["asr_all_pairs"] = ap
             env = (cfg.raw or {}).get("environment", {}) or {}
-            if str(env.get("V2_ALL_PAIRS_ASR", "")).lower() in ("1", "true", "yes"):
+            import os as _os
+            _ap_flag = env.get("V2_ALL_PAIRS_ASR") or _os.environ.get("V2_ALL_PAIRS_ASR", "")
+            if str(_ap_flag).lower() in ("1", "true", "yes"):
                 metrics["asr_same_round"] = metrics.get("asr")
                 metrics["asr"] = ap
         return RunResult(
