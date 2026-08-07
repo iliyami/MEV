@@ -21,7 +21,11 @@ DAG_STRATEGIES = ("fissure", "speculative", "sluggish")
 # the three core strategies; these are valid strategy values but never part of an
 # auto-generated split. `ALL_STRATEGIES` is the union used for enum validation.
 WITHHOLDING_STRATEGIES = ("withhold_baseline", "withhold_silent", "slw")
-ALL_STRATEGIES = DAG_STRATEGIES + WITHHOLDING_STRATEGIES
+# A2.7 proposal-timestamp attack (env-gated ATTACK_TIMESTAMP /
+# BYZANTINE_TIMESTAMP_OFFSET_MS proposer hook). Kept OUT of DAG_STRATEGIES for
+# the same reason as WITHHOLDING_STRATEGIES above.
+TIMESTAMP_STRATEGIES = ("timestamp_baseline", "timestamp")
+ALL_STRATEGIES = DAG_STRATEGIES + WITHHOLDING_STRATEGIES + TIMESTAMP_STRATEGIES
 COORDINATION_POLICIES = ("leader", "role_specialization", "rr_slot")
 COORDINATION_INFO = ("own_dag_only", "local_dag_union")
 BRIBERY_TYPES = ("guided", "effective")

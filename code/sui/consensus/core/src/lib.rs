@@ -71,6 +71,8 @@ mod sluggish_attack_test;
 mod mysticeti_lvw_attack_test;
 #[cfg(test)]
 mod withholding_attack_test;
+#[cfg(test)]
+mod timestamp_attack_test;
 
 /// Exported Consensus API.
 pub use authority_node::{ConsensusAuthority, NetworkType};

@@ -41,6 +41,10 @@ _SUI_TEST_NAMES = {
     "withhold_baseline": "withholding_attack_test::test_withhold_baseline_asr_dynamic",
     "withhold_silent": "withholding_attack_test::test_withhold_silent_attack_asr_dynamic",
     "slw": "withholding_attack_test::test_slw_attack_asr_dynamic",
+    # A2.7 proposal-timestamp attack. Hook already lived in proposer.rs
+    # (ATTACK_TIMESTAMP / BYZANTINE_TIMESTAMP_OFFSET_MS); this just arms it.
+    "timestamp_baseline": "timestamp_attack_test::test_timestamp_baseline_asr_dynamic",
+    "timestamp": "timestamp_attack_test::test_timestamp_attack_asr_dynamic",
 }
 
 # Campaign strategy label -> Sui-recognized ATTACK_MODE. Only DS5 differs: the
