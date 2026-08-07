@@ -40,6 +40,11 @@ _SUI_TEST_NAMES = {
     # Bullshark); the ATTACK_MODE it needs is translated below.
     "withhold_baseline": "withholding_attack_test::test_withhold_baseline_asr_dynamic",
     "withhold_silent": "withholding_attack_test::test_withhold_silent_attack_asr_dynamic",
+    # A3.2 competing attackers: same DS4 hook as "withhold_silent" (attacker
+    # behavior byte-identical); the test sets INDEPENDENT=1 internally, which
+    # restricts calculate_asr to disjoint one-to-one attacker-victim pairs
+    # instead of pooling every attacker against the whole victim pool.
+    "withhold_silent_independent": "withholding_attack_test::test_withhold_silent_independent_asr_dynamic",
     "slw": "withholding_attack_test::test_slw_attack_asr_dynamic",
     # A2.7 proposal-timestamp attack. Hook already lived in proposer.rs
     # (ATTACK_TIMESTAMP / BYZANTINE_TIMESTAMP_OFFSET_MS); this just arms it.

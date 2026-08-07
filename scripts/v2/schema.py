@@ -20,7 +20,14 @@ DAG_STRATEGIES = ("fissure", "speculative", "sluggish")
 # DAG_STRATEGIES so the competition archetypes in policy.py keep rotating only
 # the three core strategies; these are valid strategy values but never part of an
 # auto-generated split. `ALL_STRATEGIES` is the union used for enum validation.
-WITHHOLDING_STRATEGIES = ("withhold_baseline", "withhold_silent", "slw")
+WITHHOLDING_STRATEGIES = (
+    "withhold_baseline",
+    "withhold_silent",
+    # A3.2 competing attackers (env-gated INDEPENDENT=1 scoring restriction on
+    # the same DS4 SILENT_EXCEPT_LEADER hook; see withholding_attack_test.rs).
+    "withhold_silent_independent",
+    "slw",
+)
 # A2.7 proposal-timestamp attack (env-gated ATTACK_TIMESTAMP /
 # BYZANTINE_TIMESTAMP_OFFSET_MS proposer hook). Kept OUT of DAG_STRATEGIES for
 # the same reason as WITHHOLDING_STRATEGIES above.

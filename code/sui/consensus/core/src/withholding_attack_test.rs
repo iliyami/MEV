@@ -17,6 +17,25 @@
 //! Metric convention matches the sibling attack tests: same-round ASR
 //! (`FINAL_ASR_RESULT`) plus the neutral all-pairs ASR (`FINAL_ALL_PAIRS_ASR`),
 //! and the committed order for downstream per-policy / profit weighting.
+//!
+//! PAPER-2 A3.2 (competing attackers): `SILENT_EXCEPT_LEADER` has no
+//! victim-exclusion mechanism -- unlike fissure, an attacker never chooses
+//! *which* validator to target, only *when* to broadcast. So there is no
+//! attacker-behavior knob analogous to Bullshark's `INDEPENDENT=1`
+//! (`fissure_target_victim`, `bullshark-flashboys/primary/src/core.rs`) to
+//! flip here; `proposer.rs` is untouched by this cell. The Bullshark-style
+//! collusion trap (PROVENANCE §2.5: every attacker already shares
+//! `victims()[0]`, so the naive control already colludes) has a direct
+//! analog one layer up, at *scoring*: by default every attacker's blocks are
+//! pooled against the entire victim pool (every attacker x every victim),
+//! which is already an aggregate, already-coordinated measurement.
+//! `INDEPENDENT=1` (read in `calculate_asr`) restricts scoring to disjoint
+//! one-to-one pairs -- attacker i counts only against
+//! `victim_authors[i % victim_authors.len()]` -- isolating whether the
+//! pooled number is a genuine per-relationship effect or an artifact of
+//! aggregating many attacker-victim pairs together. This is a scoring-only
+//! change in this test file; the wire behavior of `SILENT_EXCEPT_LEADER` is
+//! byte-identical between the coordinated and independent arms.
 
 use std::{collections::BTreeSet, env, sync::Arc, time::Duration};
 
@@ -226,17 +245,44 @@ fn calculate_asr(
     let mut vics = Vec::new();
     for (pos, (author, round)) in order.iter().enumerate() {
         if *author < num_attacker {
-            atts.push((pos, *round));
+            atts.push((pos, *round, *author));
         } else if *author >= num_validators.saturating_sub(num_victim) {
-            vics.push((pos, *round));
+            vics.push((pos, *round, *author));
         }
     }
     if atts.is_empty() || vics.is_empty() {
         return (0.0, 0.0);
     }
+
+    // PAPER-2 A3.2 (env-gated, scoring-only; see module docs above). Default
+    // (INDEPENDENT unset) pools every attacker against the whole victim pool,
+    // byte-identical to the pre-existing behavior. INDEPENDENT=1 restricts
+    // each attacker to its own disjoint victim, round-robin over the victim
+    // pool, and logs the assignment so the hook's engagement can be proven
+    // from the logs (`grep -i victim`) the same way §2.5 proves
+    // `INDEPENDENT=1` on Bullshark.
+    let independent = env::var("INDEPENDENT").ok().filter(|v| v != "0").is_some();
+    // `vics` non-empty (checked above) guarantees at least one author index
+    // >= num_validators.saturating_sub(num_victim), so this range is
+    // non-empty too -- safe to index unconditionally below.
+    let victim_authors: Vec<usize> =
+        (num_validators.saturating_sub(num_victim)..num_validators).collect();
+    if independent {
+        for a in 0..num_attacker {
+            let assigned = victim_authors[a % victim_authors.len()];
+            println!("INDEPENDENT_TARGET: attacker={a} victim={assigned}");
+        }
+    }
+
     let (mut sr_s, mut sr_t, mut ap_s, mut ap_t) = (0usize, 0usize, 0usize, 0usize);
-    for (ap, ar) in &atts {
-        for (vp, vr) in &vics {
+    for (ap, ar, aauthor) in &atts {
+        for (vp, vr, vauthor) in &vics {
+            if independent {
+                let assigned = victim_authors[aauthor % victim_authors.len()];
+                if *vauthor != assigned {
+                    continue;
+                }
+            }
             ap_t += 1;
             if ap < vp {
                 ap_s += 1;
@@ -304,6 +350,50 @@ async fn test_withhold_silent_attack_asr_dynamic() {
     }
 
     run_withholding_asr("withhold_silent").await;
+}
+
+/// PAPER-2 A3.2 (competing attackers): same DS4 hook as
+/// `test_withhold_silent_attack_asr_dynamic` above -- `SILENT_EXCEPT_LEADER`
+/// attacker behavior is unchanged -- but scored with `INDEPENDENT=1`, which
+/// restricts `calculate_asr` to disjoint one-to-one attacker-victim pairs
+/// instead of pooling every attacker against the whole victim pool. This is
+/// the Sui A3.2 treatment; `test_withhold_silent_attack_asr_dynamic` (pooled,
+/// recorded at 76.09%) is kept as-is and doubles as the coordinated
+/// regression check for this cell.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_withhold_silent_independent_asr_dynamic() {
+    telemetry_subscribers::init_for_testing();
+
+    let num_validators: usize = env::var("NUM_NODES")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(13);
+    let attacker_ratio: f64 = env::var("ATTACKER_RATIO")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0.308);
+    let victim_ratio: f64 = env::var("VICTIM_RATIO")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0.231);
+    let num_attacker = (num_validators as f64 * attacker_ratio).round() as usize;
+
+    // Same DS4 setup as the coordinated test above, plus INDEPENDENT=1 so
+    // `calculate_asr` scores disjoint attacker-victim pairs instead of the
+    // pooled cross product. SAFETY: set before any ConsensusAuthority spawns.
+    unsafe {
+        env::remove_var("ATTACK_MODE");
+        env::set_var("ATTACK_TYPE", "frontrun");
+        env::set_var("ATTACKER_RATIO", attacker_ratio.to_string());
+        env::set_var("VICTIM_RATIO", victim_ratio.to_string());
+        env::set_var("NUM_ATTACKERS", num_attacker.to_string());
+        env::set_var("INDEPENDENT", "1");
+        if env::var("SILENT_EXCEPT_LEADER").is_err() {
+            env::set_var("SILENT_EXCEPT_LEADER", "1");
+        }
+    }
+
+    run_withholding_asr("withhold_silent_independent").await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
