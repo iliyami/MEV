@@ -16,6 +16,8 @@ The repository already includes the evaluated protocol forks under [`code/`](cod
 - [`config/`](config): experiment configurations used by the runners
 - [`scripts/`](scripts): campaign runners for baselines, frontrunning sweeps, and post-victim attacks
 - [`plots/`](plots): data loader, figure generator, and generated reports
+- [`results/`](results): per-cell CSVs behind Table 2, one directory per campaign, each row a
+  single repetition with its arm, committee size, attacker fraction and score
 - [`baseline.csv`](baseline.csv): attack-disabled baselines
 - [`experiment_results.csv`](experiment_results.csv): main frontrunning campaign results
 - [`autobahn_results.csv`](autobahn_results.csv): Autobahn frontrunning campaign results
@@ -187,7 +189,7 @@ Common experiment groups:
 
 Protocol-specific extensions:
 
-- Bullshark / MEVSUI / Narwhal-Tusk:
+- Bullshark / Narwhal-Tusk:
   - `defense_memory`
   - `defense_network`
   - `defense_gc`
@@ -217,7 +219,6 @@ Protocol-specific extensions:
 Main configuration files:
 
 - [`config/local_verify_unified.yaml`](config/local_verify_unified.yaml): Bullshark
-- [`config/grand_experiment.yaml`](config/grand_experiment.yaml): MEVSUI (present in the artifact, not part of the six-protocol evaluation)
 - [`config/grand_experiment_narwhal.yaml`](config/grand_experiment_narwhal.yaml): Narwhal-Tusk
 - [`config/grand_experiment_mysticeti.yaml`](config/grand_experiment_mysticeti.yaml): Mysticeti
 - [`config/grand_experiment_alephbft.yaml`](config/grand_experiment_alephbft.yaml): AlephBFT
