@@ -51,6 +51,44 @@ use tracing::{info, warn};
         front_attackers: std::ops::Range<usize>,
         victims: std::ops::Range<usize>,
         back_attackers: std::ops::Range<usize>,
+        // PAPER-2: when SANDWICH_INTERLEAVE=1, roles come from this explicit vector instead
+        // of the three contiguous ranges. See `interleaved_sandwich`.
+        explicit: Option<Vec<NodeRole>>,
+    }
+
+    /// PAPER-2 sandwich layout. The contiguous layout (front block, then victims, then back
+    /// block) leaves no victim with an attacker adjacent on *both* sides: at n=13 with 4
+    /// attackers and 3 victims the nearest back attacker sits 3 node-indices from the first
+    /// victim, so an L1 sandwich is impossible by construction and every L1 cell reads 0.00
+    /// regardless of protocol. That measures the layout, not the protocol.
+    ///
+    /// A real sandwicher chooses which validators it controls, so it would place them to flank
+    /// its targets. This interleaves them, attacker/victim/attacker/..., giving every victim a
+    /// front attacker immediately before and a back attacker immediately after. It is a
+    /// best-case attacker placement and must be reported as such.
+    fn interleaved_sandwich(n: usize, num_attackers: usize, num_victims: usize) -> Vec<NodeRole> {
+        let mut roles = vec![NodeRole::Honest; n];
+        let mut front_left = num_attackers / 2;
+        let mut back_left = num_attackers - front_left;
+        let mut idx = 0usize;
+        for _ in 0..num_victims {
+            // front attacker, victim, back attacker
+            if front_left > 0 && idx < n {
+                roles[idx] = NodeRole::FrontAttacker;
+                front_left -= 1;
+                idx += 1;
+            }
+            if idx < n {
+                roles[idx] = NodeRole::Victim;
+                idx += 1;
+            }
+            if back_left > 0 && idx < n {
+                roles[idx] = NodeRole::BackAttacker;
+                back_left -= 1;
+                idx += 1;
+            }
+        }
+        roles
     }
 
     #[derive(Clone, Copy, Debug)]
@@ -80,27 +118,42 @@ use tracing::{info, warn};
                     front_attackers: 0..num_attackers,
                     victims: n.saturating_sub(num_victims)..n,
                     back_attackers: 0..0,
+                    explicit: None,
                 },
                 AttackType::Backrun => Self {
                     front_attackers: 0..0,
                     victims: 0..num_victims,
                     back_attackers: num_victims..num_victims + num_attackers,
+                    explicit: None,
                 },
                 AttackType::Sandwich => {
                     let front = num_attackers / 2;
                     let back = num_attackers - front;
                     let victims_start = front;
                     let back_start = victims_start + num_victims;
+                    let explicit = if env::var("SANDWICH_INTERLEAVE")
+                        .ok()
+                        .filter(|v| v != "0")
+                        .is_some()
+                    {
+                        Some(interleaved_sandwich(n, num_attackers, num_victims))
+                    } else {
+                        None
+                    };
                     Self {
                         front_attackers: 0..front,
                         victims: victims_start..victims_start + num_victims,
                         back_attackers: back_start..back_start + back,
+                        explicit,
                     }
                 }
             }
         }
 
         fn role(&self, node: usize) -> NodeRole {
+            if let Some(roles) = &self.explicit {
+                return roles.get(node).copied().unwrap_or(NodeRole::Honest);
+            }
             if self.front_attackers.contains(&node) {
                 NodeRole::FrontAttacker
             } else if self.victims.contains(&node) {

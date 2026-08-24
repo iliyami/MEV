@@ -622,7 +622,35 @@ impl ValidatorProposer {
         let mut filtered = Vec::with_capacity(ancestors.len());
         let mut excluded = 0usize;
         for ancestor in ancestors {
-            let is_victim = self.is_victim_block(&ancestor, victim_count);
+            let mut is_victim = self.is_victim_block(&ancestor, victim_count);
+            // PAPER-2 A3.4, the multi-group value of the RELATIONSHIP dimension. By default
+            // every attacker targets every victim, i.e. the attacker set is one group acting
+            // together. RIVAL_GROUPS=G instead partitions the attackers into G groups with
+            // disjoint targets: attacker a joins group a % G, victim v joins group
+            // (v - first_victim) % G, and an attacker treats a block as its victim only when
+            // the groups match. The groups still coordinate internally and no longer
+            // coordinate with each other, which is the middle of the A3 dimension between
+            // colluding (one group) and competing (one victim each).
+            //
+            // Only *which* victim an attacker targets changes. The exclusion mechanism, every
+            // consensus rule, and the default path with the flag unset are untouched.
+            if is_victim {
+                if let Some(groups) = std::env::var("RIVAL_GROUPS")
+                    .ok()
+                    .and_then(|v| v.parse::<usize>().ok())
+                    .filter(|g| *g > 1)
+                {
+                    let first_victim = committee_size.saturating_sub(victim_count);
+                    let v_idx = ancestor.author().value();
+                    if v_idx >= first_victim {
+                        let victim_group = (v_idx - first_victim) % groups;
+                        let my_group = self.context.own_index.value() % groups;
+                        if victim_group != my_group {
+                            is_victim = false;
+                        }
+                    }
+                }
+            }
             if !is_victim {
                 filtered.push(ancestor);
                 continue;
@@ -648,6 +676,52 @@ impl ValidatorProposer {
                         }
                     }
                 }
+            }
+
+            // PAPER-2 A4.2, the INFORMATION dimension. Every other decision in this hook is
+            // made from one node's local view: `parent_round_stake` is what *this* attacker
+            // happens to hold. GLOBAL_VIEW=1 instead lets the attacker set condition on the
+            // union of the Byzantine nodes' observations, which is information no single
+            // attacker has and which out-of-band coordination among Byzantine nodes already
+            // permits (threat model action (ii)).
+            //
+            // The pooled state is the number of attackers that have already excluded this
+            // exact (round, victim) block. Without it every attacker excludes independently
+            // and they pile onto the same target redundantly. With it, an attacker that sees
+            // the target already covered by GLOBAL_VIEW_COVER teammates keeps the victim as a
+            // parent instead, preserving its own parent set rather than spending it on an
+            // exclusion that changes nothing.
+            //
+            // Only the information the attacker conditions on changes. The available actions
+            // are identical, no honest node behaves differently, and the default path is
+            // untouched when the flag is unset.
+            if std::env::var("GLOBAL_VIEW").ok().filter(|v| v != "0").is_some() {
+                use std::collections::HashMap;
+                use std::sync::{Mutex, OnceLock};
+                static POOLED: OnceLock<Mutex<HashMap<(u32, u32), usize>>> = OnceLock::new();
+                let cover: usize = std::env::var("GLOBAL_VIEW_COVER")
+                    .ok()
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(1);
+                let key = (ancestor.round(), ancestor.author().value() as u32);
+                let pooled = POOLED.get_or_init(|| Mutex::new(HashMap::new()));
+                let already = {
+                    let map = pooled.lock().expect("pooled view mutex");
+                    *map.get(&key).unwrap_or(&0)
+                };
+                if already >= cover {
+                    // Target already covered by teammates: keep the parent.
+                    trace!(
+                        "GLOBAL_VIEW: victim {} at round {} already excluded by {} teammates, keeping",
+                        ancestor.reference(),
+                        ancestor.round(),
+                        already
+                    );
+                    filtered.push(ancestor);
+                    continue;
+                }
+                let mut map = pooled.lock().expect("pooled view mutex");
+                *map.entry(key).or_insert(0) += 1;
             }
 
             let ancestor_stake = self.context.committee.stake(ancestor.author());

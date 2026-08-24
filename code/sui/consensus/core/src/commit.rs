@@ -3,7 +3,7 @@
 
 use std::{
     cmp::Ordering,
-    collections::BTreeMap,
+    collections::{BTreeMap, hash_map::DefaultHasher},
     fmt::{self, Debug, Display, Formatter},
     hash::{Hash, Hasher},
     ops::{Deref, Range, RangeInclusive},
@@ -424,6 +424,55 @@ pub(crate) fn sort_sub_dag_blocks(blocks: &mut [VerifiedBlock]) {
         .is_some()
     {
         blocks.sort_by(|a, b| a.round().cmp(&b.round()));
+        return;
+    }
+    // PAPER-2 defense evaluation (env-gated; the default path below is unchanged).
+    // ORDER_FAIR_TIEBREAK=1 approximates the receive-order family (Themis, FairDAG,
+    // Herring): same-round blocks are ordered by the timestamp their proposer stamped,
+    // which stands in for the order the network saw them, rather than by validator
+    // identity. Ties in timestamp fall back to the digest so the rule stays total and
+    // deterministic, never to the author, since reintroducing the author is exactly the
+    // bias under test.
+    //
+    // This measures whether an order-fair rule removes the low-index advantage that
+    // survives both the digest tiebreak (FIX_TIEBREAK) and a seeded one. It is an
+    // approximation of those protocols' ordering rule, not an implementation of their
+    // gamma-batch-order-fairness guarantee, and must be reported as such.
+    if std::env::var("ORDER_FAIR_TIEBREAK")
+        .ok()
+        .filter(|v| v != "0")
+        .is_some()
+    {
+        blocks.sort_by(|a, b| {
+            a.round()
+                .cmp(&b.round())
+                .then_with(|| a.timestamp_ms().cmp(&b.timestamp_ms()))
+                .then_with(|| a.digest().cmp(&b.digest()))
+        });
+        return;
+    }
+    // PAPER-2 defense evaluation (env-gated; the default path below is unchanged).
+    // SEEDED_TIEBREAK=1 breaks intra-round ties by hashing the block digest together
+    // with TIEBREAK_SEED, so the order is deterministic and stable for a given seed
+    // but is not a function of validator index. Measures whether an unpredictable
+    // tiebreak removes the index-linked ordering bias that the digest rule leaves
+    // partly standing.
+    if std::env::var("SEEDED_TIEBREAK")
+        .ok()
+        .filter(|v| v != "0")
+        .is_some()
+    {
+        let seed: u64 = std::env::var("TIEBREAK_SEED")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0);
+        let key = |b: &VerifiedBlock| {
+            let mut hasher = DefaultHasher::new();
+            seed.hash(&mut hasher);
+            b.digest().hash(&mut hasher);
+            hasher.finish()
+        };
+        blocks.sort_by(|a, b| a.round().cmp(&b.round()).then_with(|| key(a).cmp(&key(b))));
         return;
     }
     blocks.sort_by(|a, b| {
