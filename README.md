@@ -3,9 +3,10 @@
 This repository contains the code, data, and plotting pipeline for our experimental study of transaction-order manipulation in DAG-based Byzantine fault-tolerant consensus protocols.
 
 The artifact evaluates:
-- 7 DAG-based BFT codebases: Narwhal-Tusk, Bullshark, Mysticeti, MEVSUI, AlephBFT, Mahi-Mahi, and Autobahn
-- 3 attack families: frontrunning, backrunning, and sandwiching
-- 3 attacker strategies: fissure, speculative, and sluggish
+- 6 DAG-based BFT codebases: Narwhal-Tusk, Bullshark, Mysticeti, AlephBFT, Mahi-Mahi, and Autobahn
+- 4 attacker actions: frontrunning, backrunning, sandwiching, and censorship
+- 7 attacker primitives: fissure, speculative, sluggish, silent-except-leader, SLW, LVW, and proposal-timestamp
+- protocol and deployment dimensions: DAG type, ordering rule, tiebreak, leader rule, tuning, committee size, stake and geo-distribution
 
 The repository already includes the evaluated protocol forks under [`code/`](code), the committed datasets at the project root, and the auto-generated figure pipeline under [`plots/`](plots).
 
@@ -216,7 +217,7 @@ Protocol-specific extensions:
 Main configuration files:
 
 - [`config/local_verify_unified.yaml`](config/local_verify_unified.yaml): Bullshark
-- [`config/grand_experiment.yaml`](config/grand_experiment.yaml): MEVSUI
+- [`config/grand_experiment.yaml`](config/grand_experiment.yaml): MEVSUI (present in the artifact, not part of the six-protocol evaluation)
 - [`config/grand_experiment_narwhal.yaml`](config/grand_experiment_narwhal.yaml): Narwhal-Tusk
 - [`config/grand_experiment_mysticeti.yaml`](config/grand_experiment_mysticeti.yaml): Mysticeti
 - [`config/grand_experiment_alephbft.yaml`](config/grand_experiment_alephbft.yaml): AlephBFT
@@ -279,6 +280,37 @@ The main data products are:
 - [`back_sand_results.csv`](back_sand_results.csv)
 
 These files are the inputs consumed by the plot generator.
+
+## Attack Hooks
+
+Every attacker behaviour is an environment-gated hook on the proposing path. With the variable
+unset the hook returns before the default path, so the compiled binary is byte-identical to
+upstream and honest validators always run the disarmed build. No hook alters a validity
+predicate, a quorum-intersection check or a signature path: each one only chooses among options
+an honest validator could legally take, such as which valid parents to reference, when to
+broadcast, or which of its own candidate blocks to publish.
+
+| variable | file | what it does |
+|---|---|---|
+| `FISSURE_ATTACK` | `sui`, `bullshark-flashboys` | omit the victim from the attacker's parent set |
+| `SILENT_EXCEPT_LEADER` | `sui` | propose only in rounds the attacker leads |
+| `SLW` | `sui` | propose in every round except the attacker's own leader round |
+| `BRIBED` | `bullshark-flashboys` | honest nodes accept an offer to omit the victim |
+| `SPECULATIVE_SEED_AWARE` | `alephbft` | aim the grinder at the rank the election rotation selects |
+| `ALEPH_HASH_SORT_SEED` | `alephbft` | seed the election's candidate rotation |
+| `GLOBAL_VIEW`, `RIVAL_GROUPS` | `sui` | information and multi-group relationship cells |
+| `SANDWICH_INTERLEAVE` | `mysticeti` | close both sides of a sandwich around one victim |
+
+Ordering-rule variants used for the defense evaluation live in the same file
+(`sui/consensus/core/src/commit.rs`) and are gated the same way:
+
+| variable | ordering rule |
+|---|---|
+| unset | `(round, author)`, the shipped rule |
+| `FIX_TIEBREAK` | `(round, digest)` |
+| `ROUND_ONLY` | round only, intra-round order left to graph traversal |
+| `SEEDED_TIEBREAK`, `TIEBREAK_SEED` | `(round, H(digest, seed))` |
+| `ORDER_FAIR_TIEBREAK` | `(round, proposer timestamp, digest)` |
 
 ## Practical Notes
 
