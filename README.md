@@ -16,8 +16,9 @@ The repository already includes the evaluated protocol forks under [`code/`](cod
 - [`config/`](config): experiment configurations used by the runners
 - [`scripts/`](scripts): campaign runners for baselines, frontrunning sweeps, and post-victim attacks
 - [`plots/`](plots): data loader, figure generator, and generated reports
-- [`results/`](results): per-cell CSVs behind Table 2, one directory per campaign, each row a
-  single repetition with its arm, committee size, attacker fraction and score
+- [`data/`](data): per-cell CSVs behind Table 2, one directory per campaign, each row a single
+  repetition with its arm, committee size, attacker fraction and score; see
+  [`data/README.md`](data/README.md) for the directory-to-dimension map
 - [`baseline.csv`](baseline.csv): attack-disabled baselines
 - [`experiment_results.csv`](experiment_results.csv): main frontrunning campaign results
 - [`autobahn_results.csv`](autobahn_results.csv): Autobahn frontrunning campaign results
