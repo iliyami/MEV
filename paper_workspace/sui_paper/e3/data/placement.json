@@ -1,0 +1,1808 @@
+{
+ "epoch": 1247,
+ "committee_size": 112,
+ "probed": 94,
+ "unreachable": 18,
+ "author_equals_index": 94,
+ "author_equals_index_share": 1.0,
+ "mismatches": [],
+ "reps": 5,
+ "rows": [
+  {
+   "index": 0,
+   "name": "Staking Facilities",
+   "host": "testnet-sui.stakingfacilities.com",
+   "epoch": 1247,
+   "authors": [
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 0,
+   "matches_index": true
+  },
+  {
+   "index": 1,
+   "name": "Birdai",
+   "host": "177.54.159.9",
+   "epoch": 1247,
+   "authors": [
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 1,
+   "matches_index": true
+  },
+  {
+   "index": 2,
+   "name": "Blockscope.net",
+   "host": "testnet.sui.blockscope.net",
+   "epoch": 1247,
+   "authors": [
+    2,
+    2,
+    2,
+    2,
+    2
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 2,
+   "matches_index": true
+  },
+  {
+   "index": 3,
+   "name": "Ankr",
+   "host": "sui-validator.ankr.com",
+   "epoch": 1247,
+   "authors": [
+    3,
+    3,
+    3,
+    3,
+    3
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 3,
+   "matches_index": true
+  },
+  {
+   "index": 4,
+   "name": "Restake",
+   "host": "restake-sui-test-00-0.machine.restake.tech",
+   "epoch": null,
+   "authors": [],
+   "err": "gaierror(8, 'nodename nor servname provided, or not known')",
+   "reported_consistent": false,
+   "author": null,
+   "matches_index": false
+  },
+  {
+   "index": 5,
+   "name": "AlphaFi",
+   "host": "validator.testnet.alphafi.xyz",
+   "epoch": 1247,
+   "authors": [
+    5,
+    5,
+    5,
+    5,
+    5
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 5,
+   "matches_index": true
+  },
+  {
+   "index": 6,
+   "name": "MAVAN",
+   "host": "15.204.104.33",
+   "epoch": 1247,
+   "authors": [
+    6,
+    6,
+    6,
+    6,
+    6
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 6,
+   "matches_index": true
+  },
+  {
+   "index": 7,
+   "name": "Scallop",
+   "host": "validator.testnet.scallop.io",
+   "epoch": 1247,
+   "authors": [
+    7,
+    7,
+    7,
+    7,
+    7
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 7,
+   "matches_index": true
+  },
+  {
+   "index": 8,
+   "name": "Nodes.Guru",
+   "host": "sui-testnet-validator.nodes.guru",
+   "epoch": 1247,
+   "authors": [
+    8,
+    8,
+    8,
+    8,
+    8
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 8,
+   "matches_index": true
+  },
+  {
+   "index": 9,
+   "name": "Kiln",
+   "host": "validator-0.sui.testnet.kiln.fi",
+   "epoch": null,
+   "authors": [],
+   "err": "gaierror(8, 'nodename nor servname provided, or not known')",
+   "reported_consistent": false,
+   "author": null,
+   "matches_index": false
+  },
+  {
+   "index": 10,
+   "name": "Swiss Staking",
+   "host": "sui-testnet.swiss-staking.ch",
+   "epoch": 1247,
+   "authors": [
+    10,
+    10,
+    10,
+    10,
+    10
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 10,
+   "matches_index": true
+  },
+  {
+   "index": 11,
+   "name": "Allnodes",
+   "host": "sui-testnet.allnodes.me",
+   "epoch": 1247,
+   "authors": [
+    11,
+    11,
+    11,
+    11,
+    11
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 11,
+   "matches_index": true
+  },
+  {
+   "index": 12,
+   "name": "RepublicCrypto",
+   "host": "v.sui.testnet.republiccrypto-source.info",
+   "epoch": 1247,
+   "authors": [
+    12,
+    12,
+    12,
+    12,
+    12
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 12,
+   "matches_index": true
+  },
+  {
+   "index": 13,
+   "name": "BartestneT",
+   "host": "sui-testnet-validator.bartestnet.com",
+   "epoch": 1247,
+   "authors": [
+    13,
+    13,
+    13,
+    13,
+    13
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 13,
+   "matches_index": true
+  },
+  {
+   "index": 14,
+   "name": "Ahoy Validator",
+   "host": "ahoyvalidator.xyz",
+   "epoch": 1247,
+   "authors": [
+    14,
+    14,
+    14,
+    14,
+    14
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 14,
+   "matches_index": true
+  },
+  {
+   "index": 15,
+   "name": "Latitude.sh",
+   "host": "sui-tn.delegate.sh",
+   "epoch": 1247,
+   "authors": [
+    15,
+    15,
+    15,
+    15,
+    15
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 15,
+   "matches_index": true
+  },
+  {
+   "index": 16,
+   "name": "Figment",
+   "host": "sui-testnet.staking.production.figment.io",
+   "epoch": 1247,
+   "authors": [
+    16,
+    16,
+    16,
+    16,
+    16
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 16,
+   "matches_index": true
+  },
+  {
+   "index": 17,
+   "name": "Mysten-6",
+   "host": "lhr-tnt-val-00.testnet.sui.io",
+   "epoch": 1247,
+   "authors": [
+    17,
+    17,
+    17,
+    17,
+    17
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 17,
+   "matches_index": true
+  },
+  {
+   "index": 18,
+   "name": "Overclock",
+   "host": "sui-testnet.overclock.run",
+   "epoch": null,
+   "authors": [],
+   "err": "SSLEOFError(8, '[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1032)')",
+   "reported_consistent": false,
+   "author": null,
+   "matches_index": false
+  },
+  {
+   "index": 19,
+   "name": "Juicy Stake",
+   "host": "juicy-sui.juicystake.io",
+   "epoch": null,
+   "authors": [],
+   "err": "SSLEOFError(8, '[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1032)')",
+   "reported_consistent": false,
+   "author": null,
+   "matches_index": false
+  },
+  {
+   "index": 20,
+   "name": "Stakin by The Tie",
+   "host": "sui-perm-testnet.stakin-nodes.com",
+   "epoch": 1247,
+   "authors": [
+    20,
+    20,
+    20,
+    20,
+    20
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 20,
+   "matches_index": true
+  },
+  {
+   "index": 21,
+   "name": "Omnistake",
+   "host": "sui-validator-testnet.omnistake.com",
+   "epoch": 1247,
+   "authors": [
+    21,
+    21,
+    21,
+    21,
+    21
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 21,
+   "matches_index": true
+  },
+  {
+   "index": 22,
+   "name": "Blockdaemon",
+   "host": "cg8ofj74s963mqojg8sg.bdnodes.net",
+   "epoch": 1247,
+   "authors": [
+    22,
+    22,
+    22,
+    22,
+    22
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 22,
+   "matches_index": true
+  },
+  {
+   "index": 23,
+   "name": "Nelrann",
+   "host": "sui-validator.testnet.nelrann.org",
+   "epoch": 1247,
+   "authors": [
+    23,
+    23,
+    23,
+    23,
+    23
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 23,
+   "matches_index": true
+  },
+  {
+   "index": 24,
+   "name": "Stardust Staking",
+   "host": "sui-testnet.starduststaking.com",
+   "epoch": 1247,
+   "authors": [
+    24,
+    24,
+    24,
+    24,
+    24
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 24,
+   "matches_index": true
+  },
+  {
+   "index": 25,
+   "name": "Chorus One",
+   "host": "sui-testnet.chorus.one",
+   "epoch": 1247,
+   "authors": [
+    25,
+    25,
+    25,
+    25,
+    25
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 25,
+   "matches_index": true
+  },
+  {
+   "index": 26,
+   "name": "hoh.zone",
+   "host": "sui-validator.testnet.hoh.zone",
+   "epoch": 1247,
+   "authors": [
+    26,
+    26,
+    26,
+    26,
+    26
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 26,
+   "matches_index": true
+  },
+  {
+   "index": 27,
+   "name": "Mysten-1",
+   "host": "icn-00.testnet.sui.io",
+   "epoch": 1247,
+   "authors": [
+    27,
+    27,
+    27,
+    27,
+    27
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 27,
+   "matches_index": true
+  },
+  {
+   "index": 28,
+   "name": "Node Guardians",
+   "host": "sui-testnet.nodeguardians.io",
+   "epoch": null,
+   "authors": [],
+   "err": "TimeoutError('timed out')",
+   "reported_consistent": false,
+   "author": null,
+   "matches_index": false
+  },
+  {
+   "index": 29,
+   "name": "Everstake",
+   "host": "sui-test.everstake.one",
+   "epoch": 1247,
+   "authors": [
+    29,
+    29,
+    29,
+    29,
+    29
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 29,
+   "matches_index": true
+  },
+  {
+   "index": 30,
+   "name": "Luganodes",
+   "host": "sui-testnet.nodes.lgns.xyz",
+   "epoch": null,
+   "authors": [],
+   "err": "gaierror(8, 'nodename nor servname provided, or not known')",
+   "reported_consistent": false,
+   "author": null,
+   "matches_index": false
+  },
+  {
+   "index": 31,
+   "name": "Haedal",
+   "host": "testnet.validator.haedal.xyz",
+   "epoch": 1247,
+   "authors": [
+    31,
+    31,
+    31,
+    31,
+    31
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 31,
+   "matches_index": true
+  },
+  {
+   "index": 32,
+   "name": "BlockVision",
+   "host": "sui-testnet-validator.blockvision.org",
+   "epoch": 1247,
+   "authors": [
+    32,
+    32,
+    32,
+    32,
+    32
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 32,
+   "matches_index": true
+  },
+  {
+   "index": 33,
+   "name": "Surf",
+   "host": "sui-testnet.surf.tech",
+   "epoch": 1247,
+   "authors": [
+    33,
+    33,
+    33,
+    33,
+    33
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 33,
+   "matches_index": true
+  },
+  {
+   "index": 34,
+   "name": "HashKey Cloud",
+   "host": "sui-testnet.hashkey.cloud",
+   "epoch": 1247,
+   "authors": [
+    34,
+    34,
+    34,
+    34,
+    34
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 34,
+   "matches_index": true
+  },
+  {
+   "index": 35,
+   "name": "Shinlabs",
+   "host": "sui-testnet.shinlabs.xyz",
+   "epoch": 1247,
+   "authors": [
+    35,
+    35,
+    35,
+    35,
+    35
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 35,
+   "matches_index": true
+  },
+  {
+   "index": 36,
+   "name": "MRGN",
+   "host": "fengsui.wtf",
+   "epoch": 1247,
+   "authors": [
+    36,
+    36,
+    36,
+    36,
+    36
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 36,
+   "matches_index": true
+  },
+  {
+   "index": 37,
+   "name": "Imperator.co",
+   "host": "sui-testnet.imperator.co",
+   "epoch": null,
+   "authors": [],
+   "err": "SSLEOFError(8, '[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1032)')",
+   "reported_consistent": false,
+   "author": null,
+   "matches_index": false
+  },
+  {
+   "index": 38,
+   "name": "01node",
+   "host": "sui-testnet.01no.de",
+   "epoch": 1247,
+   "authors": [
+    38,
+    38,
+    38,
+    38,
+    38
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 38,
+   "matches_index": true
+  },
+  {
+   "index": 39,
+   "name": "Hinode Technologies",
+   "host": "testnet.sui.gu3.jp",
+   "epoch": 1247,
+   "authors": [
+    39,
+    39,
+    39,
+    39,
+    39
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 39,
+   "matches_index": true
+  },
+  {
+   "index": 40,
+   "name": "Mysten-5",
+   "host": "ewr-tnt-val-00.testnet.sui.io",
+   "epoch": 1247,
+   "authors": [
+    40,
+    40,
+    40,
+    40,
+    40
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 40,
+   "matches_index": true
+  },
+  {
+   "index": 41,
+   "name": "n1stake",
+   "host": "wave-3.testnet.n1stake.com",
+   "epoch": 1247,
+   "authors": [
+    41,
+    41,
+    41,
+    41,
+    41
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 41,
+   "matches_index": true
+  },
+  {
+   "index": 42,
+   "name": "[NODERS]",
+   "host": "sui-node.testnet.noders.team",
+   "epoch": 1247,
+   "authors": [
+    42,
+    42,
+    42,
+    42,
+    42
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 42,
+   "matches_index": true
+  },
+  {
+   "index": 43,
+   "name": "Obelisk",
+   "host": "sui.testnet.obelisk.sh",
+   "epoch": 1247,
+   "authors": [
+    43,
+    43,
+    43,
+    43,
+    43
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 43,
+   "matches_index": true
+  },
+  {
+   "index": 44,
+   "name": "BiXinKelePool",
+   "host": "t.sui.kelepool.io",
+   "epoch": null,
+   "authors": [],
+   "err": "TimeoutError('timed out')",
+   "reported_consistent": false,
+   "author": null,
+   "matches_index": false
+  },
+  {
+   "index": 45,
+   "name": "FP Validated",
+   "host": "sui-testnet.4pillars.info",
+   "epoch": 1247,
+   "authors": [
+    45,
+    45,
+    45,
+    45,
+    45
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 45,
+   "matches_index": true
+  },
+  {
+   "index": 46,
+   "name": "Forbole",
+   "host": "sui-testnet.forbole.com",
+   "epoch": 1247,
+   "authors": [
+    46,
+    46,
+    46,
+    46,
+    46
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 46,
+   "matches_index": true
+  },
+  {
+   "index": 47,
+   "name": "Staking Defense League",
+   "host": "sui.stakingdefenseleague.com",
+   "epoch": 1247,
+   "authors": [
+    47,
+    47,
+    47,
+    47,
+    47
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 47,
+   "matches_index": true
+  },
+  {
+   "index": 48,
+   "name": "Alchemy",
+   "host": "sui-t-v.bwarelabs.com",
+   "epoch": null,
+   "authors": [],
+   "err": "TimeoutError('timed out')",
+   "reported_consistent": false,
+   "author": null,
+   "matches_index": false
+  },
+  {
+   "index": 49,
+   "name": "InfStones",
+   "host": "testnet.sui.infstones.io",
+   "epoch": null,
+   "authors": [],
+   "err": "TimeoutError('timed out')",
+   "reported_consistent": false,
+   "author": null,
+   "matches_index": false
+  },
+  {
+   "index": 50,
+   "name": "TradePort",
+   "host": "sui01.tradeport.xyz",
+   "epoch": null,
+   "authors": [],
+   "err": "TimeoutError('timed out')",
+   "reported_consistent": false,
+   "author": null,
+   "matches_index": false
+  },
+  {
+   "index": 51,
+   "name": "Sentio",
+   "host": "sui-testnet-validator.sentio.xyz",
+   "epoch": 1247,
+   "authors": [
+    51,
+    51,
+    51,
+    51,
+    51
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 51,
+   "matches_index": true
+  },
+  {
+   "index": 52,
+   "name": "GiveRep",
+   "host": "sui.testnet.validator.giverep.com",
+   "epoch": 1247,
+   "authors": [
+    52,
+    52,
+    52,
+    52,
+    52
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 52,
+   "matches_index": true
+  },
+  {
+   "index": 53,
+   "name": "Kraken",
+   "host": "sui-testnet.eks-ap-northeast-2-secure.staging.staked.cloud",
+   "epoch": 1247,
+   "authors": [
+    53,
+    53,
+    53,
+    53,
+    53
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 53,
+   "matches_index": true
+  },
+  {
+   "index": 54,
+   "name": "Certora Validator",
+   "host": "sui-testnet-validator.certora.com",
+   "epoch": 1247,
+   "authors": [
+    54,
+    54,
+    54,
+    54,
+    54
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 54,
+   "matches_index": true
+  },
+  {
+   "index": 55,
+   "name": "Suiet",
+   "host": "testnet-validator.suiet.app",
+   "epoch": 1247,
+   "authors": [
+    55,
+    55,
+    55,
+    55,
+    55
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 55,
+   "matches_index": true
+  },
+  {
+   "index": 56,
+   "name": "Chainbase",
+   "host": "testnet-validator.sui.chainbase.online",
+   "epoch": 1247,
+   "authors": [
+    56,
+    56,
+    56,
+    56,
+    56
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 56,
+   "matches_index": true
+  },
+  {
+   "index": 57,
+   "name": "MIDL.dev",
+   "host": "sui-testnet.midl.dev",
+   "epoch": 1247,
+   "authors": [
+    57,
+    57,
+    57,
+    57,
+    57
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 57,
+   "matches_index": true
+  },
+  {
+   "index": 58,
+   "name": "QuantNode",
+   "host": "sui-testnet.quantnode.tech",
+   "epoch": 1247,
+   "authors": [
+    58,
+    58,
+    58,
+    58,
+    58
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 58,
+   "matches_index": true
+  },
+  {
+   "index": 59,
+   "name": "Bucket Protocol",
+   "host": "validator.bucketprotocol.io",
+   "epoch": 1247,
+   "authors": [
+    59,
+    59,
+    59,
+    59,
+    59
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 59,
+   "matches_index": true
+  },
+  {
+   "index": 60,
+   "name": "Brightlystake",
+   "host": "sui.brightlystake.com",
+   "epoch": 1247,
+   "authors": [
+    60,
+    60,
+    60,
+    60,
+    60
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 60,
+   "matches_index": true
+  },
+  {
+   "index": 61,
+   "name": "ZKV",
+   "host": "validator.testnet.sui.zkvalidator.com",
+   "epoch": 1247,
+   "authors": [
+    61,
+    61,
+    61,
+    61,
+    61
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 61,
+   "matches_index": true
+  },
+  {
+   "index": 62,
+   "name": "Lofi The Yeti",
+   "host": "lofitheyeti-sui-test-00-0.machine.restake.tech",
+   "epoch": null,
+   "authors": [],
+   "err": "gaierror(8, 'nodename nor servname provided, or not known')",
+   "reported_consistent": false,
+   "author": null,
+   "matches_index": false
+  },
+  {
+   "index": 63,
+   "name": "Artifact",
+   "host": "sui-testnet.artifact-staking.io",
+   "epoch": 1247,
+   "authors": [
+    63,
+    63,
+    63,
+    63,
+    63
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 63,
+   "matches_index": true
+  },
+  {
+   "index": 64,
+   "name": "Astro-Stakers",
+   "host": "sui-test.astrostakers.com",
+   "epoch": 1247,
+   "authors": [
+    64,
+    64,
+    64,
+    64,
+    64
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 64,
+   "matches_index": true
+  },
+  {
+   "index": 65,
+   "name": "BLRD",
+   "host": "validator-sui-testnet.blrd.inc",
+   "epoch": null,
+   "authors": [],
+   "err": "gaierror(8, 'nodename nor servname provided, or not known')",
+   "reported_consistent": false,
+   "author": null,
+   "matches_index": false
+  },
+  {
+   "index": 66,
+   "name": "ContributionDAO",
+   "host": "sui-validator.contributiondao.com",
+   "epoch": 1247,
+   "authors": [
+    66,
+    66,
+    66,
+    66,
+    66
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 66,
+   "matches_index": true
+  },
+  {
+   "index": 67,
+   "name": "DSRV",
+   "host": "sui-01.validator.dsrvlabs.dev",
+   "epoch": 1247,
+   "authors": [
+    67,
+    67,
+    67,
+    67,
+    67
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 67,
+   "matches_index": true
+  },
+  {
+   "index": 68,
+   "name": "SyncNode",
+   "host": "suitestnet1.syncnode.ro",
+   "epoch": null,
+   "authors": [],
+   "err": "TimeoutError('timed out')",
+   "reported_consistent": false,
+   "author": null,
+   "matches_index": false
+  },
+  {
+   "index": 69,
+   "name": "Ika",
+   "host": "ika-validator.sui-testnet.ika.xyz",
+   "epoch": 1247,
+   "authors": [
+    69,
+    69,
+    69,
+    69,
+    69
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 69,
+   "matches_index": true
+  },
+  {
+   "index": 70,
+   "name": "P2P.ORG",
+   "host": "val1.testnet.sui.p2p.org",
+   "epoch": 1247,
+   "authors": [
+    70,
+    70,
+    70,
+    70,
+    70
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 70,
+   "matches_index": true
+  },
+  {
+   "index": 71,
+   "name": "StakingCabin",
+   "host": "testnet.sui.stakingcabin.com",
+   "epoch": 1247,
+   "authors": [
+    71,
+    71,
+    71,
+    71,
+    71
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 71,
+   "matches_index": true
+  },
+  {
+   "index": 72,
+   "name": "TPT",
+   "host": "sui-testnet.thepassivetrust.com",
+   "epoch": null,
+   "authors": [],
+   "err": "ConnectionRefusedError(61, 'Connection refused')",
+   "reported_consistent": false,
+   "author": null,
+   "matches_index": false
+  },
+  {
+   "index": 73,
+   "name": "H2O Nodes",
+   "host": "sui-testnet-validator.h2o-nodes.com",
+   "epoch": 1247,
+   "authors": [
+    73,
+    73,
+    73,
+    73,
+    73
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 73,
+   "matches_index": true
+  },
+  {
+   "index": 74,
+   "name": "Peeranha",
+   "host": "testnet-sui-validator.peeranha.io",
+   "epoch": 1247,
+   "authors": [
+    74,
+    74,
+    74,
+    74,
+    74
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 74,
+   "matches_index": true
+  },
+  {
+   "index": 75,
+   "name": "LumiWave",
+   "host": "wave3-01-sui-validator.onbuff.com",
+   "epoch": 1247,
+   "authors": [
+    75,
+    75,
+    75,
+    75,
+    75
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 75,
+   "matches_index": true
+  },
+  {
+   "index": 76,
+   "name": "Natsai",
+   "host": "sui-tn-validator.natsai.xyz",
+   "epoch": 1247,
+   "authors": [
+    76,
+    76,
+    76,
+    76,
+    76
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 76,
+   "matches_index": true
+  },
+  {
+   "index": 77,
+   "name": "ChainIDE",
+   "host": "sui-testnet.chainide.com",
+   "epoch": 1247,
+   "authors": [
+    77,
+    77,
+    77,
+    77,
+    77
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 77,
+   "matches_index": true
+  },
+  {
+   "index": 78,
+   "name": "Moonlet",
+   "host": "sui-testnet.moonlet.network",
+   "epoch": 1247,
+   "authors": [
+    78,
+    78,
+    78,
+    78,
+    78
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 78,
+   "matches_index": true
+  },
+  {
+   "index": 79,
+   "name": "Coinage x DAIC",
+   "host": "sui-testnet.dzdaic.com",
+   "epoch": 1247,
+   "authors": [
+    79,
+    79,
+    79,
+    79,
+    79
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 79,
+   "matches_index": true
+  },
+  {
+   "index": 80,
+   "name": "Ruby Nodes",
+   "host": "sui-testnet-validator.rubynodes.io",
+   "epoch": 1247,
+   "authors": [
+    80,
+    80,
+    80,
+    80,
+    80
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 80,
+   "matches_index": true
+  },
+  {
+   "index": 81,
+   "name": "SenseiNode",
+   "host": "sui-testnet.senseinode.com",
+   "epoch": 1247,
+   "authors": [
+    81,
+    81,
+    81,
+    81,
+    81
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 81,
+   "matches_index": true
+  },
+  {
+   "index": 82,
+   "name": "Triton One",
+   "host": "validator.testnet.sui.rpcpool.com",
+   "epoch": 1247,
+   "authors": [
+    82,
+    82,
+    82,
+    82,
+    82
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 82,
+   "matches_index": true
+  },
+  {
+   "index": 83,
+   "name": "Chainflow",
+   "host": "sui.chainflow.io",
+   "epoch": 1247,
+   "authors": [
+    83,
+    83,
+    83,
+    83,
+    83
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 83,
+   "matches_index": true
+  },
+  {
+   "index": 84,
+   "name": "Studio Mirai",
+   "host": "validator.testnet.sui.mirai.cloud",
+   "epoch": 1247,
+   "authors": [
+    84,
+    84,
+    84,
+    84,
+    84
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 84,
+   "matches_index": true
+  },
+  {
+   "index": 85,
+   "name": "proofgroup",
+   "host": "sui-testnet.proofgp.com",
+   "epoch": 1247,
+   "authors": [
+    85,
+    85,
+    85,
+    85,
+    85
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 85,
+   "matches_index": true
+  },
+  {
+   "index": 86,
+   "name": "Cetus",
+   "host": "testnet.validator.cetus.zone",
+   "epoch": 1247,
+   "authors": [
+    86,
+    86,
+    86,
+    86,
+    86
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 86,
+   "matches_index": true
+  },
+  {
+   "index": 87,
+   "name": "SynergyNodes",
+   "host": "sui-testnet-val.synergynodes.com",
+   "epoch": 1247,
+   "authors": [
+    87,
+    87,
+    87,
+    87,
+    87
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 87,
+   "matches_index": true
+  },
+  {
+   "index": 88,
+   "name": "Nansen",
+   "host": "sui-testnet.nansen.ai",
+   "epoch": 1247,
+   "authors": [
+    88,
+    88,
+    88,
+    88,
+    88
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 88,
+   "matches_index": true
+  },
+  {
+   "index": 89,
+   "name": "t2000",
+   "host": "testnet-validator.t2000.ai",
+   "epoch": 1247,
+   "authors": [
+    89,
+    89,
+    89,
+    89,
+    89
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 89,
+   "matches_index": true
+  },
+  {
+   "index": 90,
+   "name": "Kuna Labs",
+   "host": "sui-testnet-validator.kunalabs.io",
+   "epoch": 1247,
+   "authors": [
+    90,
+    90,
+    90,
+    90,
+    90
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 90,
+   "matches_index": true
+  },
+  {
+   "index": 91,
+   "name": "KiligLab",
+   "host": "testnet.sui.kiliglab.io",
+   "epoch": 1247,
+   "authors": [
+    91,
+    91,
+    91,
+    91,
+    91
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 91,
+   "matches_index": true
+  },
+  {
+   "index": 92,
+   "name": "Mysten-2",
+   "host": "jnb-00.testnet.sui.io",
+   "epoch": 1247,
+   "authors": [
+    92,
+    92,
+    92,
+    92,
+    92
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 92,
+   "matches_index": true
+  },
+  {
+   "index": 93,
+   "name": "B-Harvest",
+   "host": "sui-pt-v.bharvest.io",
+   "epoch": 1247,
+   "authors": [
+    93,
+    93,
+    93,
+    93,
+    93
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 93,
+   "matches_index": true
+  },
+  {
+   "index": 94,
+   "name": "HashedPotatoes",
+   "host": "sui.hashedpotatoes.net",
+   "epoch": null,
+   "authors": [],
+   "err": "SSLEOFError(8, '[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1032)')",
+   "reported_consistent": false,
+   "author": null,
+   "matches_index": false
+  },
+  {
+   "index": 95,
+   "name": "Aftermath",
+   "host": "validator.sui.testnet.aftermath.finance",
+   "epoch": 1247,
+   "authors": [
+    95,
+    95,
+    95,
+    95,
+    95
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 95,
+   "matches_index": true
+  },
+  {
+   "index": 96,
+   "name": "iBriz.ai",
+   "host": "sui-testnet-validator.ibriz.ai",
+   "epoch": 1247,
+   "authors": [
+    96,
+    96,
+    96,
+    96,
+    96
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 96,
+   "matches_index": true
+  },
+  {
+   "index": 97,
+   "name": "NAVI Protocol",
+   "host": "40.160.22.248",
+   "epoch": 1247,
+   "authors": [
+    97,
+    97,
+    97,
+    97,
+    97
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 97,
+   "matches_index": true
+  },
+  {
+   "index": 98,
+   "name": "P-OPS Team",
+   "host": "val.sui.testnet.pops.one",
+   "epoch": 1247,
+   "authors": [
+    98,
+    98,
+    98,
+    98,
+    98
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 98,
+   "matches_index": true
+  },
+  {
+   "index": 99,
+   "name": "Encapsulate",
+   "host": "validator.sui.testnet.encapsulate.xyz",
+   "epoch": 1247,
+   "authors": [
+    99,
+    99,
+    99,
+    99,
+    99
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 99,
+   "matches_index": true
+  },
+  {
+   "index": 100,
+   "name": "Staketab",
+   "host": "sui-wave3.staketab.com",
+   "epoch": 1247,
+   "authors": [
+    100,
+    100,
+    100,
+    100,
+    100
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 100,
+   "matches_index": true
+  },
+  {
+   "index": 101,
+   "name": "Karrier One",
+   "host": "testnet.validator.karrier.one",
+   "epoch": 1247,
+   "authors": [
+    101,
+    101,
+    101,
+    101,
+    101
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 101,
+   "matches_index": true
+  },
+  {
+   "index": 102,
+   "name": "Cypher Capital",
+   "host": "cypher-testnet.juicystake.io",
+   "epoch": 1247,
+   "authors": [
+    102,
+    102,
+    102,
+    102,
+    102
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 102,
+   "matches_index": true
+  },
+  {
+   "index": 103,
+   "name": "Mysten-4",
+   "host": "lon-tnt-val-00.testnet.sui.io",
+   "epoch": 1247,
+   "authors": [
+    103,
+    103,
+    103,
+    103,
+    103
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 103,
+   "matches_index": true
+  },
+  {
+   "index": 104,
+   "name": "Suilend",
+   "host": "dfd910.stwserver.net",
+   "epoch": 1247,
+   "authors": [
+    104,
+    104,
+    104,
+    104,
+    104
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 104,
+   "matches_index": true
+  },
+  {
+   "index": 105,
+   "name": "Stakely",
+   "host": "sui-testnet.stakely.io",
+   "epoch": null,
+   "authors": [],
+   "err": "gaierror(8, 'nodename nor servname provided, or not known')",
+   "reported_consistent": false,
+   "author": null,
+   "matches_index": false
+  },
+  {
+   "index": 106,
+   "name": "TrustedPoint",
+   "host": "sui-testnet-validator.trusted-point.com",
+   "epoch": null,
+   "authors": [],
+   "err": "gaierror(8, 'nodename nor servname provided, or not known')",
+   "reported_consistent": false,
+   "author": null,
+   "matches_index": false
+  },
+  {
+   "index": 107,
+   "name": "Aphelion",
+   "host": "testnet-sui-validator.apheliontrading.com",
+   "epoch": 1247,
+   "authors": [
+    107,
+    107,
+    107,
+    107,
+    107
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 107,
+   "matches_index": true
+  },
+  {
+   "index": 108,
+   "name": "Coinbase",
+   "host": "p2p.87ac0d22-55ea-4244-a26c-7c9b163be4dc.sui.bison.run",
+   "epoch": 1247,
+   "authors": [
+    108,
+    108,
+    108,
+    108,
+    108
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 108,
+   "matches_index": true
+  },
+  {
+   "index": 109,
+   "name": "Nodeinfra",
+   "host": "sui-testnet.nodeinfravalidators.com",
+   "epoch": 1247,
+   "authors": [
+    109,
+    109,
+    109,
+    109,
+    109
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 109,
+   "matches_index": true
+  },
+  {
+   "index": 110,
+   "name": "Galaxy Digital",
+   "host": "sui-validator.testnet.validator.bci.glxy.com",
+   "epoch": 1247,
+   "authors": [
+    110,
+    110,
+    110,
+    110,
+    110
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 110,
+   "matches_index": true
+  },
+  {
+   "index": 111,
+   "name": "Chainode Tech",
+   "host": "sui-testnet.chainode.tech",
+   "epoch": 1247,
+   "authors": [
+    111,
+    111,
+    111,
+    111,
+    111
+   ],
+   "err": null,
+   "reported_consistent": true,
+   "author": 111,
+   "matches_index": true
+  }
+ ]
+}

@@ -1,0 +1,1014 @@
+{
+ "epoch": 1247,
+ "rgp": 1000,
+ "validators": [
+  {
+   "name": "Staking Facilities",
+   "key": "800000000bb1f6c37d7915055e9415598466c47b265b6bcf3760a341b3a8b5d16f9a2341ad2239e236b1a6a40795649f16cec25ed66ca9d6614394ecd3e47cdf586303a3ddb05d8fc0bc7c0c14ae4649135668b564c7f70e28883f466d5ec3cb",
+   "host": "testnet-sui.stakingfacilities.com",
+   "port": 9080,
+   "power": 40,
+   "index": 0,
+   "rtt_ms": 106.45318031311035
+  },
+  {
+   "name": "Birdai",
+   "key": "800000339f3c63cb8340260e85b68b86b4b1af43e2f1184342584c71e8e03cb371f7c867ff4409e80baee24fff3f66ac1227fd8bcfb64c3487c1b5c933981a38bd83b21ae8cbb407094ad8d9a6842f5c8a043d9cf06ffc7ab284264aa29154c3",
+   "host": "177.54.159.9",
+   "port": 8080,
+   "power": 23,
+   "index": 1,
+   "rtt_ms": 17.63319969177246
+  },
+  {
+   "name": "Blockscope.net",
+   "key": "80127c70c3276c01a2f5db6dfed4e8ab25cdb27c4734ca4a78c363393a5a3d57bf96fd7bb980b79ac4f4e17591f76ad404ff6ed99c6fe4f2090b81a23b53a2318f6455beff6c5a79bfe10d20bb28dec58bcd8d950bf426bc6a0f755251983df6",
+   "host": "testnet.sui.blockscope.net",
+   "port": 8080,
+   "power": 326,
+   "index": 2,
+   "rtt_ms": 34.11984443664551
+  },
+  {
+   "name": "Ankr",
+   "key": "811c9dec82ea97c08154db6f11ad28b153d59402c717084fccaa2577770a680a0bd3f8d3ab3ad1a375b5a2accecb9060011853b8163fa10d5db88f387938592a595aa776ec4b03dcf4b60d738a1f501e3faa339e7c8052b633e04f0d17ceed6a",
+   "host": "sui-validator.ankr.com",
+   "port": 8080,
+   "power": 40,
+   "index": 3,
+   "rtt_ms": 73.84014129638672
+  },
+  {
+   "name": "Restake",
+   "key": "81626d03fc71338d6e72b3fdebd91150124b0c0631754f9dcf3128d808eab396fc7c96a0b69da1df8ee44ad3c2f55f430dfdb1829408adab481ac439b96804889349d12fb33736c83c6df42e249d6747e905d7968df752351d296c34d29f9cbd",
+   "host": "restake-sui-test-00-0.machine.restake.tech",
+   "port": 8080,
+   "power": 40,
+   "index": 4,
+   "rtt_ms": null
+  },
+  {
+   "name": "AlphaFi",
+   "key": "81d8c0794d386b3daa9ca631761f6be0e9f8ef337ab14f3a61a30e356818257d7758dfa33c67c9aac0f0e8d0f75ab0470a55d0897da2df86b57b40ef2d832bee15bfa8fbd2995d72b4b828a25e1df0d70c4b6fbca3a08d3139e25664a517d92f",
+   "host": "validator.testnet.alphafi.xyz",
+   "port": 8080,
+   "power": 47,
+   "index": 5,
+   "rtt_ms": 52.797794342041016
+  },
+  {
+   "name": "MAVAN",
+   "key": "8268848189240173653c8e03c2bfa33a6aeb466b058ba8e780251dda4fc0d46858d14aeb83aad7a25a339a794900e48a0f2c82b3009d182e8905a56d6fedde02ad31e0d11c2b355ff2102f2abbb8c613726eb90c7358be362003b4a43aa7f436",
+   "host": "15.204.104.33",
+   "port": 8080,
+   "power": 23,
+   "index": 6,
+   "rtt_ms": 81.50196075439453
+  },
+  {
+   "name": "Scallop",
+   "key": "82867634cde0c4575345259942ea50f631ca54a1adcea8abaa18a16ac0edbd66f0f8836404dd1f3a2c783fab5b1db55b0200d9d6459973041d1169aa435e90a93ae127a7dd4e28cd334f5b70af5e6420aa32c64c115ba35d40feee4779183284",
+   "host": "validator.testnet.scallop.io",
+   "port": 8080,
+   "power": 15,
+   "index": 7,
+   "rtt_ms": 123.32701683044434
+  },
+  {
+   "name": "Nodes.Guru",
+   "key": "82a23f7fb3e28004dae84d7604939f6d2b010a03ff1c55639b202488fd6fcd7db0f00165895d988df394820cb245d6460fda5d72941be4c9079517efd615e93ab2ec298a8ad3ab4efe10f7ddec005116a5eef845a5169e7ff105a497d7653b09",
+   "host": "sui-testnet-validator.nodes.guru",
+   "port": 8080,
+   "power": 131,
+   "index": 8,
+   "rtt_ms": 53.31993103027344
+  },
+  {
+   "name": "Kiln",
+   "key": "8358b8c0f8b83267ac09eb9c3cfdfe19fe5afb900a70da3fd262e8d5d62c7ba5a6a346b3f986d6b8c1c013c076a5c69712dc3d7b638165d52a7a3151c63deb07d79644a8b9f6ec7379996f147a59e88da3eb4da10a2c74b97c2fb070e09de916",
+   "host": "validator-0.sui.testnet.kiln.fi",
+   "port": 8080,
+   "power": 32,
+   "index": 9,
+   "rtt_ms": null
+  },
+  {
+   "name": "Swiss Staking",
+   "key": "8429dec49a2ba2b7541b91417d04a8de96a3b9f8b3a5f0b91c5f40caca987fd93c7cc4e9228460c2e8175962ce260c2107b0825fc7a7a722d4b647ab91f622d2d7f83117c6fce465b4c1133ff732885dee70804ea4ed2f24f687dfcb98a7eba8",
+   "host": "sui-testnet.swiss-staking.ch",
+   "port": 8080,
+   "power": 58,
+   "index": 10,
+   "rtt_ms": 112.1969223022461
+  },
+  {
+   "name": "Allnodes",
+   "key": "84ddf75f5b98a8437d21c94132cd7f9c80063d06ac65e3c1e591979647ce477ba12d063c3aee7bbbdbbabc49e446cab816c8a6d193de5c13331b8fa549ac0c4c14ce4d147645785fce9d1ce70ad159ed29ca5d718ccfbbc138741689a38268cf",
+   "host": "sui-testnet.allnodes.me",
+   "port": 8080,
+   "power": 58,
+   "index": 11,
+   "rtt_ms": 96.06695175170898
+  },
+  {
+   "name": "RepublicCrypto",
+   "key": "8520574f9aefc4fe09008eedd8062d59ee910f187fcca7cbe4ac22aff09fb0d31c774ed99b25f5184cf6721de99ec41e06336a05c5a9aa85ea3cc7a42aec53988d4234eac8727fcb7ba2ada40697e0be25743fdd0eaf945871d648637c75430c",
+   "host": "v.sui.testnet.republiccrypto-source.info",
+   "port": 8080,
+   "power": 32,
+   "index": 12,
+   "rtt_ms": 88.04178237915039
+  },
+  {
+   "name": "BartestneT",
+   "key": "85c78d0ac130b887fedf2cad9afeef7cbc1a10744b54b7c28bdadaf74e6cef96f074a31edbf4719b6a17325ad7148e9a115a93171e9e02b93e11f84967648eb72fea4c7f2387f80196693040722deb53ae33243e26a2401ff3d7b470c395253e",
+   "host": "sui-testnet-validator.bartestnet.com",
+   "port": 8080,
+   "power": 130,
+   "index": 13,
+   "rtt_ms": 82.81707763671875
+  },
+  {
+   "name": "Ahoy Validator",
+   "key": "860e61160013e38d984708472362d74487525978c9ab1fcc8594683ea7a88a295e3f9f85e8f717c25c8b18791c5450810bc2e96184a005f34dd120e0838e0a1f9430a094b07a9a493a08ddb5423914fb8fb2e21b130c87d23599ac95c61eadb4",
+   "host": "ahoyvalidator.xyz",
+   "port": 8080,
+   "power": 163,
+   "index": 14,
+   "rtt_ms": 11.636972427368164
+  },
+  {
+   "name": "Latitude.sh",
+   "key": "8618abdcb848cb4703f153876e77b4f3996932841ebb4f0c686c63036c48e1fbcf9e79385ff18a518d75ac709e8fd6b515a05454626dc039b200e0b39b5267bd36823f5e2ebe8b8442d2fd5388dc4cb15dfd76bb6d9d5918292a5c99fb6e686d",
+   "host": "sui-tn.delegate.sh",
+   "port": 8080,
+   "power": 82,
+   "index": 15,
+   "rtt_ms": 83.48417282104492
+  },
+  {
+   "name": "Figment",
+   "key": "878ddc6c92c0f23968db488f1709f6bb874d63a56e25d1eb2ecb9aa4c037c366c2f052eda6705728ff58d4e54773d7a003c131ef702884ef70f908a95af66d94175d1079005cf56985aaf906f204e82ee112db85bcd18dd5ba70df453e761b56",
+   "host": "sui-testnet.staking.production.figment.io",
+   "port": 8080,
+   "power": 60,
+   "index": 16,
+   "rtt_ms": 20.602941513061523
+  },
+  {
+   "name": "Mysten-6",
+   "key": "88737c6d4f9e93c181ba440cd32b0e974c01fdf68d74d0048ffbd32b91f104ece9be61145674b2dd4a65e082f11fabed0aa8596a22d4a52c58d17c2efc840de9aeb7783bf7ab7068cb384ba8c9a38ae6971218071a8e6f7ec90b37ac42640a69",
+   "host": "lhr-tnt-val-00.testnet.sui.io",
+   "port": 8080,
+   "power": 357,
+   "index": 17,
+   "rtt_ms": 80.67798614501953
+  },
+  {
+   "name": "Overclock",
+   "key": "88a71d3023e18cbfb3b0f9896ec6b0ca93656a6483ae3c3154141f5ad289c6b00e90176f14e951dd7d8b2c52441ae3bb159517e7f02885a549b511c13457e21ea5978a9cb0052c3566e0501fa4cc42779ee47920eb740ef0713045867b8853fa",
+   "host": "sui-testnet.overclock.run",
+   "port": 8080,
+   "power": 277,
+   "index": 18,
+   "rtt_ms": 17.599105834960938
+  },
+  {
+   "name": "Juicy Stake",
+   "key": "88cbeb00ed4e840f2c4a94bbae21c66de4ba6ab3d56da33f5347439b6b32ae1a61ead3fa0d6f6cb581fcc33f2987b256096fa8f14966ad84ca48de3ff354a3818dfea43bff6f1bc93b18f5a0a2bce1514801c4bf36f125ce645da4f40b347f71",
+   "host": "juicy-sui.juicystake.io",
+   "port": 8080,
+   "power": 32,
+   "index": 19,
+   "rtt_ms": 58.90822410583496
+  },
+  {
+   "name": "Stakin by The Tie",
+   "key": "8955402422336a82d3d1df8cdb07f2582bc24873e78178941f4caa9a1ab206cd234071093e0fca100d6d494361f07fd0015c4948aafd5bcf6a3a26d69ade320554df0fdacb20f42e000c988bd8165895313b70c73394169cdc2014cc29e23d29",
+   "host": "sui-perm-testnet.stakin-nodes.com",
+   "port": 8080,
+   "power": 32,
+   "index": 20,
+   "rtt_ms": 86.41314506530762
+  },
+  {
+   "name": "Omnistake",
+   "key": "8aed639d89917c81906072ef44cd4106433cfd3f627c62030e972ba0df109270a3926d31486934345515ed662494581608147f7b326ffbfe6a32439742b1d12854f78fe0a1df91a4b4311caac6b2016b00667492c809bdbe1ac86c5c63741d1b",
+   "host": "sui-validator-testnet.omnistake.com",
+   "port": 30090,
+   "power": 32,
+   "index": 21,
+   "rtt_ms": 20.219087600708008
+  },
+  {
+   "name": "Blockdaemon",
+   "key": "8b0fdc63a3bf0cfb92c68b63e971789a2a852a30c1434d0a1c03803d3e1f45e202857c76d47bb3f8d6ac8870e232a399140223abe6ffe0a00af0c73ec11e2dead06d474d9d56ffe796441f6481b72b6da4f50f6fbb86d5e996140bc9a43a736b",
+   "host": "cg8ofj74s963mqojg8sg.bdnodes.net",
+   "port": 8080,
+   "power": 57,
+   "index": 22,
+   "rtt_ms": 216.1412239074707
+  },
+  {
+   "name": "Nelrann",
+   "key": "8b999b8d3c51e7fe295f1e756bec815736c45fd69ec41eb447b39e0d44cce4409a7749b1484841690b25fc21633a4610105e9811fa577e62d2c32868b07ff01e7d66a537ddd2cada5a52ca08f2ae480b258a71f02b33b8b93fca9489b3a03856",
+   "host": "sui-validator.testnet.nelrann.org",
+   "port": 8080,
+   "power": 40,
+   "index": 23,
+   "rtt_ms": 11.501073837280273
+  },
+  {
+   "name": "Stardust Staking",
+   "key": "8c7771fefa014c3877cdb0aa2546f53b0cce73aaf67345093a494f56e9a1d862b39773ef091fd57e6349887679575f171199eda9cff439ddad61c97900ee0d2172768e8c9df5ac07996c0f9a0d7c7d4b6268ecd628e5930a544c51fb8b7fb9f5",
+   "host": "sui-testnet.starduststaking.com",
+   "port": 8080,
+   "power": 40,
+   "index": 24,
+   "rtt_ms": 82.1681022644043
+  },
+  {
+   "name": "Chorus One",
+   "key": "8d63c33d2fce402fd3357f39f4c224855a34cf17563714b62d9e7791ea717b7fdc2fb2ec2c9287773dbbc5d55dd973ac172243d0d1b0ae28786a133b8929e0d79bf44d3eab92468f0d0e2095dc672679b8635348043c398564ff5737ecfa3fd8",
+   "host": "sui-testnet.chorus.one",
+   "port": 8080,
+   "power": 155,
+   "index": 25,
+   "rtt_ms": 99.91097450256348
+  },
+  {
+   "name": "hoh.zone",
+   "key": "8e757a5177a2a08cacafc4f40c256b32dff98e6e80b463a0d2b4b1c58947e02a4d8708a6322632a32d2d46d60eca079e03628d5406e32f30bc83755884902e4eafbf05c9d422692232cbd37d1881eb9e229343ab9d3b6701d7f6ae7896c8db92",
+   "host": "sui-validator.testnet.hoh.zone",
+   "port": 8080,
+   "power": 24,
+   "index": 26,
+   "rtt_ms": 110.26287078857422
+  },
+  {
+   "name": "Mysten-1",
+   "key": "8e7acf39a2bac8104c82e14719f4abf586a77d124be8e7df83637c31f389c2198e69f371105d07fa1acba509ee0ec28b00f48a244d54efbaecdac3dbf7d5756be2da2fed49cf2c95ce7d2406216e5cdaf10cf5aedd0eef3a0509b9a25184bd5b",
+   "host": "icn-00.testnet.sui.io",
+   "port": 8080,
+   "power": 317,
+   "index": 27,
+   "rtt_ms": 254.37593460083008
+  },
+  {
+   "name": "Node Guardians",
+   "key": "8ea7ef8a89aa04c975109cbdd5cc5a9bb02c8962c62e5a0c3bc6656891365179978c7e00b474177cffeef62b13533a480a063843eb5d2a71c25e2ab8413cf4d089a81a8fd97d07c320b8e738cb93a5f2bb021cf06c96a43c30f8f8ffff1e3298",
+   "host": "sui-testnet.nodeguardians.io",
+   "port": 8080,
+   "power": 32,
+   "index": 28,
+   "rtt_ms": null
+  },
+  {
+   "name": "Everstake",
+   "key": "8ec4bc5980204e24dbe6841083a4423d47d11cc41aac968cafcfa36300f188f09dad6f8f1cf02b773f8b07ccfd61b69a1096d7a29a2fff55c44b8c04a6bb1680ba2959bf8790f2de1b61cf48185fa06384d9921284a8106a51b9627751e67424",
+   "host": "sui-test.everstake.one",
+   "port": 8080,
+   "power": 40,
+   "index": 29,
+   "rtt_ms": 92.41795539855957
+  },
+  {
+   "name": "Luganodes",
+   "key": "8f369346e62325060e5aeea249a0afb557ffebd02b37611e9e526d84f7711ca67270cfa3303427b147e0dfe8f144d3fc0daa974bc17f98f54c8f6b99f679cc56fbedfc642ebd7310e742f142400ce2e516b6f9740597c9bc53ad718da0e5979c",
+   "host": "sui-testnet.nodes.lgns.xyz",
+   "port": 8080,
+   "power": 131,
+   "index": 30,
+   "rtt_ms": null
+  },
+  {
+   "name": "Haedal",
+   "key": "8ff5bde0a90d2213e76ec8afb25b2a887015c2e5a1d417bd40c39eb47ed09967de1c6474f7a42a804cb76f69b5e3814015fca50e308cbc739498f32a794c7403f931acdd6d26de5846d12989a32289fdfbb350372eae3e96a4592a07a44efc93",
+   "host": "testnet.validator.haedal.xyz",
+   "port": 8080,
+   "power": 46,
+   "index": 31,
+   "rtt_ms": 32.10091590881348
+  },
+  {
+   "name": "BlockVision",
+   "key": "912abfd20cb29c48cbcbf2114392127995e8581cc77472ceb4975a72c6633da07fa3566f5ef327971cb359df94bb97c20f6031204683cae31017495ca28f620c90690538605a0b67eb24c23d2f805718ce5f5581b25ea15e23df92e716d9e44a",
+   "host": "sui-testnet-validator.blockvision.org",
+   "port": 8080,
+   "power": 57,
+   "index": 32,
+   "rtt_ms": 20.41006088256836
+  },
+  {
+   "name": "Surf",
+   "key": "912adbe530122304b42e45ba1d942a9fea6ad786a157a646e9b2e9e51613cedfbc3ac895b9575ca985a66c15f085d74d0a117133e9213f2eaa8090623e5e3a305e3052e6ffa6a3f7b5a6d5dc759c0bdbcd7ec704fe85d895e2f2a943b0a56c90",
+   "host": "sui-testnet.surf.tech",
+   "port": 8080,
+   "power": 47,
+   "index": 33,
+   "rtt_ms": 86.85016632080078
+  },
+  {
+   "name": "HashKey Cloud",
+   "key": "916349736beca810b67adf1b2006e912744d036c277d09ea6c663d4222d081afce7a3e0a535c042ad7eee236cd0d493e00e79dec8d0bdb6390899c4284a81fcfdee956d2ad478e82d5b5cee8c7c74388326587d604d8b62fa33122c2c074080c",
+   "host": "sui-testnet.hashkey.cloud",
+   "port": 8080,
+   "power": 32,
+   "index": 34,
+   "rtt_ms": 99.26414489746094
+  },
+  {
+   "name": "Shinlabs",
+   "key": "925efa864839b7c068a625d5aa38a285353c883af747bafc688d33fa115a1704ed40c643f4f1d75e9c1c27f89a571d9f08d2948260cb934ce8820abfe8dc6320226efb469ae31655d3b74c0412ac446166ae6ec1cca09faa0d0a3bb97bfe3fab",
+   "host": "sui-testnet.shinlabs.xyz",
+   "port": 8080,
+   "power": 131,
+   "index": 35,
+   "rtt_ms": 114.70198631286621
+  },
+  {
+   "name": "MRGN",
+   "key": "92db6c844cef2898791446ca18a9e3b9417bd1e09ec726039213d48cf1ace79bcb9a1b81af3122ba556d7412406488ae189b093279a4cae6ddb9afd5310ebc69db00448c0bb52a08fa4e62b50d56d331cddad4d84bdba1dd1fd1a7cae0c98338",
+   "host": "fengsui.wtf",
+   "port": 8080,
+   "power": 139,
+   "index": 36,
+   "rtt_ms": 28.225183486938477
+  },
+  {
+   "name": "Imperator.co",
+   "key": "9421e83157cfa5b88658ebae277b1bdcea3d531035933f8a8d200a4b86da4b658740b03aaca140d0ec0f249438404e0f148ec5113dc7a6d09245d1e2df2dc88b9596ae78969d557a6f38c0bcb2aa9213500348db5dab271d33841f5bafa7b583",
+   "host": "sui-testnet.imperator.co",
+   "port": 8080,
+   "power": 40,
+   "index": 37,
+   "rtt_ms": 101.38487815856934
+  },
+  {
+   "name": "01node",
+   "key": "9469e6147d17f90e0269281fcaf4122717821008614f372303fee4dc8fd2f6195fcc62081a5a1eb239bcb24aa82037950a358e5e73e2a6be7416f9b483e94d5cbc076b575273e489ac003867684dc2821f258cc07429bb0189550f9a4f3066bd",
+   "host": "sui-testnet.01no.de",
+   "port": 8080,
+   "power": 57,
+   "index": 38,
+   "rtt_ms": 123.81196022033691
+  },
+  {
+   "name": "Hinode Technologies",
+   "key": "94b77c994ea73ec2b62e0b4068f5eb727a6393f2c061e2f5151bcae36ef9bb8f5356a99c6f994a79f6bb71ad3e20d0df083fb946bd4cc93e6dbf7a772325978703c88819c3392f47949b8bf4919e27c021191e0a562565e590cdc6223350be1b",
+   "host": "testnet.sui.gu3.jp",
+   "port": 8080,
+   "power": 32,
+   "index": 39,
+   "rtt_ms": 101.23515129089355
+  },
+  {
+   "name": "Mysten-5",
+   "key": "94d2b6b375ab6b59e018013532d8154aad6a6e33163128be81eeecac2b171cf455715661632f8188758df26dfb33fc6c01df1cf6f0f311237c034f305390506a1c17de79b7d2783e0215f7e6e7828f57d31dde55247be52ef84467010f0b9323",
+   "host": "ewr-tnt-val-00.testnet.sui.io",
+   "port": 8080,
+   "power": 357,
+   "index": 40,
+   "rtt_ms": 31.590938568115234
+  },
+  {
+   "name": "n1stake",
+   "key": "94d322542b897222c9dbc1d7f5f057d66398c7146c25d48cccb1af91974103953575169d33b202a8ae90172c6382a13e04b12fd98412a644af21d656016f66d48391947d20bfb89a6ed9d5b15ca33c33f2b9787017d8ea50303eaa46cf50305e",
+   "host": "wave-3.testnet.n1stake.com",
+   "port": 8080,
+   "power": 130,
+   "index": 41,
+   "rtt_ms": 81.8181037902832
+  },
+  {
+   "name": "[NODERS]",
+   "key": "94e9ca44a0438b215dfadbd6ca99c385ba977b6e83c245f0a2a75b711b23947fde969b47fa6e8dcf00d397aaab9359860de414b9df054d1edff39c7ea1c5c656e9d10a7a3360101006f55aa8a3d95eab4cf11a10221171ab577ba0e1b8355af1",
+   "host": "sui-node.testnet.noders.team",
+   "port": 8080,
+   "power": 40,
+   "index": 42,
+   "rtt_ms": 100.0819206237793
+  },
+  {
+   "name": "Obelisk",
+   "key": "965e3cfb7d65c20a094db5bcadae90d0b6f658e5e8d292c2f116fb692830691d850b0b6d525dd620464e7eaded6b9c4803a2fba0eb8df1b967b35781831f7228c61be38f6183ca1859efc7ea7175d5868e900a3f6fad8829d8dba654b1584fe9",
+   "host": "sui.testnet.obelisk.sh",
+   "port": 8080,
+   "power": 32,
+   "index": 43,
+   "rtt_ms": 19.355058670043945
+  },
+  {
+   "name": "BiXinKelePool",
+   "key": "981c537696dfb57935a4f5cf2305d3d89452d1c541d09a8b43d623aed4ce49dede8d7c780742045ed5638c9632e7a1570b617a8d340f55c6c73cce06c7dea6600df95be813ac4008330752c80d60f7ff486e94d0713a8917039bdcfdba92c630",
+   "host": "t.sui.kelepool.io",
+   "port": 1501,
+   "power": 58,
+   "index": 44,
+   "rtt_ms": null
+  },
+  {
+   "name": "FP Validated",
+   "key": "983772a96bc18eff558e10dd154bfb8aca344160ae09904a8ea8b71f9d78b6269c66964d6e025e2364d95c67eb0cfb390d7fad88df1f507b08eb73e2cbec407c3db685934939357ebe9efe23dc8ff80efa2fcc0b948b7dd2af6c715aa7c7ab0d",
+   "host": "sui-testnet.4pillars.info",
+   "port": 8080,
+   "power": 40,
+   "index": 45,
+   "rtt_ms": 101.8669605255127
+  },
+  {
+   "name": "Forbole",
+   "key": "988a3b76ff27afcc82964187df513a2da01c41d3aa903336a14b15c28bdf34acda7bf7bcbb3b0194fba3f32cb1a26de7125fece5d5e3adde34ba8930ab40a695c47def1e8875e6bef433ad325c46176654fe8e8efe883dfc427edf3e98c7cb97",
+   "host": "sui-testnet.forbole.com",
+   "port": 8080,
+   "power": 32,
+   "index": 46,
+   "rtt_ms": 84.03587341308594
+  },
+  {
+   "name": "Staking Defense League",
+   "key": "9944f42c3a11f1ed0cf2d329f9ad463b496a6ea34dd6c9d00b7b64e697137177f9387e7343259a64909169f808dcd6e70fd5bffa5fe4a25e433caea178206d964d670401ceb415fadf21deee0b1fad5c7730ff2fb08db4ad65c3f6b2d51e2627",
+   "host": "sui.stakingdefenseleague.com",
+   "port": 8080,
+   "power": 40,
+   "index": 47,
+   "rtt_ms": 124.23300743103027
+  },
+  {
+   "name": "Alchemy",
+   "key": "99ba4edabd780dff8ee9f2783aed86ac5e036d38794c101a64f9979b728badf1c1d4bac1b92f7bd890c6a80774742e9e152ba5832b50cf06cb7f982a29556419bd85b51b441cdf06e99e2df4efacfa4f4cdb37008d53b9061feb749e880bad79",
+   "host": "sui-t-v.bwarelabs.com",
+   "port": 8080,
+   "power": 131,
+   "index": 48,
+   "rtt_ms": null
+  },
+  {
+   "name": "InfStones",
+   "key": "99ceaedfe61869be22c7f91c7c94512c16ee6a66f54e719d3b2e888a2666617fc2afd638f4f3de15a874f8a0f693168616725865efe2efd52b1d77bad8cc8ebd18e18efc02d688e14338f9b7cc8b500efa23989a2ad52754b0003a183bade731",
+   "host": "testnet.sui.infstones.io",
+   "port": 8080,
+   "power": 32,
+   "index": 49,
+   "rtt_ms": null
+  },
+  {
+   "name": "TradePort",
+   "key": "99ed93396b169c2845612179823e3ffd9d8890d201b7bee3113fdb1b593695989e1727b9b4b2751a7e59ad2a33b3543c0b2af97854101b857b3d5b55078e39e09eeb5ce896b13df06b46202cb10bb03e75fdd105343a8e2b31d82299b04c5912",
+   "host": "sui01.tradeport.xyz",
+   "port": 8080,
+   "power": 23,
+   "index": 50,
+   "rtt_ms": null
+  },
+  {
+   "name": "Sentio",
+   "key": "a0251ac14782a1ac12678beb5184493ed1d81b94f888f1ef86da81f0e688e4d98be0d46781e76981ad5bd380e5a711df018c6ded2a296dfc85a9f44fa1da1a1ce522373d31c2df04047899c8163d0fa9aa0402165c05a064e8da00085c057d75",
+   "host": "sui-testnet-validator.sentio.xyz",
+   "port": 8080,
+   "power": 356,
+   "index": 51,
+   "rtt_ms": 81.9699764251709
+  },
+  {
+   "name": "GiveRep",
+   "key": "a041086f3b4838b73035273bc438c9871048eff7095f7989888cafbe130b0fa52ab6632f00751feac25900c3aa54c78404ed87122078d3aa9d442cc1689e970887d73153f9925475745ccff4cdb63d1cbba59c5960d03a11e73873bf0e0d5cad",
+   "host": "sui.testnet.validator.giverep.com",
+   "port": 18080,
+   "power": 23,
+   "index": 52,
+   "rtt_ms": 199.98884201049805
+  },
+  {
+   "name": "Kraken",
+   "key": "a20eb503897e35e4275b212ac580cd53a58e4d3d8aa48d8f322929bc2bffcdb003dfbb5074ed60de267097f86e8488e015f9dbc965322001a8863a074f5569c088faeb12a6769541868019448c2e402c7813c045faada524b3b57128aa379348",
+   "host": "sui-testnet.eks-ap-northeast-2-secure.staging.staked.cloud",
+   "port": 8080,
+   "power": 40,
+   "index": 53,
+   "rtt_ms": 214.11585807800293
+  },
+  {
+   "name": "Certora Validator",
+   "key": "a231c35f51cc7ed91c727ee8100de67468bd8004949aadf8325100656a6245420618924469ed4ff9da862c69faee40db03801ba2b9e6d90a7c084338f1f4c3f7eb681c42e0f7cf8b366ff64d51707b4cd8b8c31cb58c4b58d716ea741f533663",
+   "host": "sui-testnet-validator.certora.com",
+   "port": 8080,
+   "power": 23,
+   "index": 54,
+   "rtt_ms": 99.7931957244873
+  },
+  {
+   "name": "Suiet",
+   "key": "a24eb782e05a02db40acd235756fdd9fafa6d082733bf65f55bfbdf2a0442aab4b193c4874edad51ebcf2f74adb6dac116dbdd37e61c1133e73a1244b99e1268742a992654b9441abca48b0409795ece619a6d1a237ed8ac9a3e10271d2440c0",
+   "host": "testnet-validator.suiet.app",
+   "port": 8080,
+   "power": 48,
+   "index": 55,
+   "rtt_ms": 98.94490242004395
+  },
+  {
+   "name": "Chainbase",
+   "key": "a2d3bfd0df47c13b0ade397335ee37cbe38856125028a4ce9e9c341bd77b44108b6a756adb99e6e3ad9b5a8447bd3b660681d5f35e1a11972f9c63f0188b6804e1f7868e8b08ee9ff1f4e136217500c5ee546a714c49d35d03552a9c4c6b257a",
+   "host": "testnet-validator.sui.chainbase.online",
+   "port": 8080,
+   "power": 171,
+   "index": 56,
+   "rtt_ms": 102.13804244995117
+  },
+  {
+   "name": "MIDL.dev",
+   "key": "a2e560a2c0e0bf323a4704bcfca37bc12bb15ec7a90d63dadff7411e4ca2845724a09633e5861e551625ca84e6ea6e5a00d83b70219b735060987accc75918b78c91e2e807db34f139002bd83702732a37f7e78fbc7454583642774abd2b2552",
+   "host": "sui-testnet.midl.dev",
+   "port": 8080,
+   "power": 82,
+   "index": 57,
+   "rtt_ms": 86.67588233947754
+  },
+  {
+   "name": "QuantNode",
+   "key": "a373ef7ed4d9f623f8fa5dd371c198c6805aee14f9d759284301ca7f17e1b6028ca136b6a882634aa4e60d29c97cf71e128df404b2a40f1c8c494772212e466ba8607ea0bc632c9e8a2e96c264756e818b8d94056d99a14e18337cf82564b8b1",
+   "host": "sui-testnet.quantnode.tech",
+   "port": 8080,
+   "power": 32,
+   "index": 58,
+   "rtt_ms": 76.81083679199219
+  },
+  {
+   "name": "Bucket Protocol",
+   "key": "a3d5df774db1bd91af74bc024a5260db4120bacfa0680f05a1e30b72996948c3717713689ad05f1c163fc35e727d883e1255bf68d89641074a6185209a25f328fec70a2326cb97e70a35ba265d6db026f86225eb9763f817fa7355b3c38737af",
+   "host": "validator.bucketprotocol.io",
+   "port": 8080,
+   "power": 47,
+   "index": 59,
+   "rtt_ms": 100.38614273071289
+  },
+  {
+   "name": "Brightlystake",
+   "key": "a44fab99f11b94d0ebdc99b0850e3ad46b6262672047ca7fc097e7273eb0c49e6dbaed723a97795b5712aa9f704c95de13ac926d687929293e13e98df1e1606c77c67362ddd4b65575646ba9b63b0804934ca5d61ef95f42b1b9a08dc277d27d",
+   "host": "sui.brightlystake.com",
+   "port": 8080,
+   "power": 40,
+   "index": 60,
+   "rtt_ms": 11.946916580200195
+  },
+  {
+   "name": "ZKV",
+   "key": "a47edc65f58a589d7b2279d752c4ac383bd302db14c5ced29cdd928c6600f8f326d914058dc7b063431f0b3e1a45dc430b74dc69803f9045e8a9de7f105422e0afd1410d9f776c62393f56fa6c366dca995326b188d9863e496c23e8de201f4b",
+   "host": "validator.testnet.sui.zkvalidator.com",
+   "port": 8080,
+   "power": 48,
+   "index": 61,
+   "rtt_ms": 108.24894905090332
+  },
+  {
+   "name": "Lofi The Yeti",
+   "key": "a573434d62f9ea54b3a3c905c5fff6c0d4dff312c0e75b3780a39cc1be1221f7f318609c939b964e992644f5507010031315f6f053b49f74348fa0119ee663540310a4cda1fdc12d609b45339bca85eabbb3d9f641fa9759223577e2f577ef01",
+   "host": "lofitheyeti-sui-test-00-0.machine.restake.tech",
+   "port": 8080,
+   "power": 23,
+   "index": 62,
+   "rtt_ms": null
+  },
+  {
+   "name": "Artifact",
+   "key": "a6f2251267b48c73e3af93bfe106154f682c289fb7e1a68f71c18d1d4e73b58ea8c35a717251bcd81760495f5f64263e0c494bed20e5c9544c18d44cf3971a02c41e9cc23a19d33963b99442f5509ca9d256fc95ba8bc11f7ff478c7e29c7558",
+   "host": "sui-testnet.artifact-staking.io",
+   "port": 8080,
+   "power": 171,
+   "index": 63,
+   "rtt_ms": 47.846317291259766
+  },
+  {
+   "name": "Astro-Stakers",
+   "key": "a7034f3f0f86bd932c6a6bdf33c15ffbf533ccef2aa21ca9fb320f9d930a1353fd2d828aa56e0fed78452d62cd15dae912c14445bc371bb107514a701607034ec4cf0ec0686d35e1575a933d22182c058687966fc226c9dff24f04d6eb9cf14a",
+   "host": "sui-test.astrostakers.com",
+   "port": 8080,
+   "power": 40,
+   "index": 64,
+   "rtt_ms": 136.16013526916504
+  },
+  {
+   "name": "BLRD",
+   "key": "a72513a8c86b157dd4d45a92ebacda0560d65889424de61370ffcbd0d914f7af9828a648a9f1e370db677c81f3df6e701961080b2105c310a5661c79c8e57357acc647bb67a13c98df4a4eade0f24f7ac1a2910ffb6460033c68762a5f5ee642",
+   "host": "validator-sui-testnet.blrd.inc",
+   "port": 8080,
+   "power": 32,
+   "index": 65,
+   "rtt_ms": null
+  },
+  {
+   "name": "ContributionDAO",
+   "key": "a83bf219e7fec6f16f022aab41b35a32358ec37017a6fdc6d63e4cc74b6a0a04b61a9d1d217f5713e0338e2a4e2767ff18e9b53ecc1b65c86c94f0b2bc75a0d672bef0e85beb0b0aafbed1fd9596f2c6167be54f81c88653b309220a9b9bf18b",
+   "host": "sui-validator.contributiondao.com",
+   "port": 8080,
+   "power": 326,
+   "index": 66,
+   "rtt_ms": 110.260009765625
+  },
+  {
+   "name": "DSRV",
+   "key": "a85d5addf0db51aa9983461cce93fa8a9fe585124c356261a2e85b20fea1dafe65d3002a8fbe0b081ec2ff4ecf2aaf79055ce3ef1a9c9bd5cfc1cca7d163d992cc3fd41823c2d0bb8f763483063daa5348bdb9e9341d598db71a6a4d29e73c4e",
+   "host": "sui-01.validator.dsrvlabs.dev",
+   "port": 8080,
+   "power": 212,
+   "index": 67,
+   "rtt_ms": 88.86003494262695
+  },
+  {
+   "name": "SyncNode",
+   "key": "a86c164cc93f6b333bf7418e719551c63943bfbf30acbb63862a2bc0e9b2fdde1c610e821d8dfe0ffaa1447dae5f32b405587928b0fb64dd41c821c2bcdf91ba2208beb69057e38ed0de44bd0fed1bf5a6274fd71f4885f5d2eb350e28153f89",
+   "host": "suitestnet1.syncnode.ro",
+   "port": 8080,
+   "power": 40,
+   "index": 68,
+   "rtt_ms": null
+  },
+  {
+   "name": "Ika",
+   "key": "a881dbb8ef24aa135eacf800076aabc7450fd4abf2c94a4c56e9aa59e523269f6da5c6a3721d544c81dedb0400ad931005e7360b94da725ee6c1ed454337d48107552b9033cdd6e31e7e65948478bf66cf2a3fe2e95ccc84fbc4fa20b81ddcb3",
+   "host": "ika-validator.sui-testnet.ika.xyz",
+   "port": 8080,
+   "power": 47,
+   "index": 69,
+   "rtt_ms": 84.79785919189453
+  },
+  {
+   "name": "P2P.ORG",
+   "key": "a8912735ad58504fe56525f18bb02399c565faaee79da4585536450bb417bb90b98574f6b22c9d684222584ad56d4e50169e6e959fb1214d46ebb2f3fffc33bc0f3b50ff03861fb846d4fadfefa8edfde55118857c749be714ceefea161983f2",
+   "host": "val1.testnet.sui.p2p.org",
+   "port": 8080,
+   "power": 49,
+   "index": 70,
+   "rtt_ms": 99.38406944274902
+  },
+  {
+   "name": "StakingCabin",
+   "key": "a8f13d977d329ff19b8ad07c4dd17f75714c6c16ee4318bbb99667a442dc6e169e7408d87a15269d0b134cfdb4361f87058f8eb1620891eb4442b2b2fcf09ea9092a3bb78669898cf4a7930cb2f19a88a8f0cb07cd0d8efaa5680383701cd461",
+   "host": "testnet.sui.stakingcabin.com",
+   "port": 8080,
+   "power": 326,
+   "index": 71,
+   "rtt_ms": 98.48999977111816
+  },
+  {
+   "name": "TPT",
+   "key": "a96bfb45f20a805f0ed98c7f2422e8dd5d9d7d3cd7d9ee61971462e36cb1b1d03a615627e10360089f2c132a9bad956816d022109489c9a7a5a4a2f2847bfef55e52f4b0cef830026545dbc3f853fadeab3f95ef55548d9b5cf14245f991d467",
+   "host": "sui-testnet.thepassivetrust.com",
+   "port": 8080,
+   "power": 171,
+   "index": 72,
+   "rtt_ms": null
+  },
+  {
+   "name": "H2O Nodes",
+   "key": "a9e05fbe04b1268e9bebadd93a47dda361f84e6e23f7c13662274652a04bbd2d85d8e65754f1589369d6dee0c0bfffc70a8bb2be737690084c404f35587dd18708be92db216f524f6f6fb0c20bd68f9ec0cd531cc6d77911ce058fa57414aa24",
+   "host": "sui-testnet-validator.h2o-nodes.com",
+   "port": 8080,
+   "power": 32,
+   "index": 73,
+   "rtt_ms": 98.0379581451416
+  },
+  {
+   "name": "Peeranha",
+   "key": "a9f429d4b7a52eb2346189c47f6c125cce57c3376edcf8d6cf502c22aa7e7c82a8bd25d4ac5e575543bcb2a1124722de0588ae2f98c044eaead03ba24b4f772cf39f35e6d08c880dd7498b52e7d20c188b906f3294823bac40de9b6696a48b3e",
+   "host": "testnet-sui-validator.peeranha.io",
+   "port": 8080,
+   "power": 40,
+   "index": 74,
+   "rtt_ms": 11.90185546875
+  },
+  {
+   "name": "LumiWave",
+   "key": "aa3ef349d67a4eeed9e07f9ced36a238b2f01c0f1b27c258df2b10d36b6a32306babb982bf39945307dd78276a1ba52c0bca881a27144916746a773bef15407067429a1a56e4238c3c4df0ab02bb1242bef09e71de0bb4fe58df55c496577094",
+   "host": "wave3-01-sui-validator.onbuff.com",
+   "port": 8080,
+   "power": 82,
+   "index": 75,
+   "rtt_ms": 234.61127281188965
+  },
+  {
+   "name": "Natsai",
+   "key": "aac495c0c18a9246d07e1dc94935ac338e3f9dc341ccdbcb93303ae2e1a30d65dfb1fb9f9243d1a90d4279685246a44812a0a377477c43edbab4ef8b5dc76d157586b150a7c4c255bf0256ff808541f70f23257c1a1cdc9f0175aac7cb888c02",
+   "host": "sui-tn-validator.natsai.xyz",
+   "port": 8080,
+   "power": 23,
+   "index": 76,
+   "rtt_ms": 97.84388542175293
+  },
+  {
+   "name": "ChainIDE",
+   "key": "aae0b12dea6f045831d24f85de0f7feb263bd3b533f07f8fb68e75234929700fbee6f4edd2e10a929b560818d7dbecca0116cf82153db216bdf82f929ee8195cc4f02205df1f5c3db49d9ec9098627dd28f798a60c097e3992131b0b3fcbf624",
+   "host": "sui-testnet.chainide.com",
+   "port": 8080,
+   "power": 57,
+   "index": 77,
+   "rtt_ms": 242.54679679870605
+  },
+  {
+   "name": "Moonlet",
+   "key": "ab781b5ae9601318a07aa3571e3276d4b5000e162b13b330c97b5caf178873ceda08889bc27dcb8041c0ea9efc3c2cc7105ded7ef862a20180c75acf7570cfffd1708b70c337aedc4af8c8fe8caad19453e532042a2224f753e9232443e014e1",
+   "host": "sui-testnet.moonlet.network",
+   "port": 8080,
+   "power": 32,
+   "index": 78,
+   "rtt_ms": 99.68280792236328
+  },
+  {
+   "name": "Coinage x DAIC",
+   "key": "ab7edb6e0649b48e702fa34e05bbbc7a834f807b407b54fffdd19256d5d4845e553c7f63a762724411021d55cad6d19c12fcb3d1fa489724aa38f83810383c3a7ba234b288125346be3700fb7e73ce3990d889387c813b68bdfa8df1093bbd39",
+   "host": "sui-testnet.dzdaic.com",
+   "port": 8080,
+   "power": 131,
+   "index": 79,
+   "rtt_ms": 101.54390335083008
+  },
+  {
+   "name": "Ruby Nodes",
+   "key": "aba50e519ebe9611dd2915b44a0b943da9dbf1de31cb421c8fcfd4ac81dde5d7923acc7a063455e9dc99675b091bfad813873a390eacddd21c72e8b38f9e55f0ea3648896472787bf00181321d9ad813558fca808eaf8c14450d68fe0513a72c",
+   "host": "sui-testnet-validator.rubynodes.io",
+   "port": 8080,
+   "power": 23,
+   "index": 80,
+   "rtt_ms": 33.75601768493652
+  },
+  {
+   "name": "SenseiNode",
+   "key": "ac200d799701bb442a7ca3d1061354e00d40e97c9d8d880f738636f904a76f55bd0d2421600c26adff54fd9bc0d8eec100f4ccc132c48ba4b05d25fe76c08a49cf7d903770bd2f2753f25438f22d1bdfe29a83903edc1a06e6f5ea11f59e0ead",
+   "host": "sui-testnet.senseinode.com",
+   "port": 8180,
+   "power": 32,
+   "index": 81,
+   "rtt_ms": 107.8488826751709
+  },
+  {
+   "name": "Triton One",
+   "key": "acc5ecc16d9b84c2af52964e0e472524d59689224011302ea4e9ed309da922ca1dfbe1565f1f9b8111ed795087a9e8281810d749b0d0fb3804a4b735c3973dde606b2444b273e1cae55e2b91ec22c097cbad39686c97a8f36dbbfd7a017c619e",
+   "host": "validator.testnet.sui.rpcpool.com",
+   "port": 8080,
+   "power": 326,
+   "index": 82,
+   "rtt_ms": 86.70616149902344
+  },
+  {
+   "name": "Chainflow",
+   "key": "acc7209e0ab5fd3232df03d695c9eee0ea14801dd9c84bad2832637e67bc9cade5cc7fea0ae106089a42f63631f3dfae00d6d0254328420c796aca78d2140b0bffd4428316f4cba7b5ee01411a42fe45c665fbd03bad9e124fa64046037c0be2",
+   "host": "sui.chainflow.io",
+   "port": 8080,
+   "power": 40,
+   "index": 83,
+   "rtt_ms": 120.40090560913086
+  },
+  {
+   "name": "Studio Mirai",
+   "key": "adc0a5eb4dbaf14cd2e3d7b2381504f0dbd30ee43d03a27261889835975be935bdaca4fbf6393e6afc41b00ea6a507f70007bf352f418644adcdf46412a64372fee680b521bc344f50b142e9516599fb01c2de7fcad807b8b74757251701ca1b",
+   "host": "validator.testnet.sui.mirai.cloud",
+   "port": 8080,
+   "power": 48,
+   "index": 84,
+   "rtt_ms": 82.57794380187988
+  },
+  {
+   "name": "proofgroup",
+   "key": "af8e2546faf395ee60de975339f74e0df30dbe384d240ae08db946494b363b90a8c6d4a20ddf0eb0ed4c09248df69e8715a3bca11f2c1d1733f1fe2c370806da29fcdb605e4da94985485aa42f327c6c3d8bb625456c078a4b412632ea00a199",
+   "host": "sui-testnet.proofgp.com",
+   "port": 8080,
+   "power": 40,
+   "index": 85,
+   "rtt_ms": 32.12094306945801
+  },
+  {
+   "name": "Cetus",
+   "key": "af9a7bdc7241a5c7388e853d9e42cb3b83c79a55278da919a0a218b586b560f08861c9bd676ae1cc50db8e5f69016cdb0ea5084e8408e637642d7784132177f4d3e707a560e9d61ab34fdff9e40205272e42933fe0548e488c0359c382871010",
+   "host": "testnet.validator.cetus.zone",
+   "port": 8080,
+   "power": 47,
+   "index": 86,
+   "rtt_ms": 77.41594314575195
+  },
+  {
+   "name": "SynergyNodes",
+   "key": "afc1fce1c417f00968986b0fc20ebfe139bea07dd9e878e70e5caa351f93d5f18e6e887b2bd52712dd5eeb42693eb8ca0be9171afca51fbd14bbfc4b9926a4127a67c9bbf11a460bcbf911117b972e3e415a2c911804cb12c438c4b4e7d6d015",
+   "host": "sui-testnet-val.synergynodes.com",
+   "port": 8080,
+   "power": 57,
+   "index": 87,
+   "rtt_ms": 94.53487396240234
+  },
+  {
+   "name": "Nansen",
+   "key": "b0431325f51268c34ff5561d4ea1aa3d5610daec8f5b7dae95a995cfab4ba1c3bdbd3cdbffc8fd0b7247a5d1504f544902c19efe4ab369a807623c5345f876fa297f038a643205b91eba0d8c722b0e6f7fac9b599ec0d5f8383f757abc9bfcdf",
+   "host": "sui-testnet.nansen.ai",
+   "port": 8080,
+   "power": 40,
+   "index": 88,
+   "rtt_ms": 87.677001953125
+  },
+  {
+   "name": "t2000",
+   "key": "b0511006ff3d97b7cc4ecc9059da7382c223a173f388b120e803ae8cc62de9ca0ea5c8291d048ac7cfb07b49ac3164a60d9c9a79ceee5223be19d5a489d40cdb46f83f4fe8113eac546181c951fe0792738d1fd8f0b975a10ad9886ccd75b07b",
+   "host": "testnet-validator.t2000.ai",
+   "port": 8080,
+   "power": 23,
+   "index": 89,
+   "rtt_ms": 110.72516441345215
+  },
+  {
+   "name": "Kuna Labs",
+   "key": "b05ad664cdb6bf3d1903b96fc23f975ecd0745b5155b1198abcc44b0f97d4bb36e0d2f5eb7551540be3da101efddf038005255e5d9dfcb099780b1656f655f999638978545bcd226ad672ee4ad483101cbe9b3bfdd04c7e70238fedf39d4f486",
+   "host": "sui-testnet-validator.kunalabs.io",
+   "port": 8280,
+   "power": 23,
+   "index": 90,
+   "rtt_ms": 85.57009696960449
+  },
+  {
+   "name": "KiligLab",
+   "key": "b08ba422d96ee412221eeffa0da57d8320e65ad5dbd72fe8bd7c8d136e20d84b4803bc75b0ea23386b60f3ef7bf1e0cf16680d495ccd40cefb55f4f15cc6761b3d8f458b502a9f64bb842f8420d28c6d6791ce743ecf90b8250a1937a2446f05",
+   "host": "testnet.sui.kiliglab.io",
+   "port": 8080,
+   "power": 40,
+   "index": 91,
+   "rtt_ms": 210.784912109375
+  },
+  {
+   "name": "Mysten-2",
+   "key": "b0f7d2c6f2285967173b5aaa93f5f4dd5a270a168f74201db72f095f35dd36490a52a565700c5a2ae46ec2894bbb35f01015e1fa74a59fbbc653bee2505cb4d4ee842e22684d8308079c2715d1db07deb61e56042c61462c7353ac887c4a93da",
+   "host": "jnb-00.testnet.sui.io",
+   "port": 8080,
+   "power": 294,
+   "index": 92,
+   "rtt_ms": 252.0887851715088
+  },
+  {
+   "name": "B-Harvest",
+   "key": "b1da8cf09588132ff6ea67c2b099b9e714591d09295cebe9322af3496d218ce97ab93005af3bda562f0fc8c9e5fffe6319c673876614e0cb139f4897b1700ff781dc8783a8d12f4f6dbd0b378d473c5a2d262481b60d7a246b5623dc9401c518",
+   "host": "sui-pt-v.bharvest.io",
+   "port": 8080,
+   "power": 58,
+   "index": 93,
+   "rtt_ms": 217.10205078125
+  },
+  {
+   "name": "HashedPotatoes",
+   "key": "b2319f8083606e1861002388a3bed26a68b1350d106dfd9c318c4848891d85ead74e00c87cd7e58ebe0654063890572d1430b98d53d9f7de483a60bd064a14dda101e62b45d5e38ef9b91d8f1eafcbc220c06a8931452eb7cff9413b1bf9aa71",
+   "host": "sui.hashedpotatoes.net",
+   "port": 8080,
+   "power": 147,
+   "index": 94,
+   "rtt_ms": 53.601980209350586
+  },
+  {
+   "name": "Aftermath",
+   "key": "b2b64837b138ea0cc99428362b6c5128c4ddc4c052218ef2e27fbf68048b362838038f2ba6440d19103385ff2575bf4418284b567660670eb66f2423c38b0d1afc3ab4817d641c05289cb9dc182390958e450193a68270bee48b8ec2d88f5144",
+   "host": "validator.sui.testnet.aftermath.finance",
+   "port": 8080,
+   "power": 171,
+   "index": 95,
+   "rtt_ms": 103.78026962280273
+  },
+  {
+   "name": "iBriz.ai",
+   "key": "b2bbb07c51d38c0143d6f5d07e96a58a01d8f8a5725b4324ce0dc63530cf26046e2ed38dce792f404441364fa8e7777019126fe618c59ccb72e756b04e2813c3428eeb43ee332a874a27743ad0dc61c1b5d9b8736159459f21c134168f05eaad",
+   "host": "sui-testnet-validator.ibriz.ai",
+   "port": 8080,
+   "power": 47,
+   "index": 96,
+   "rtt_ms": 96.06599807739258
+  },
+  {
+   "name": "NAVI Protocol",
+   "key": "b2c704b9a3b315c56010db24373249ff4a60f609405828aa871a3c03d91e06a6a45ca87607084a1992d88a1560aadb8017dc6818ca9e3af30ced28f91fbe7df0f46c137cc0687580550f99992877f1ea05a12b28d9a7ad0d78e3eccd18eff4ec",
+   "host": "40.160.22.248",
+   "port": 8080,
+   "power": 47,
+   "index": 97,
+   "rtt_ms": 18.208026885986328
+  },
+  {
+   "name": "P-OPS Team",
+   "key": "b310bc25db27d02a1ca8ead7ff8f43ecf4525d21286985d395b027a295976553a584e33e0767ab2aac674aa3d042a588138fdeeb8b0ccac70d53e3e8ca651dc7fc0e441db1ee72e9b676ae4f96f6f79d211cf6741be86403cdfa0cce15c04934",
+   "host": "val.sui.testnet.pops.one",
+   "port": 8080,
+   "power": 130,
+   "index": 98,
+   "rtt_ms": 122.38192558288574
+  },
+  {
+   "name": "Encapsulate",
+   "key": "b38ed8ce39ab6ad4aa199607b069bda1d5018c48b3581de72d8362aeffe4d9fe129f0cfddc4d115647e2be4d76b214ff0615a5676654a57b4594c397aab93de61aa66a12cd5fbcf3a663c4280321478ddc109cac8f8e248c4cd704c713cce9b7",
+   "host": "validator.sui.testnet.encapsulate.xyz",
+   "port": 8080,
+   "power": 40,
+   "index": 99,
+   "rtt_ms": 96.55570983886719
+  },
+  {
+   "name": "Staketab",
+   "key": "b38fbddc6a926473707c0de355e302bec8671dc84f0fbf74ea71749e4bf7eb953726faa13b52564daf8235859e9e434210a9bd609352382522e4809ad9e4b3e525d75d76d00a4a4e863326d400d867e7aa0851dc3cfb6b671bedb0cbeadc0c61",
+   "host": "sui-wave3.staketab.com",
+   "port": 8080,
+   "power": 32,
+   "index": 100,
+   "rtt_ms": 46.981096267700195
+  },
+  {
+   "name": "Karrier One",
+   "key": "b3bd58e98f556422ed920fbabda8ed5e0524033dd11055f24cf070b5e6bb82e37fc805faf7426efb756630c239248a450f91904a2955b507eef9f4011cc468bcd41272a75cbfcfd1c4a4afdbb7f4b5e75bc9fa354a5d647f7817eb1523596f10",
+   "host": "testnet.validator.karrier.one",
+   "port": 8080,
+   "power": 47,
+   "index": 101,
+   "rtt_ms": 75.67524909973145
+  },
+  {
+   "name": "Cypher Capital",
+   "key": "b4257256f3a254be476f7a010e3c9ce4eb03912da079323e5027fe5c6fda42cb13e347931d5489071f09e8c54bc8cf7517d37610260ee43b68509551372596a2e0bcec2e46d0aad171592c2f3422610973188a026b86f9b88858f95310fd9cbb",
+   "host": "cypher-testnet.juicystake.io",
+   "port": 8080,
+   "power": 32,
+   "index": 102,
+   "rtt_ms": 58.57682228088379
+  },
+  {
+   "name": "Mysten-4",
+   "key": "b470ccb94240bf3810a479337f4e9b408e96a12f95072d960295384826241029dec79aa3a45785e53fde6263dd30f1a306b9314b8fbb2a505a90d52db72f2c2692ab524627ccdc62673924de476b5f05faed104212346abf1fe8dd9916806401",
+   "host": "lon-tnt-val-00.testnet.sui.io",
+   "port": 8080,
+   "power": 47,
+   "index": 103,
+   "rtt_ms": 81.77709579467773
+  },
+  {
+   "name": "Suilend",
+   "key": "b53a1375b3bf6ee6bd6da2db6199a60710536dfae06775e5b9da56e88bf977461e506f5daa1dd9b51a89ab1a4d95563e0875ca87c80ba91499ab23af0112ff399477292ba1a309aee9a139e673ec49349a7d6f2aa36a822265e2cc7592de1523",
+   "host": "dfd910.stwserver.net",
+   "port": 8080,
+   "power": 47,
+   "index": 104,
+   "rtt_ms": 104.60209846496582
+  },
+  {
+   "name": "Stakely",
+   "key": "b53bf3d96f58a30b0eb39392947814997fff96fd28358fb4a27f4d7d954972b2d4dbd42ae7e80570b08e64e67bf4e6220852c83d8523f4dfc7a4f6c36d8905a5b637ba3fc03268ca7f5e66a6851b831998f68bfa9d2201157421e52ced6dc72c",
+   "host": "sui-testnet.stakely.io",
+   "port": 8080,
+   "power": 32,
+   "index": 105,
+   "rtt_ms": null
+  },
+  {
+   "name": "TrustedPoint",
+   "key": "b54d02172bcbab270f981d9f20b46f6e4c93b29749698d452597e5d9c0f3f99b23b1e84619ff41151f139a2e0b29a19606f80bd7ae1172032c5cb0772d6931743e724094f11f77b51384d62d52904570135705b1e5a330a43fee5de09387ab32",
+   "host": "sui-testnet-validator.trusted-point.com",
+   "port": 7070,
+   "power": 326,
+   "index": 106,
+   "rtt_ms": null
+  },
+  {
+   "name": "Aphelion",
+   "key": "b6c73cf7f95a77e0f0dbbaf2e4da51e2606b00a5eb6320c0aed1049e71ae8b10eef253274cc406f3f6aa468e91433f201241c44235535931eace93ce4c0cb4969546eb2cb1f753e71a21a0fa5b7f09e59fac275f291ca6f708487ddc850d1779",
+   "host": "testnet-sui-validator.apheliontrading.com",
+   "port": 8080,
+   "power": 23,
+   "index": 107,
+   "rtt_ms": 85.25395393371582
+  },
+  {
+   "name": "Coinbase",
+   "key": "b6c81e4787712f99937f7ebcd29f0c27778c1d632135c3f83c67f1b41db4928fcea5d1f184367120ff42af36dd2387730f8e5c51e2fa86874e02ddc3ca02a472bd29a8a4767ea08a1a3afe45edfc282f76205c7a12957c4b3a4fd5df92521028",
+   "host": "p2p.87ac0d22-55ea-4244-a26c-7c9b163be4dc.sui.bison.run",
+   "port": 8080,
+   "power": 196,
+   "index": 108,
+   "rtt_ms": 98.18506240844727
+  },
+  {
+   "name": "Nodeinfra",
+   "key": "b75a270a3c15b670333f462a79d9920f466f8f9ccdbb807158803b7821f3d45f1ddb791a9940fd0f217b2e849a186b5000488b94c58108f1a1c792a99768c62f50ff5780087ff1bc7ee8b0df6104679e37a3fbe1307b1e8a94829e71a51703fc",
+   "host": "sui-testnet.nodeinfravalidators.com",
+   "port": 8080,
+   "power": 32,
+   "index": 109,
+   "rtt_ms": 28.023719787597656
+  },
+  {
+   "name": "Galaxy Digital",
+   "key": "b7740e890e57993ff21caed932464ea3b6e0813e74d33389c7f7f512c6035d3acea22a9b63119ce6e9cb0534584b949914ba6ed15f4775001f4e45c130a3d5dc18ad329e611db8810c2f2a0958a140e0d8cc6f4c65626f3a3f607bbd34c41039",
+   "host": "sui-validator.testnet.validator.bci.glxy.com",
+   "port": 8080,
+   "power": 131,
+   "index": 110,
+   "rtt_ms": 84.24019813537598
+  },
+  {
+   "name": "Chainode Tech",
+   "key": "b84e7d1faa8ff7ecc8098f70e568ac87c99ffd98353948d22b562c240621ed67cd9a84d2cc8285bb135aace90450ae870d24520040d1dbbaf9ecfbbacdbaf1cc91f1d680a2732afa17303dc9ab62e9177b403d912347ce935927088e334775b7",
+   "host": "sui-testnet.chainode.tech",
+   "port": 8080,
+   "power": 276,
+   "index": 111,
+   "rtt_ms": 109.23075675964355
+  }
+ ]
+}
