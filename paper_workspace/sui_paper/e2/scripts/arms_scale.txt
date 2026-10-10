@@ -1,0 +1,5 @@
+direct    wan 0 0 1 100 1
+reverse   wan 0 0 1 100 1
+direct    wan 0 1 1 100 1
+fullnode  wan 0 0 1 100 1
+fullnode  wan 0 1 1 100 1
