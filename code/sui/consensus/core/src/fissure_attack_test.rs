@@ -192,15 +192,24 @@ async fn test_fissure_attack_asr_dynamic() {
     }
 
     {
+        // Measurement-only dump. `subdag` records which committed sub-DAG each block
+        // was linearized in, so same-round pairs can be partitioned into those the
+        // intra-round sort key actually compares (same sub-DAG) and those it never
+        // sees (cross sub-DAG). No consensus logic is affected.
         let mut pos = 0usize;
-        let entries: Vec<String> = all_commits.iter()
-            .flat_map(|c| c.blocks.iter())
-            .map(|b| {
-                let s = format!(r#"{{"creator":{},"position":{},"round":{}}}"#, b.author().value(), pos, b.round());
+        let mut entries: Vec<String> = Vec::new();
+        for (subdag_idx, c) in all_commits.iter().enumerate() {
+            for b in c.blocks.iter() {
+                entries.push(format!(
+                    r#"{{"creator":{},"position":{},"round":{},"subdag":{}}}"#,
+                    b.author().value(),
+                    pos,
+                    b.round(),
+                    subdag_idx
+                ));
                 pos += 1;
-                s
-            })
-            .collect();
+            }
+        }
         println!("FINAL_COMMITTED_ORDER: [{}]", entries.join(","));
     }
 
