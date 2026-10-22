@@ -126,7 +126,28 @@ pub(crate) const FRONTRUN_ID_LEN: usize = 8;
 /// carries them, as an operator of a full node sees submitted transactions.
 /// The workload pushes (id, victim index, time it becomes visible); only the
 /// attacker's hook reads it, so honest validators are unaffected.
-pub(crate) static FRONTRUN_MEMPOOL: std::sync::Mutex<Vec<(Vec<u8>, usize, std::time::Instant)>> =
+/// Byte offset of the big-endian u64 gas price in a tagged transaction.
+pub(crate) const FRONTRUN_GAS_OFFSET: usize = 16;
+
+/// Gas price the attacker pays against a victim paying `victim_gas`:
+/// FRONTRUN_GAS=outbid pays one unit more, anything else matches it.
+pub(crate) fn frontrun_attacker_gas(victim_gas: u64) -> u64 {
+    if env::var("FRONTRUN_GAS").map(|g| g == "outbid").unwrap_or(false) {
+        victim_gas.saturating_add(1)
+    } else {
+        victim_gas
+    }
+}
+
+pub(crate) fn frontrun_read_gas(d: &[u8]) -> u64 {
+    if d.len() >= FRONTRUN_GAS_OFFSET + 8 {
+        u64::from_be_bytes(d[FRONTRUN_GAS_OFFSET..FRONTRUN_GAS_OFFSET + 8].try_into().unwrap())
+    } else {
+        0
+    }
+}
+
+pub(crate) static FRONTRUN_MEMPOOL: std::sync::Mutex<Vec<(Vec<u8>, usize, std::time::Instant, u64)>> =
     std::sync::Mutex::new(Vec::new());
 
 impl ValidatorProposer {
@@ -231,7 +252,7 @@ impl ValidatorProposer {
         }
 
         let fr_enabled = env::var("FRONTRUN").ok().filter(|v| v != "0").is_some()
-            && env::var("FRONTRUN_MODE").map(|m| m != "blind").unwrap_or(true)
+            && env::var("FRONTRUN_MODE").map(|m| m != "blind" && m != "broadcast").unwrap_or(true)
             && context.own_index.value()
                 < env::var("FRONTRUN_ATTACKERS").ok().and_then(|s| s.parse().ok()).unwrap_or(1usize);
         let fr_victims: usize = env::var("FRONTRUN_VICTIMS").ok().and_then(|s| s.parse().ok()).unwrap_or(3);
@@ -819,14 +840,14 @@ impl ValidatorProposer {
             Some((r, t)) if r == clock_round => t.elapsed().as_millis() as u64,
             _ => 0,
         };
-        // (id, victim round or 0 when seen pending, victim, source)
-        let mut found: Vec<(Vec<u8>, Round, usize, &'static str)> = Vec::new();
+        // (id, victim round or 0 when seen pending, victim, source, victim gas)
+        let mut found: Vec<(Vec<u8>, Round, usize, &'static str, u64)> = Vec::new();
         if let Ok(mut pool) = FRONTRUN_MEMPOOL.lock() {
             let now = std::time::Instant::now();
-            pool.retain(|(id, v, at)| {
+            pool.retain(|(id, v, at, gas)| {
                 if *at <= now {
                     if !self.fr_reacted.contains(id) {
-                        found.push((id.clone(), 0, *v, "mempool"));
+                        found.push((id.clone(), 0, *v, "mempool", *gas));
                     }
                     false
                 } else {
@@ -850,7 +871,7 @@ impl ValidatorProposer {
                         if d.len() > FRONTRUN_ID_LEN && d[0] == FRONTRUN_VICTIM_TAG {
                             let id = d[1..1 + FRONTRUN_ID_LEN].to_vec();
                             if !self.fr_reacted.contains(&id) && !found.iter().any(|f| f.0 == id) {
-                                found.push((id, b.round(), a, "block"));
+                                found.push((id, b.round(), a, "block", frontrun_read_gas(d)));
                             }
                         }
                     }
@@ -866,12 +887,14 @@ impl ValidatorProposer {
             .map(|d| d.as_millis())
             .unwrap_or(0);
         let mut front: Vec<Transaction> = Vec::new();
-        for (id, vround, vauthor, src) in found {
+        for (id, vround, vauthor, src, vgas) in found {
             let mut data = Vec::with_capacity(32);
             data.push(FRONTRUN_ATTACKER_TAG);
             data.extend_from_slice(&id);
             data.push(own.value() as u8);
             data.resize(32, 0);
+            data[FRONTRUN_GAS_OFFSET..FRONTRUN_GAS_OFFSET + 8]
+                .copy_from_slice(&frontrun_attacker_gas(vgas).to_be_bytes());
             if (max_count > 0 && count + 1 > max_count) || (max_bytes > 0 && bytes + data.len() > max_bytes) {
                 println!(
                     "FRONTRUN_DROPPED: {{\"victim\":\"{}\",\"own_round\":{}}}",

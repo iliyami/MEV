@@ -34,7 +34,10 @@ use crate::{
     authority_node::ConsensusAuthority,
     block::BlockAPI,
     commit::CommittedSubDag,
-    proposer::{FRONTRUN_ATTACKER_TAG, FRONTRUN_ID_LEN, FRONTRUN_MEMPOOL, FRONTRUN_VICTIM_TAG},
+    proposer::{
+        FRONTRUN_ATTACKER_TAG, FRONTRUN_GAS_OFFSET, FRONTRUN_ID_LEN, FRONTRUN_MEMPOOL,
+        FRONTRUN_VICTIM_TAG, frontrun_attacker_gas, frontrun_read_gas,
+    },
     transaction::NoopTransactionVerifier,
 };
 
@@ -98,6 +101,10 @@ async fn test_frontrun_reactive() {
     let collection_secs: u64 = env_or("COLLECTION_DURATION", 60);
     let seed: u64 = env_or("SEED", 0);
     let blind = env::var("FRONTRUN_MODE").map(|m| m == "blind").unwrap_or(false);
+    // FRONTRUN_MODE=broadcast: the attacker acts as a client rather than through its
+    // validator. It sees each victim transaction while pending and submits its copy
+    // to every validator, as any Sui client may.
+    let broadcast = env::var("FRONTRUN_MODE").map(|m| m == "broadcast").unwrap_or(false);
     // FRONTRUN_VISIBILITY=mempool: the attacker also sees each victim
     // transaction while it is pending, FRONTRUN_MEMPOOL_DELAY_MS after it is
     // submitted, as a full-node operator would. Default: blocks only.
@@ -146,9 +153,16 @@ async fn test_frontrun_reactive() {
             let mut id = Vec::with_capacity(FRONTRUN_ID_LEN);
             id.extend_from_slice(&(seed as u32).to_be_bytes());
             id.extend_from_slice(&seq.to_be_bytes());
+            // Victim gas price, spread over [1000, 3000) so that ties between
+            // victims are rare and an outbid is always one unit above the victim.
+            let mut h = (seed << 32) ^ seq as u64 ^ 0x9E37_79B9_7F4A_7C15;
+            h = (h ^ (h >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+            h = (h ^ (h >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+            let vgas: u64 = 1000 + (h ^ (h >> 31)) % 2000;
             let mut vtx = vec![FRONTRUN_VICTIM_TAG];
             vtx.extend_from_slice(&id);
             vtx.resize(32, 0);
+            vtx[FRONTRUN_GAS_OFFSET..FRONTRUN_GAS_OFFSET + 8].copy_from_slice(&vgas.to_be_bytes());
             println!(
                 "FRONTRUN_SUBMIT: {{\"victim\":\"{}\",\"vauthor\":{},\"t_ms\":{}}}",
                 hexs(&id),
@@ -161,6 +175,7 @@ async fn test_frontrun_reactive() {
                         id.clone(),
                         v,
                         std::time::Instant::now() + Duration::from_millis(mempool_delay_ms),
+                        vgas,
                     ));
                 }
             }
@@ -174,9 +189,29 @@ async fn test_frontrun_reactive() {
                 ftx.extend_from_slice(&id);
                 ftx.push(0);
                 ftx.resize(32, 0);
+                ftx[FRONTRUN_GAS_OFFSET..FRONTRUN_GAS_OFFSET + 8]
+                    .copy_from_slice(&frontrun_attacker_gas(vgas).to_be_bytes());
                 let c = clients[0].clone();
                 tokio::spawn(async move {
                     let _ = c.submit(vec![ftx]).await;
+                });
+            }
+            if broadcast {
+                let mut ftx = vec![FRONTRUN_ATTACKER_TAG];
+                ftx.extend_from_slice(&id);
+                ftx.push(0);
+                ftx.resize(32, 0);
+                ftx[FRONTRUN_GAS_OFFSET..FRONTRUN_GAS_OFFSET + 8]
+                    .copy_from_slice(&frontrun_attacker_gas(vgas).to_be_bytes());
+                let all = clients.clone();
+                tokio::spawn(async move {
+                    tokio::time::sleep(Duration::from_millis(mempool_delay_ms)).await;
+                    for c in all {
+                        let f = ftx.clone();
+                        tokio::spawn(async move {
+                            let _ = c.submit(vec![f]).await;
+                        });
+                    }
                 });
             }
             for (i, c) in clients.iter().enumerate() {
@@ -232,9 +267,10 @@ async fn test_frontrun_reactive() {
                     && (d[0] == FRONTRUN_VICTIM_TAG || d[0] == FRONTRUN_ATTACKER_TAG)
                 {
                     entries.push(format!(
-                        r#"{{"tag":"{}","id":"{}","author":{},"round":{},"subdag":{},"pos":{}}}"#,
+                        r#"{{"tag":"{}","id":"{}","gas":{},"author":{},"round":{},"subdag":{},"pos":{}}}"#,
                         if d[0] == FRONTRUN_VICTIM_TAG { "V" } else { "F" },
                         hexs(&d[1..1 + FRONTRUN_ID_LEN]),
+                        frontrun_read_gas(d),
                         b.author().value(),
                         b.round(),
                         subdag,
@@ -247,7 +283,8 @@ async fn test_frontrun_reactive() {
     }
     println!("FINAL_TX_ORDER: [{}]", entries.join(","));
     println!(
-        "FRONTRUN_SUMMARY: n={n} attackers={attackers} victims={victims} blind={blind} mempool={mempool} delay_ms={mempool_delay_ms} attack_mode={} submitted={submitted} commits={}",
+        "FRONTRUN_SUMMARY: n={n} attackers={attackers} victims={victims} blind={blind} broadcast={broadcast} gas={} mempool={mempool} delay_ms={mempool_delay_ms} attack_mode={} submitted={submitted} commits={}",
+        env::var("FRONTRUN_GAS").unwrap_or_else(|_| "match".into()),
         env::var("ATTACK_MODE").unwrap_or_default(),
         all_commits.len()
     );
