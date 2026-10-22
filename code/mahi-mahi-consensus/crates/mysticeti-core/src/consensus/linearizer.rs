@@ -26,13 +26,18 @@ impl CommittedSubDag {
 
     /// Sort the blocks of the sub-dag by round number. Any deterministic algorithm works.
     pub fn sort(&mut self) {
-        // PER-RUN STOCHASTIC TIE-BREAKING: Combine round with a process-unique randomized index.
-        // This ensures every repetition explores a slightly different commit order.
-        let seed = (std::process::id() as u64) % 1000;
-        self.blocks.sort_by_key(|x| {
-            let authority_seed = (x.author() as u64 + seed) % 1000;
-            (x.round(), authority_seed)
-        });
+        // Upstream rule: round only, stable. MAHI_PID_TIEBREAK=1 restores an
+        // experimental per-process rotation of the author tiebreak; it is off by
+        // default so honest validators run the upstream ordering.
+        if std::env::var("MAHI_PID_TIEBREAK").ok().filter(|v| v != "0").is_some() {
+            let seed = (std::process::id() as u64) % 1000;
+            self.blocks.sort_by_key(|x| {
+                let authority_seed = (x.author() as u64 + seed) % 1000;
+                (x.round(), authority_seed)
+            });
+        } else {
+            self.blocks.sort_by_key(|x| x.round());
+        }
     }
 }
 
