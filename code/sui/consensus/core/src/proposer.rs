@@ -13,7 +13,7 @@ use crate::{
     ancestor::{AncestorState, AncestorStateManager},
     block::{
         Block, BlockAPI, BlockV1, BlockV2, ExtendedBlock, GENESIS_ROUND, SignedBlock, Slot,
-        VerifiedBlock,
+        Transaction, VerifiedBlock,
     },
     context::Context,
     dag_state::DagState,
@@ -101,7 +101,33 @@ pub(crate) struct ValidatorProposer {
     // Paper-2 burst-and-hide attack: count of successful proposals from
     // this validator. Gated by MAX_ATTACKER_PROPOSES env var.
     bh_propose_count: u32,
+
+    // REACTIVE FRONT-RUN (paper-2, #64A A1): env-gated, attacker-only. The
+    // attacker reads victim-tagged transactions out of blocks it has already
+    // accepted into its own DAG and puts a tagged copy at the front of its
+    // next block. It changes only its own block's contents (clause ii) and,
+    // with FRONTRUN_WAIT_MS, when it proposes within the leader timeout
+    // (clause iii). Honest validators run unmodified code.
+    fr_enabled: bool,
+    fr_victims: usize,
+    fr_wait_ms: u64,
+    fr_reacted: BTreeSet<Vec<u8>>,
+    fr_wait_round: Option<(Round, std::time::Instant)>,
 }
+
+/// Tag byte of a transaction the workload marks as a victim's.
+pub(crate) const FRONTRUN_VICTIM_TAG: u8 = 0xA1;
+/// Tag byte of the attacker's reaction to a victim transaction.
+pub(crate) const FRONTRUN_ATTACKER_TAG: u8 = 0xF1;
+/// Bytes after the tag that identify a victim transaction.
+pub(crate) const FRONTRUN_ID_LEN: usize = 8;
+
+/// Pending victim transactions an attacker can observe before any block
+/// carries them, as an operator of a full node sees submitted transactions.
+/// The workload pushes (id, victim index, time it becomes visible); only the
+/// attacker's hook reads it, so honest validators are unaffected.
+pub(crate) static FRONTRUN_MEMPOOL: std::sync::Mutex<Vec<(Vec<u8>, usize, std::time::Instant)>> =
+    std::sync::Mutex::new(Vec::new());
 
 impl ValidatorProposer {
     pub(crate) fn new(
@@ -204,6 +230,12 @@ impl ValidatorProposer {
             }
         }
 
+        let fr_enabled = env::var("FRONTRUN").ok().filter(|v| v != "0").is_some()
+            && env::var("FRONTRUN_MODE").map(|m| m != "blind").unwrap_or(true)
+            && context.own_index.value()
+                < env::var("FRONTRUN_ATTACKERS").ok().and_then(|s| s.parse().ok()).unwrap_or(1usize);
+        let fr_victims: usize = env::var("FRONTRUN_VICTIMS").ok().and_then(|s| s.parse().ok()).unwrap_or(3);
+        let fr_wait_ms: u64 = env::var("FRONTRUN_WAIT_MS").ok().and_then(|s| s.parse().ok()).unwrap_or(0);
         Self {
             context,
             transaction_consumer,
@@ -227,6 +259,11 @@ impl ValidatorProposer {
             role_action,
             own_group_id,
             bh_propose_count: 0,
+            fr_enabled,
+            fr_victims,
+            fr_wait_ms,
+            fr_reacted: BTreeSet::new(),
+            fr_wait_round: None,
         }
     }
 
@@ -764,6 +801,114 @@ impl ValidatorProposer {
     }
 
     /// Victims are the last `victim_count` authority indices.
+    /// REACTIVE FRONT-RUN: scan the blocks this node has accepted for
+    /// victim-tagged transactions it has not reacted to yet, and put one
+    /// attacker-tagged transaction per victim transaction at the front of
+    /// the block being built. Only blocks already in the local DAG are read,
+    /// so the attacker reacts only to what it has actually seen. Each
+    /// reaction is logged as FRONTRUN_REACT for the scorer.
+    fn frontrun_prepend(
+        &mut self,
+        clock_round: Round,
+        force: bool,
+        transactions: Vec<Transaction>,
+    ) -> Vec<Transaction> {
+        let own = self.context.own_index;
+        let n = self.context.committee.size();
+        let waited_ms = match self.fr_wait_round {
+            Some((r, t)) if r == clock_round => t.elapsed().as_millis() as u64,
+            _ => 0,
+        };
+        // (id, victim round or 0 when seen pending, victim, source)
+        let mut found: Vec<(Vec<u8>, Round, usize, &'static str)> = Vec::new();
+        if let Ok(mut pool) = FRONTRUN_MEMPOOL.lock() {
+            let now = std::time::Instant::now();
+            pool.retain(|(id, v, at)| {
+                if *at <= now {
+                    if !self.fr_reacted.contains(id) {
+                        found.push((id.clone(), 0, *v, "mempool"));
+                    }
+                    false
+                } else {
+                    true
+                }
+            });
+        }
+        {
+            let dag_state = self.dag_state.read();
+            for a in 0..n {
+                if a == own.value() {
+                    continue;
+                }
+                let blocks = dag_state.get_cached_blocks(
+                    self.context.committee.to_authority_index(a).expect("index in committee"),
+                    clock_round.saturating_sub(5),
+                );
+                for b in blocks.iter() {
+                    for t in b.transactions() {
+                        let d = t.data();
+                        if d.len() > FRONTRUN_ID_LEN && d[0] == FRONTRUN_VICTIM_TAG {
+                            let id = d[1..1 + FRONTRUN_ID_LEN].to_vec();
+                            if !self.fr_reacted.contains(&id) && !found.iter().any(|f| f.0 == id) {
+                                found.push((id, b.round(), a, "block"));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let max_count = self.context.protocol_config.max_num_transactions_in_block() as usize;
+        let max_bytes = self.context.protocol_config.max_transactions_in_block_bytes() as usize;
+        let mut count = transactions.len();
+        let mut bytes: usize = transactions.iter().map(|t| t.data().len()).sum();
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+        let mut front: Vec<Transaction> = Vec::new();
+        for (id, vround, vauthor, src) in found {
+            let mut data = Vec::with_capacity(32);
+            data.push(FRONTRUN_ATTACKER_TAG);
+            data.extend_from_slice(&id);
+            data.push(own.value() as u8);
+            data.resize(32, 0);
+            if (max_count > 0 && count + 1 > max_count) || (max_bytes > 0 && bytes + data.len() > max_bytes) {
+                println!(
+                    "FRONTRUN_DROPPED: {{\"victim\":\"{}\",\"own_round\":{}}}",
+                    id.iter().map(|b| format!("{:02x}", b)).collect::<String>(),
+                    clock_round
+                );
+                continue;
+            }
+            count += 1;
+            bytes += data.len();
+            println!(
+                "FRONTRUN_REACT: {{\"victim\":\"{}\",\"src\":\"{}\",\"vround\":{},\"vauthor\":{},\"own_round\":{},\"attacker\":{},\"t_ms\":{},\"waited_ms\":{},\"force\":{}}}",
+                id.iter().map(|b| format!("{:02x}", b)).collect::<String>(),
+                src,
+                vround,
+                vauthor,
+                clock_round,
+                own.value(),
+                now_ms,
+                waited_ms,
+                force
+            );
+            self.fr_reacted.insert(id);
+            front.push(Transaction::new(data));
+        }
+        println!(
+            "FRONTRUN_PROPOSE: {{\"attacker\":{},\"own_round\":{},\"waited_ms\":{},\"force\":{},\"reactions\":{}}}",
+            own.value(),
+            clock_round,
+            waited_ms,
+            force,
+            front.len()
+        );
+        front.extend(transactions);
+        front
+    }
+
     fn is_victim_block(&self, block: &VerifiedBlock, victim_count: usize) -> bool {
         let author = block.author().value();
         let n = self.context.committee.size();
@@ -1081,6 +1226,34 @@ impl Proposer for ValidatorProposer {
             clock_round
         };
 
+        // REACTIVE FRONT-RUN wait: hold this round's proposal for up to
+        // FRONTRUN_WAIT_MS, until every victim's block of the same round has
+        // arrived. The wait is bounded by the leader timeout, which still
+        // forces a proposal, so this stays within honest timing choices.
+        if self.fr_enabled && self.fr_wait_ms > 0 && !force {
+            let n = self.context.committee.size();
+            let have_all = {
+                let dag_state = self.dag_state.read();
+                (n.saturating_sub(self.fr_victims)..n).all(|v| {
+                    dag_state
+                        .get_cached_blocks(self.context.committee.to_authority_index(v).expect("index in committee"), clock_round)
+                        .iter()
+                        .any(|b| b.round() == clock_round)
+                })
+            };
+            let started = match self.fr_wait_round {
+                Some((r, t)) if r == clock_round => t,
+                _ => {
+                    let t = std::time::Instant::now();
+                    self.fr_wait_round = Some((clock_round, t));
+                    t
+                }
+            };
+            if !have_all && (started.elapsed().as_millis() as u64) < self.fr_wait_ms {
+                return None;
+            }
+        }
+
         // There must be a quorum of blocks from the previous round.
         let quorum_round = clock_round.saturating_sub(1);
         let leader_slots = self.leader_waiter.leader_slots_to_wait_for(quorum_round);
@@ -1268,6 +1441,9 @@ impl Proposer for ValidatorProposer {
         // Choosing which valid block to propose is an attacker-legal
         // action — the candidates are all individually well-formed.
         let mut final_transactions = transactions;
+        if self.fr_enabled {
+            final_transactions = self.frontrun_prepend(clock_round, force, final_transactions);
+        }
         if self.attack_active && self.is_attacker && self.attack_mode == "speculative" {
             use consensus_types::block::BlockDigest;
             let p_max = self.speculative_p_max.min(50);
