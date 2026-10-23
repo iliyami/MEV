@@ -90,6 +90,8 @@ pub(crate) struct ValidatorProposer {
     attack_active: bool,
     speculative_p_max: usize,
     sluggish_timeout_multiplier: f64,
+    // Sluggish: earliest instant at which the held-back proposal may go out.
+    sluggish_ready_at: Option<std::time::Instant>,
 
     // Paper-2 v2 coordinator integration. When V2_COORDINATOR_URL is set,
     // per-node policy comes from the coordinator instead of global env vars.
@@ -275,6 +277,7 @@ impl ValidatorProposer {
             attack_active,
             speculative_p_max,
             sluggish_timeout_multiplier,
+            sluggish_ready_at: None,
             coordinator_url,
             profit_threshold,
             role_action,
@@ -1198,7 +1201,17 @@ impl Proposer for ValidatorProposer {
                 self.sluggish_timeout_multiplier,
                 base_timeout_ms,
             );
-            std::thread::sleep(Duration::from_millis(delay_ms));
+            // Hold the proposal back without blocking the thread: the test runtime is
+            // shared by every co-hosted validator, so sleeping here would stall honest nodes.
+            let now = std::time::Instant::now();
+            match self.sluggish_ready_at {
+                None => {
+                    self.sluggish_ready_at = Some(now + Duration::from_millis(delay_ms));
+                    return None;
+                }
+                Some(ready_at) if now < ready_at => return None,
+                Some(_) => self.sluggish_ready_at = None,
+            }
         }
 
         // STRATEGIC LEADER WITHHOLDING (SLW): when this attacker IS the
