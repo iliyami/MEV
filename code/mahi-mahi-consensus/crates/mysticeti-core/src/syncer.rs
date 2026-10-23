@@ -134,7 +134,12 @@ impl<H: BlockHandler, S: SyncerSignals, C: CommitObserver> Syncer<H, S, C> {
         {
             // STOCHASTIC PRODUCTION: Small jitter (0-5ms) to break perfectly synchronized production on localhost
             // This ensures every repetition explore slightly different block-packing scenarios.
-            let fuzz_ms = rand::thread_rng().gen_range(0..=5);
+            // Off by default (PROPOSAL_JITTER=1 enables it), so every node proposes as upstream does.
+            let fuzz_ms = if std::env::var("PROPOSAL_JITTER").map(|v| v == "1").unwrap_or(false) {
+                rand::thread_rng().gen_range(0..=5)
+            } else {
+                0
+            };
             if fuzz_ms > 0 {
                 // Use thread::sleep since Syncer usually runs in a dedicated core thread
                 std::thread::sleep(Duration::from_millis(fuzz_ms));
