@@ -128,10 +128,15 @@ async fn run(matches: &ArgMatches<'_>) -> Result<()> {
             let tx_output_clone = tx_output.clone();
             let tx_feedback_clone = tx_feedback.clone();
 
+            // Upstream never feeds committed headers to the garbage collector (its sender is
+            // dropped). AUTOBAHN_GC_FEEDBACK=1 restores the experimental loopback; off by default.
+            let gc_feedback = std::env::var("AUTOBAHN_GC_FEEDBACK").map(|v| v == "1").unwrap_or(false);
             tokio::spawn(async move {
                 while let Some(header) = rx_committer_out.recv().await {
                     let _ = tx_output_clone.send(header.clone()).await;
-                    let _ = tx_feedback_clone.send(header).await;
+                    if gc_feedback {
+                        let _ = tx_feedback_clone.send(header).await;
+                    }
                 }
             });
 
