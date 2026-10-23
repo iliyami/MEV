@@ -10,6 +10,8 @@ Usage:
 
 from __future__ import annotations
 
+import os
+
 import argparse
 import json
 import sys
@@ -32,8 +34,8 @@ _BASE_ENV = {
     "ATTACKER_RATIO": "0.308",
     "VICTIM_RATIO": "0.231",
     "GC_DEPTH": "10",
-    "COLLECTION_DURATION": "45",
-    "MIN_COMMITS": "25",
+    "COLLECTION_DURATION": os.environ.get("V2_COLLECTION_DURATION", "45"),
+    "MIN_COMMITS": os.environ.get("V2_MIN_COMMITS", "25"),
 }
 
 

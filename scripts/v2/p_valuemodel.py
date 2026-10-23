@@ -16,6 +16,8 @@ Usage:
 
 from __future__ import annotations
 
+import os
+
 import argparse
 import sys
 from pathlib import Path
@@ -49,7 +51,7 @@ def _cfg(strategy: str, profit: dict, reps: int) -> schema.V2Config:
         "protocol": {"name": "sui", "path": "sui"},
         "environment": {
             "NUM_NODES": "13", "ATTACKER_RATIO": "0.308", "VICTIM_RATIO": "0.231",
-            "GC_DEPTH": "10", "COLLECTION_DURATION": "45", "MIN_COMMITS": "25",
+            "GC_DEPTH": "10", "COLLECTION_DURATION": os.environ.get("V2_COLLECTION_DURATION", "45"), "MIN_COMMITS": os.environ.get("V2_MIN_COMMITS", "25"),
         },
         "adversary": {
             "threat_model": "TM-Solo",

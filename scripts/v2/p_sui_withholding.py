@@ -19,6 +19,8 @@ Usage:
 
 from __future__ import annotations
 
+import os
+
 import argparse
 import sys
 from pathlib import Path
@@ -40,8 +42,8 @@ _BASE_ENV = {
     "ATTACKER_RATIO": "0.308",
     "VICTIM_RATIO": "0.231",
     "GC_DEPTH": "10",
-    "COLLECTION_DURATION": "45",
-    "MIN_COMMITS": "25",
+    "COLLECTION_DURATION": os.environ.get("V2_COLLECTION_DURATION", "45"),
+    "MIN_COMMITS": os.environ.get("V2_MIN_COMMITS", "25"),
 }
 
 # Attacker layout for n=13, alpha=0.308 -> the first 4 indices.
