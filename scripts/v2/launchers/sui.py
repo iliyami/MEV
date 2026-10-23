@@ -179,15 +179,16 @@ class SuiLauncher:
             subprocess_env["SLUGGISH_TIMEOUT_MULTIPLIER"] = str(
                 cfg.raw.get("environment", {}).get("SLUGGISH_TIMEOUT_MULTIPLIER", "2.0")
             )
-        # Test harness params
+        # Forward any extra env the cell declares (STAKE_PROFILE, LATENCY_MS,
+        # ASYMMETRIC_LATENCY, run length, etc.) so deployment/knob cells reach the
+        # Sui test. setdefault so it never overrides the specific keys set above.
+        for _k, _v in (cfg.raw.get("environment", {}) or {}).items():
+            subprocess_env.setdefault(_k, str(_v))
+        # Test harness params, applied only where the cell declares none (the
+        # cell's MIN_COMMITS / COLLECTION_DURATION used to be shadowed here).
         subprocess_env.setdefault("COLLECTION_DURATION", "45")
         subprocess_env.setdefault("MIN_COMMITS", str(cfg.num_nodes + 10))
         subprocess_env.setdefault("GC_DEPTH", "10")
-        # Forward any extra env the cell declares (STAKE_PROFILE, LATENCY_MS,
-        # ASYMMETRIC_LATENCY, etc.) so deployment/knob cells reach the Sui test.
-        # setdefault so it never overrides the specific keys set above.
-        for _k, _v in (cfg.raw.get("environment", {}) or {}).items():
-            subprocess_env.setdefault(_k, str(_v))
 
         # Coordinator sidecar
         coord: Optional[CoordinatorServer] = None
