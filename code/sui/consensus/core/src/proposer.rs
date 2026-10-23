@@ -1169,8 +1169,17 @@ impl Proposer for ValidatorProposer {
             if self.context.own_index.value() < num_atk {
                 let clock_round = self.dag_state.read().threshold_clock_round();
                 let committee_size = self.context.committee.size();
-                let is_my_leader_round =
-                    (clock_round as usize % committee_size) == self.context.own_index.value();
+                // SEL_REAL_SCHEDULE=1: follow the protocol's own (public) leader schedule
+                // instead of assuming round-robin, so the attack stays correct when the
+                // election is stake-based.
+                let is_my_leader_round = if std::env::var("SEL_REAL_SCHEDULE").map(|v| v == "1").unwrap_or(false) {
+                    self.leader_waiter
+                        .leader_slots_to_wait_for(clock_round)
+                        .iter()
+                        .any(|slot| slot.authority == self.context.own_index)
+                } else {
+                    (clock_round as usize % committee_size) == self.context.own_index.value()
+                };
                 if !is_my_leader_round {
                     return None;
                 }
