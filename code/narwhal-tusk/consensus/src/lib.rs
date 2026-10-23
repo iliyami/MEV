@@ -405,7 +405,40 @@ impl Consensus {
             ordered.push(cert.clone());
         }
 
-        traverse(leader, state, &mut visited, &mut ordered, self.attack_active, &self.attack_mode, &self.attacker_nodes, &self.victim_nodes);
+        // Upstream Narwhal `order_dag`: pre-order depth-first walk from the leader with a stack,
+        // visiting parents in the order of the header's parent set. NT_LOP_SORT=1 switches to an
+        // experimental post-order walk with digest-descending parents (`traverse` above).
+        if std::env::var("NT_LOP_SORT").map(|v| v == "1").unwrap_or(false) {
+            traverse(leader, state, &mut visited, &mut ordered, self.attack_active, &self.attack_mode, &self.attacker_nodes, &self.victim_nodes);
+        } else {
+            let mut already_ordered = HashSet::new();
+            let mut buffer = vec![leader];
+            while let Some(x) = buffer.pop() {
+                ordered.push(x.clone());
+                for parent in &x.header.parents {
+                    let (digest, certificate) = match state
+                        .dag
+                        .get(&(x.round() - 1))
+                        .map(|x| x.values().find(|(x, _)| x == parent))
+                        .flatten()
+                    {
+                        Some(x) => x,
+                        None => continue, // We already ordered or GC up to here.
+                    };
+                    // Skip the certificate if we (1) already processed it or (2) reached a round
+                    // that we already committed for this authority.
+                    let mut skip = already_ordered.contains(&digest);
+                    skip |= state
+                        .last_committed
+                        .get(&certificate.origin())
+                        .map_or_else(|| false, |r| r == &certificate.round());
+                    if !skip {
+                        buffer.push(certificate);
+                        already_ordered.insert(digest);
+                    }
+                }
+            }
+        }
 
         // Ensure we do not commit garbage collected certificates.
         ordered.retain(|x| x.round() + self.gc_depth >= state.last_committed_round);
