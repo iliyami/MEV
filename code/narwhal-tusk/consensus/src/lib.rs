@@ -322,7 +322,9 @@ impl Consensus {
     fn order_leaders(&self, leader: &Certificate, state: &State) -> Vec<Certificate> {
         let mut to_commit = vec![leader.clone()];
         let mut leader = leader;
-        for r in (state.last_committed_round + 2..leader.round())
+        // Upstream fix e5cc15d ("Fix round offset", Nov 2022): the range ends at the previous
+        // leader round, so the walk visits even (leader) rounds only.
+        for r in (state.last_committed_round + 2..=leader.round() - 2)
             .rev()
             .step_by(2)
         {
