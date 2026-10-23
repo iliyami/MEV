@@ -64,9 +64,14 @@ impl CommittedSubDag {
         CommittedSubDag::new(*leader_block_ref, blocks, timestamp_ms, commit_data.height)
     }
 
-    /// Sort the blocks of the sub-dag using a stable but per-process randomized key.
-    /// This provides experimental variance across repetitions while maintaining consistency within a run.
+    /// Sort the blocks of the sub-dag by round number, as upstream does. MYS_PID_SORT=1
+    /// restores an experimental per-process tiebreak; it is off by default so honest
+    /// validators run the upstream ordering.
     pub fn sort(&mut self) {
+        if !std::env::var("MYS_PID_SORT").map(|v| v == "1").unwrap_or(false) {
+            self.blocks.sort_by_key(|x| x.round());
+            return;
+        }
         let seed = std::process::id() as u64;
         tracing::debug!("🎲 Stochastic Sort (PID={})", seed);
         self.blocks.sort_by_key(|x| {

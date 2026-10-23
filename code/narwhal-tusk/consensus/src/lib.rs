@@ -260,6 +260,19 @@ impl Consensus {
                     certificate.round(),
                     certificate.origin(),
                 ));
+                // Measurement only: one line per committed certificate with its global
+                // height, round and role, so every arm can be scored the same way offline.
+                {
+                    let (attackers, victims) = self.scoring_roles();
+                    let role = if attackers.contains(&certificate.origin()) {
+                        "A"
+                    } else if victims.contains(&certificate.origin()) {
+                        "V"
+                    } else {
+                        "H"
+                    };
+                    info!("GLOBAL_COMMIT {} {} {}", global_height, certificate.round(), role);
+                }
                 
                 #[cfg(not(feature = "benchmark"))]
                 info!("Committed {}", certificate.header);
@@ -397,12 +410,18 @@ impl Consensus {
         // Ensure we do not commit garbage collected certificates.
         ordered.retain(|x| x.round() + self.gc_depth >= state.last_committed_round);
 
-        // Restore explicit LOP sorting logic: round ascending, digest descending
-        ordered.sort_by(|a, b| {
-            a.round().cmp(&b.round()).then_with(|| {
-                b.digest().as_ref().cmp(a.digest().as_ref())
-            })
-        });
+        // Upstream: stable sort by round, keeping the depth-first order inside a round.
+        // NT_LOP_SORT=1 restores an experimental digest-descending tiebreak; it is off by
+        // default so honest validators run the upstream ordering.
+        if std::env::var("NT_LOP_SORT").map(|v| v == "1").unwrap_or(false) {
+            ordered.sort_by(|a, b| {
+                a.round().cmp(&b.round()).then_with(|| {
+                    b.digest().as_ref().cmp(a.digest().as_ref())
+                })
+            });
+        } else {
+            ordered.sort_by_key(|x| x.round());
+        }
 
         // ASR TRACKING: Track when attacker blocks are ordered before victim blocks
         self.track_asr(&ordered);
@@ -416,6 +435,22 @@ impl Consensus {
     /// - Filter: attacker_round >= victim_round (attacker creates block after witnessing victim)
     /// - Success: attacker_height < victim_height (attacker block ordered before victim block)
     /// - ASR = successes / total_pairs
+    /// Attacker and victim sets exactly as `track_asr` and the proposer derive them.
+    fn scoring_roles(&self) -> (HashSet<PublicKey>, HashSet<PublicKey>) {
+        let ratio = |k: &str, d: f64| {
+            std::env::var(k).ok().and_then(|v| v.parse::<f64>().ok()).unwrap_or(d)
+        };
+        let n = self.committee.size();
+        let attacker_count = Self::resolve_ratio_count(n, ratio("ATTACKER_RATIO", 0.33));
+        let victim_count =
+            Self::resolve_victim_count(n, attacker_count, ratio("VICTIM_RATIO", 0.22));
+        let mut keys: Vec<PublicKey> = self.committee.authorities.keys().cloned().collect();
+        keys.sort();
+        let attackers = keys.iter().take(attacker_count).cloned().collect();
+        let victims = keys.iter().skip(attacker_count).take(victim_count).cloned().collect();
+        (attackers, victims)
+    }
+
     fn track_asr(&self, ordered: &[Certificate]) {
         // Check if attack tracking is enabled
         let attack_mode = std::env::var("ATTACK_MODE").unwrap_or_default();

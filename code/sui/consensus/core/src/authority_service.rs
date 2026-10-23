@@ -426,6 +426,24 @@ impl<C: CoreThreadDispatcher> ValidatorNetworkService for AuthorityService<C> {
             }),
         );
 
+        // D3 network model (environment, not an attack): LATENCY_MS delays every block
+        // this node streams to a peer, which is where blocks actually travel in this
+        // version. ASYMMETRIC_LATENCY doubles it for links that touch the far group
+        // (index >= 9). Applied to every node alike; honest handling is unchanged.
+        let link_latency_ms: u64 = std::env::var("LATENCY_MS")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .map(|ms| {
+                let far = peer.value() >= 9 || self.context.own_index.value() >= 9;
+                if std::env::var("ASYMMETRIC_LATENCY").is_ok() && far {
+                    ms.saturating_mul(2)
+                } else {
+                    ms
+                }
+            })
+            .unwrap_or(0);
+        let withhold_delay_ms = withhold_delay_ms + link_latency_ms;
+
         if withhold_delay_ms > 0 {
             let delay = Duration::from_millis(withhold_delay_ms);
             Ok(Box::pin(block_stream.then(move |item| async move {
