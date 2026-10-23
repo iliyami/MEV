@@ -242,21 +242,17 @@ async fn create_unit<U: Unit>(
 async fn process_unit<U: Unit>(
     creator: &mut Creator<U::Hasher>,
     incoming_parents: &mut Receiver<U>,
-    _is_attacker: bool,
+    is_attacker: bool,
 ) -> anyhow::Result<(), CreatorError> {
-    // SLUGGISH ATTACK: Strategic delay in processing incoming units
-    // Strategy: Small delay for all nodes in sluggish mode to manipulate timing
-    // This creates a timing environment that can affect when units see enough parents
-    // Key insight: Delaying all nodes slightly can create timing advantages for attackers
+    // SLUGGISH ATTACK: the attacker delays processing incoming units, so it builds its own
+    // units later. Only attacker nodes apply the delay; honest nodes run the upstream path.
     let attack_mode = std::env::var("ATTACK_MODE").unwrap_or_default();
-    if attack_mode == "sluggish" {
+    if attack_mode == "sluggish" && is_attacker {
         let processing_delay_ms: u64 = std::env::var("SLUGGISH_PROCESSING_DELAY_MS")
             .unwrap_or_else(|_| "10".to_string())  // Optimal: 10ms processing delay for all nodes
             .parse()
             .unwrap_or(10);
         
-        // Apply small delay to all nodes in sluggish mode
-        // This creates a timing environment where attackers can benefit from better parent sets
         if processing_delay_ms > 0 && processing_delay_ms < 15 {
             Delay::new(Duration::from_millis(processing_delay_ms)).await;
         }
