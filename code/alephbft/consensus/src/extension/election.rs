@@ -177,10 +177,10 @@ impl<U: UnitWithParents> RoundElection<U> {
         let seed_str = std::env::var("ALEPH_HASH_SORT_SEED").unwrap_or_else(|_| "0".to_string());
         let seed: u64 = seed_str.parse().unwrap_or(0);
         if seed != 0 {
-            // Apply deterministic "shuffle" by XORing or rotating based on seed + round
-            // This breaks the attacker's ability to grind a globally "best" hash
-            let rotation = (seed % candidates.len() as u64) as usize;
-            candidates.rotate_left(rotation);
+            // Order candidates by a seeded key of their own hash. The key is a function of the
+            // candidate alone, so nodes with different local candidate sets still agree on the
+            // relative order of any two candidates, as with the upstream hash order.
+            candidates.sort_by_key(|h| (super::seeded_rank_key(seed, h.as_ref()), *h));
         }
 
         // We will be `pop`ing the candidates from the back.

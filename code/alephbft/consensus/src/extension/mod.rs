@@ -1,6 +1,17 @@
 use crate::{dag::DagUnit, MultiKeychain, UnitFinalizationHandler};
 
 mod election;
+
+/// Seeded ranking key for a round's election candidates (env ALEPH_HASH_SORT_SEED, 0 = upstream).
+/// The key depends only on the seed and the candidate's own hash, so every node orders any two
+/// candidates the same way, exactly as the upstream hash order does.
+pub(crate) fn seeded_rank_key(seed: u64, bytes: &[u8]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    seed.hash(&mut h);
+    bytes.hash(&mut h);
+    h.finish()
+}
 mod extender;
 mod units;
 

@@ -136,50 +136,25 @@ where
 
             // PAPER-2 A4.2, the INFORMATION dimension.
             //
-            // The election extension sorts candidates by hash, rotates by
-            // `ALEPH_HASH_SORT_SEED % candidates.len()`, and takes the winner, so the winning
-            // rank is `rotation`, not necessarily rank 0. The grinder below targets the
-            // SMALLEST hash, which wins only when rotation == 0. That is why the artifact's
-            // "HASH SORT RANDOMIZATION" mitigation appears to work: at seed 123 with 13
-            // candidates the winning rank is 6, a minimum-grinder never lands there, and the
-            // measured speculative ASR collapses.
-            //
-            // The mitigation only holds against a *locally* informed attacker. An attacker
-            // that knows the seed and the committee size knows the winning rank, and to land
-            // at rank r among n roughly-uniform hashes it should aim for the r/n quantile of
-            // the hash space rather than the minimum. It never needs its peers' actual
-            // hashes, only their distribution, so this is information a real adversary has:
-            // the seed is protocol configuration and n is public.
-            //
-            // SPECULATIVE_SEED_AWARE=1 selects the candidate closest to that quantile.
-            // Choosing among one's own valid candidates is unchanged; only the selection
-            // criterion, i.e. what the attacker knows, differs. Default path untouched.
+            // With ALEPH_HASH_SORT_SEED set, the election orders a round's candidates by
+            // seeded_rank_key(seed, hash) instead of the raw hash. The default grinder below
+            // still minimizes the raw hash, which the seeded order no longer rewards. An
+            // attacker that knows the seed (it is protocol configuration) grinds the seeded key
+            // directly. SPECULATIVE_SEED_AWARE=1 selects that criterion. Choosing among one's
+            // own valid candidates is unchanged; only what the attacker knows differs.
             let seed_aware = env::var("SPECULATIVE_SEED_AWARE")
                 .ok()
                 .filter(|v| v != "0")
                 .is_some();
             let is_better = if seed_aware && !is_back_attacker {
+                // The election orders candidates by seeded_rank_key(seed, hash); an attacker
+                // that knows the seed grinds that key instead of the raw hash.
                 let seed: u64 = env::var("ALEPH_HASH_SORT_SEED")
                     .ok()
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(0);
-                let n = read_network_size(13).max(1) as u64;
-                let rotation = seed % n;
-                // Target the rotation/n quantile of the hash space, read from the leading
-                // 8 bytes so the comparison is over the same prefix the sort orders by.
-                let lead = |h: &<H as Hasher>::Hash| -> u128 {
-                    let b = h.as_ref();
-                    let mut v: u128 = 0;
-                    for i in 0..8.min(b.len()) {
-                        v = (v << 8) | b[i] as u128;
-                    }
-                    v
-                };
-                let span: u128 = u64::MAX as u128;
-                let target: u128 = span * rotation as u128 / n as u128;
-                let d_new = lead(&candidate_hash).abs_diff(target);
-                let d_old = lead(&best_hash).abs_diff(target);
-                d_new < d_old
+                crate::extension::seeded_rank_key(seed, candidate_hash.as_ref())
+                    < crate::extension::seeded_rank_key(seed, best_hash.as_ref())
             } else if is_back_attacker {
                 candidate_hash > best_hash
             } else {

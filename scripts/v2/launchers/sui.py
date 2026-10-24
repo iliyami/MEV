@@ -155,6 +155,10 @@ class SuiLauncher:
         if os.environ.get("SUI_RELEASE"):
             cmd.append("--release")
         cmd += ["--lib", test_name, "--", "--nocapture"]
+        # Harness-only: SUI_TEST_BIN runs an already-built consensus-core test binary
+        # directly, skipping cargo's per-call fingerprinting of the whole workspace.
+        if os.environ.get("SUI_TEST_BIN"):
+            cmd = [os.environ["SUI_TEST_BIN"], test_name, "--nocapture"]
 
         subprocess_env = os.environ.copy()
         subprocess_env["ATTACK_MODE"] = _SUI_ATTACK_MODE.get(strategy, strategy)
