@@ -302,6 +302,9 @@ impl<H: BlockHandler> Core<H> {
             }
         }
         
+        // Victim includes the fissure attacker dropped; restored below if the block would
+        // otherwise lack a quorum of previous-round parents (an invalid block).
+        let mut fissure_dropped: Vec<BlockReference> = vec![];
         for (_, statement) in taken.into_iter() {
             match statement {
                 MetaStatement::Include(include) => {
@@ -319,6 +322,7 @@ impl<H: BlockHandler> Core<H> {
                                     victim_id,
                                     include.round
                                 );
+                                fissure_dropped.push(include);
                                 continue; // Skip adding this victim block
                             } else {
                                 tracing::debug!(
@@ -360,6 +364,20 @@ impl<H: BlockHandler> Core<H> {
                         statements.extend(payload);
                     }
                 }
+            }
+        }
+
+        // Fissure stays inside the legitimate action set: a block must still reference a
+        // quorum of round-(clock_round - 1) blocks, so the victim is dropped only when the
+        // remaining parents already form that quorum.
+        if !fissure_dropped.is_empty() {
+            let mut aggregator = crate::committee::StakeAggregator::<crate::committee::QuorumThreshold>::new();
+            let mut is_quorum = false;
+            for r in includes.iter().filter(|r| r.round + 1 == clock_round) {
+                is_quorum = aggregator.add(r.authority, &self.committee);
+            }
+            if !is_quorum {
+                includes.extend(fissure_dropped.drain(..));
             }
         }
 
