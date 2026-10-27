@@ -39,6 +39,8 @@ RE_META = re.compile(r"FairDag CommitMeta (\S+) author (\S+) round (\d+) height 
 # Roles come from the logged ATTACK PAIRS, exactly as our_harness/measure.py does. An earlier
 # version keyed off "Created a victim header", which every non-attacker emits, so it labelled
 # all nine honest nodes as victims and compared honest-vs-attacker (censorship read -738%).
+# The vote-withholding hook names its target; used when the victim has no committed block.
+RE_CENSOR = re.compile(r"CENSOR_VOTE_WITHHELD round \d+ target (\S+)")
 RE_PAIRS = [
     re.compile(r"FairDag Created a fissure attacking header (\S+), victim header (\S+), in round (\d+)"),
     re.compile(r"FairDag Created a sluggish attacking header (\S+), victim header (\S+), in round (\d+)"),
@@ -51,6 +53,7 @@ def score_run(run_dir: str) -> dict | None:
     meta: dict[str, dict] = {}
     victim_digests: set[str] = set()
     attacker_digests: set[str] = set()
+    censor_targets: set[str] = set()
 
     for path in glob.glob(os.path.join(run_dir, "primary-*.log")):
         with open(path, encoding="utf-8", errors="replace") as fh:
@@ -59,6 +62,10 @@ def score_run(run_dir: str) -> dict | None:
                 if m:
                     d, author, rnd, h = m.groups()
                     meta[d] = {"author": author, "round": int(rnd), "height": int(h)}
+                    continue
+                m = RE_CENSOR.search(line)
+                if m:
+                    censor_targets.add(m.group(1))
                     continue
                 for rx in RE_PAIRS:
                     m = rx.search(line)
@@ -74,6 +81,9 @@ def score_run(run_dir: str) -> dict | None:
     # nothing rather than guessing, so a missing marker is visible instead of silently
     # producing a wrong denominator.
     victim_authors = {meta[d]["author"] for d in victim_digests if d in meta}
+    if not victim_authors and censor_targets:
+        # A fully censored victim commits nothing; the withholding hook still names it.
+        victim_authors = set(censor_targets)
     if not victim_authors:
         return {"error": "no victim headers matched committed blocks", "committed": len(meta)}
 
