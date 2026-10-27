@@ -1,0 +1,11 @@
+launched
+{"arm": "baseline_f4_n13", "run": "run0", "same_round_succ": 132, "same_round_total": 261, "all_pairs_succ": 34323, "all_pairs_total": 68644}
+{"arm": "baseline_f4_n13", "run": "run1", "same_round_succ": 142, "same_round_total": 272, "all_pairs_succ": 37956, "all_pairs_total": 75900}
+{"arm": "baseline_f4_n13", "run": "run2", "same_round_succ": 150, "same_round_total": 265, "all_pairs_succ": 35488, "all_pairs_total": 71556}
+{"arm": "baseline_f4_n13", "run": "run3", "same_round_succ": 129, "same_round_total": 255, "all_pairs_succ": 33753, "all_pairs_total": 67596}
+{"arm": "baseline_f4_n13", "run": "run4", "same_round_succ": 129, "same_round_total": 261, "all_pairs_succ": 34470, "all_pairs_total": 69165}
+{"arm": "fissure_f4_n13", "run": "run0", "same_round_succ": 90, "same_round_total": 118, "all_pairs_succ": 25178, "all_pairs_total": 33138}
+{"arm": "fissure_f4_n13", "run": "run1", "same_round_succ": 174, "same_round_total": 272, "all_pairs_succ": 37521, "all_pairs_total": 75076}
+{"arm": "fissure_f4_n13", "run": "run2", "same_round_succ": 168, "same_round_total": 261, "all_pairs_succ": 34464, "all_pairs_total": 68643}
+{"arm": "fissure_f4_n13", "run": "run3", "same_round_succ": 97, "same_round_total": 152, "all_pairs_succ": 28461, "all_pairs_total": 40194}
+{"arm": "fissure_f4_n13", "run": "run4", "same_round_succ": 183, "same_round_total": 268, "all_pairs_succ": 37089, "all_pairs_total": 73710}

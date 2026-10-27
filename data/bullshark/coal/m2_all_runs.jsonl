@@ -1,0 +1,440 @@
+{"arm": "base1", "src": "coal", "run": "run0", "nopairs": 1}
+{"arm": "base1", "src": "coal", "run": "run1", "nopairs": 1}
+{"arm": "base1", "src": "coal", "run": "run10", "nopairs": 1}
+{"arm": "base1", "src": "coal", "run": "run11", "nopairs": 1}
+{"arm": "base1", "src": "coal", "run": "run12", "nopairs": 1}
+{"arm": "base1", "src": "coal", "run": "run13", "nopairs": 1}
+{"arm": "base1", "src": "coal", "run": "run14", "nopairs": 1}
+{"arm": "base1", "src": "coal", "run": "run15", "nopairs": 1}
+{"arm": "base1", "src": "coal", "run": "run2", "nopairs": 1}
+{"arm": "base1", "src": "coal", "run": "run3", "nopairs": 1}
+{"arm": "base1", "src": "coal", "run": "run4", "nopairs": 1}
+{"arm": "base1", "src": "coal", "run": "run5", "nopairs": 1}
+{"arm": "base1", "src": "coal", "run": "run6", "nopairs": 1}
+{"arm": "base1", "src": "coal", "run": "run7", "nopairs": 1}
+{"arm": "base1", "src": "coal", "run": "run8", "nopairs": 1}
+{"arm": "base1", "src": "coal", "run": "run9", "nopairs": 1}
+{"arm": "base1", "src": "coal2", "run": "run0", "nopairs": 1}
+{"arm": "base1", "src": "coal2", "run": "run1", "nopairs": 1}
+{"arm": "base1", "src": "coal2", "run": "run10", "nopairs": 1}
+{"arm": "base1", "src": "coal2", "run": "run11", "nopairs": 1}
+{"arm": "base1", "src": "coal2", "run": "run12", "nopairs": 1}
+{"arm": "base1", "src": "coal2", "run": "run13", "nopairs": 1}
+{"arm": "base1", "src": "coal2", "run": "run14", "nopairs": 1}
+{"arm": "base1", "src": "coal2", "run": "run15", "nopairs": 1}
+{"arm": "base1", "src": "coal2", "run": "run16", "nopairs": 1}
+{"arm": "base1", "src": "coal2", "run": "run17", "nopairs": 1}
+{"arm": "base1", "src": "coal2", "run": "run18", "nopairs": 1}
+{"arm": "base1", "src": "coal2", "run": "run19", "nopairs": 1}
+{"arm": "base1", "src": "coal2", "run": "run2", "nopairs": 1}
+{"arm": "base1", "src": "coal2", "run": "run20", "nopairs": 1}
+{"arm": "base1", "src": "coal2", "run": "run21", "nopairs": 1}
+{"arm": "base1", "src": "coal2", "run": "run22", "nopairs": 1}
+{"arm": "base1", "src": "coal2", "run": "run23", "nopairs": 1}
+{"arm": "base1", "src": "coal2", "run": "run3", "nopairs": 1}
+{"arm": "base1", "src": "coal2", "run": "run4", "nopairs": 1}
+{"arm": "base1", "src": "coal2", "run": "run5", "nopairs": 1}
+{"arm": "base1", "src": "coal2", "run": "run6", "nopairs": 1}
+{"arm": "base1", "src": "coal2", "run": "run7", "nopairs": 1}
+{"arm": "base1", "src": "coal2", "run": "run8", "nopairs": 1}
+{"arm": "base1", "src": "coal2", "run": "run9", "nopairs": 1}
+{"arm": "base4", "src": "coal", "run": "run0", "nopairs": 1}
+{"arm": "base4", "src": "coal", "run": "run1", "nopairs": 1}
+{"arm": "base4", "src": "coal", "run": "run10", "nopairs": 1}
+{"arm": "base4", "src": "coal", "run": "run11", "nopairs": 1}
+{"arm": "base4", "src": "coal", "run": "run12", "nopairs": 1}
+{"arm": "base4", "src": "coal", "run": "run13", "nopairs": 1}
+{"arm": "base4", "src": "coal", "run": "run14", "nopairs": 1}
+{"arm": "base4", "src": "coal", "run": "run15", "nopairs": 1}
+{"arm": "base4", "src": "coal", "run": "run2", "nopairs": 1}
+{"arm": "base4", "src": "coal", "run": "run3", "nopairs": 1}
+{"arm": "base4", "src": "coal", "run": "run4", "nopairs": 1}
+{"arm": "base4", "src": "coal", "run": "run5", "nopairs": 1}
+{"arm": "base4", "src": "coal", "run": "run6", "nopairs": 1}
+{"arm": "base4", "src": "coal", "run": "run7", "nopairs": 1}
+{"arm": "base4", "src": "coal", "run": "run8", "nopairs": 1}
+{"arm": "base4", "src": "coal", "run": "run9", "nopairs": 1}
+{"arm": "base4", "src": "coal2", "run": "run0", "nopairs": 1}
+{"arm": "base4", "src": "coal2", "run": "run1", "nopairs": 1}
+{"arm": "base4", "src": "coal2", "run": "run10", "nopairs": 1}
+{"arm": "base4", "src": "coal2", "run": "run11", "nopairs": 1}
+{"arm": "base4", "src": "coal2", "run": "run12", "nopairs": 1}
+{"arm": "base4", "src": "coal2", "run": "run13", "nopairs": 1}
+{"arm": "base4", "src": "coal2", "run": "run14", "nopairs": 1}
+{"arm": "base4", "src": "coal2", "run": "run15", "nopairs": 1}
+{"arm": "base4", "src": "coal2", "run": "run16", "nopairs": 1}
+{"arm": "base4", "src": "coal2", "run": "run17", "nopairs": 1}
+{"arm": "base4", "src": "coal2", "run": "run18", "nopairs": 1}
+{"arm": "base4", "src": "coal2", "run": "run19", "nopairs": 1}
+{"arm": "base4", "src": "coal2", "run": "run2", "nopairs": 1}
+{"arm": "base4", "src": "coal2", "run": "run20", "nopairs": 1}
+{"arm": "base4", "src": "coal2", "run": "run21", "nopairs": 1}
+{"arm": "base4", "src": "coal2", "run": "run22", "nopairs": 1}
+{"arm": "base4", "src": "coal2", "run": "run23", "nopairs": 1}
+{"arm": "base4", "src": "coal2", "run": "run3", "nopairs": 1}
+{"arm": "base4", "src": "coal2", "run": "run4", "nopairs": 1}
+{"arm": "base4", "src": "coal2", "run": "run5", "nopairs": 1}
+{"arm": "base4", "src": "coal2", "run": "run6", "nopairs": 1}
+{"arm": "base4", "src": "coal2", "run": "run7", "nopairs": 1}
+{"arm": "base4", "src": "coal2", "run": "run8", "nopairs": 1}
+{"arm": "base4", "src": "coal2", "run": "run9", "nopairs": 1}
+{"arm": "base6", "src": "coal", "run": "run0", "nopairs": 1}
+{"arm": "base6", "src": "coal", "run": "run1", "nopairs": 1}
+{"arm": "base6", "src": "coal", "run": "run10", "nopairs": 1}
+{"arm": "base6", "src": "coal", "run": "run11", "nopairs": 1}
+{"arm": "base6", "src": "coal", "run": "run12", "nopairs": 1}
+{"arm": "base6", "src": "coal", "run": "run13", "nopairs": 1}
+{"arm": "base6", "src": "coal", "run": "run14", "nopairs": 1}
+{"arm": "base6", "src": "coal", "run": "run15", "nopairs": 1}
+{"arm": "base6", "src": "coal", "run": "run2", "nopairs": 1}
+{"arm": "base6", "src": "coal", "run": "run3", "nopairs": 1}
+{"arm": "base6", "src": "coal", "run": "run4", "nopairs": 1}
+{"arm": "base6", "src": "coal", "run": "run5", "nopairs": 1}
+{"arm": "base6", "src": "coal", "run": "run6", "nopairs": 1}
+{"arm": "base6", "src": "coal", "run": "run7", "nopairs": 1}
+{"arm": "base6", "src": "coal", "run": "run8", "nopairs": 1}
+{"arm": "base6", "src": "coal", "run": "run9", "nopairs": 1}
+{"arm": "base6", "src": "coal2", "run": "run0", "nopairs": 1}
+{"arm": "base6", "src": "coal2", "run": "run1", "nopairs": 1}
+{"arm": "base6", "src": "coal2", "run": "run10", "nopairs": 1}
+{"arm": "base6", "src": "coal2", "run": "run11", "nopairs": 1}
+{"arm": "base6", "src": "coal2", "run": "run12", "nopairs": 1}
+{"arm": "base6", "src": "coal2", "run": "run13", "nopairs": 1}
+{"arm": "base6", "src": "coal2", "run": "run14", "nopairs": 1}
+{"arm": "base6", "src": "coal2", "run": "run15", "nopairs": 1}
+{"arm": "base6", "src": "coal2", "run": "run16", "nopairs": 1}
+{"arm": "base6", "src": "coal2", "run": "run17", "nopairs": 1}
+{"arm": "base6", "src": "coal2", "run": "run18", "nopairs": 1}
+{"arm": "base6", "src": "coal2", "run": "run19", "nopairs": 1}
+{"arm": "base6", "src": "coal2", "run": "run2", "nopairs": 1}
+{"arm": "base6", "src": "coal2", "run": "run20", "nopairs": 1}
+{"arm": "base6", "src": "coal2", "run": "run21", "nopairs": 1}
+{"arm": "base6", "src": "coal2", "run": "run22", "nopairs": 1}
+{"arm": "base6", "src": "coal2", "run": "run23", "nopairs": 1}
+{"arm": "base6", "src": "coal2", "run": "run3", "nopairs": 1}
+{"arm": "base6", "src": "coal2", "run": "run4", "nopairs": 1}
+{"arm": "base6", "src": "coal2", "run": "run5", "nopairs": 1}
+{"arm": "base6", "src": "coal2", "run": "run6", "nopairs": 1}
+{"arm": "base6", "src": "coal2", "run": "run7", "nopairs": 1}
+{"arm": "base6", "src": "coal2", "run": "run8", "nopairs": 1}
+{"arm": "base6", "src": "coal2", "run": "run9", "nopairs": 1}
+{"arm": "solo", "src": "coal", "run": "run0", "m1": [31750, 64262], "m2": [118, 241]}
+{"arm": "solo", "src": "coal", "run": "run1", "m1": [32865, 65535], "m2": [128, 252]}
+{"arm": "solo", "src": "coal", "run": "run10", "m1": [33388, 66820], "m2": [150, 257]}
+{"arm": "solo", "src": "coal", "run": "run11", "m1": [32928, 65535], "m2": [151, 255]}
+{"arm": "solo", "src": "coal", "run": "run12", "m1": [30964, 61250], "m2": [122, 240]}
+{"arm": "solo", "src": "coal", "run": "run13", "m1": [35747, 71556], "m2": [144, 265]}
+{"arm": "solo", "src": "coal", "run": "run14", "m1": [31586, 63252], "m2": [143, 251]}
+{"arm": "solo", "src": "coal", "run": "run15", "m1": [34087, 68121], "m2": [147, 261]}
+{"arm": "solo", "src": "coal", "run": "run2", "m1": [32371, 64515], "m2": [129, 251]}
+{"arm": "solo", "src": "coal", "run": "run3", "m1": [31617, 63252], "m2": [143, 251]}
+{"arm": "solo", "src": "coal", "run": "run4", "m1": [32274, 64516], "m2": [135, 253]}
+{"arm": "solo", "src": "coal", "run": "run5", "m1": [31466, 62750], "m2": [123, 250]}
+{"arm": "solo", "src": "coal", "run": "run6", "m1": [32872, 65278], "m2": [124, 246]}
+{"arm": "solo", "src": "coal", "run": "run7", "nopairs": 1}
+{"arm": "solo", "src": "coal", "run": "run8", "m1": [32440, 64512], "m2": [131, 252]}
+{"arm": "solo", "src": "coal", "run": "run9", "m1": [30657, 62001], "m2": [109, 237]}
+{"arm": "solo", "src": "coal2", "run": "run0", "m1": [27543, 54990], "m2": [125, 232]}
+{"arm": "solo", "src": "coal2", "run": "run1", "m1": [27377, 55224], "m2": [121, 233]}
+{"arm": "solo", "src": "coal2", "run": "run10", "m1": [28711, 57360], "m2": [137, 237]}
+{"arm": "solo", "src": "coal2", "run": "run11", "m1": [30530, 61250], "m2": [133, 240]}
+{"arm": "solo", "src": "coal2", "run": "run12", "m1": [27225, 54288], "m2": [128, 230]}
+{"arm": "solo", "src": "coal2", "run": "run13", "m1": [28337, 56160], "m2": [131, 229]}
+{"arm": "solo", "src": "coal2", "run": "run14", "m1": [28286, 56644], "m2": [120, 237]}
+{"arm": "solo", "src": "coal2", "run": "run15", "m1": [28198, 56406], "m2": [118, 224]}
+{"arm": "solo", "src": "coal2", "run": "run16", "m1": [29015, 56580], "m2": [129, 228]}
+{"arm": "solo", "src": "coal2", "run": "run17", "m1": [27819, 55460], "m2": [108, 233]}
+{"arm": "solo", "src": "coal2", "run": "run18", "m1": [27609, 55458], "m2": [117, 233]}
+{"arm": "solo", "src": "coal2", "run": "run19", "m1": [30358, 60762], "m2": [153, 245]}
+{"arm": "solo", "src": "coal2", "run": "run2", "m1": [29083, 58320], "m2": [133, 238]}
+{"arm": "solo", "src": "coal2", "run": "run20", "m1": [28610, 57121], "m2": [122, 237]}
+{"arm": "solo", "src": "coal2", "run": "run21", "m1": [27771, 56168], "m2": [123, 230]}
+{"arm": "solo", "src": "coal2", "run": "run22", "m1": [31807, 63756], "m2": [136, 250]}
+{"arm": "solo", "src": "coal2", "run": "run23", "m1": [26302, 53128], "m2": [111, 216]}
+{"arm": "solo", "src": "coal2", "run": "run3", "m1": [30904, 60993], "m2": [134, 241]}
+{"arm": "solo", "src": "coal2", "run": "run4", "m1": [29645, 59048], "m2": [118, 239]}
+{"arm": "solo", "src": "coal2", "run": "run5", "m1": [28050, 54960], "m2": [115, 226]}
+{"arm": "solo", "src": "coal2", "run": "run6", "m1": [29924, 59290], "m2": [116, 239]}
+{"arm": "solo", "src": "coal2", "run": "run7", "m1": [30779, 61504], "m2": [142, 248]}
+{"arm": "solo", "src": "coal2", "run": "run8", "m1": [27645, 55224], "m2": [119, 233]}
+{"arm": "solo", "src": "coal2", "run": "run9", "m1": [27255, 55440], "m2": [124, 228]}
+{"arm": "bribe1", "src": "coal2", "run": "run0", "m1": [33206, 65780], "m2": [131, 243]}
+{"arm": "bribe1", "src": "coal2", "run": "run1", "m1": [32603, 65016], "m2": [149, 249]}
+{"arm": "bribe1", "src": "coal2", "run": "run10", "m1": [33928, 68643], "m2": [152, 260]}
+{"arm": "bribe1", "src": "coal2", "run": "run11", "m1": [32964, 66306], "m2": [143, 252]}
+{"arm": "bribe1", "src": "coal2", "run": "run12", "m1": [32881, 65536], "m2": [146, 255]}
+{"arm": "bribe1", "src": "coal2", "run": "run13", "m1": [35135, 71285], "m2": [169, 264]}
+{"arm": "bribe1", "src": "coal2", "run": "run14", "m1": [33686, 67338], "m2": [146, 255]}
+{"arm": "bribe1", "src": "coal2", "run": "run15", "m1": [34852, 69696], "m2": [154, 263]}
+{"arm": "bribe1", "src": "coal2", "run": "run16", "m1": [33060, 66049], "m2": [154, 257]}
+{"arm": "bribe1", "src": "coal2", "run": "run17", "m1": [33237, 66563], "m2": [137, 250]}
+{"arm": "bribe1", "src": "coal2", "run": "run18", "m1": [33466, 66563], "m2": [136, 257]}
+{"arm": "bribe1", "src": "coal2", "run": "run19", "nopairs": 1}
+{"arm": "bribe1", "src": "coal2", "run": "run2", "m1": [32142, 64262], "m2": [144, 250]}
+{"arm": "bribe1", "src": "coal2", "run": "run20", "m1": [33196, 66048], "m2": [156, 254]}
+{"arm": "bribe1", "src": "coal2", "run": "run21", "m1": [32857, 66306], "m2": [146, 256]}
+{"arm": "bribe1", "src": "coal2", "run": "run22", "m1": [34576, 68906], "m2": [145, 262]}
+{"arm": "bribe1", "src": "coal2", "run": "run23", "m1": [36114, 72900], "m2": [155, 268]}
+{"arm": "bribe1", "src": "coal2", "run": "run24", "m1": [33713, 67599], "m2": [147, 253]}
+{"arm": "bribe1", "src": "coal2", "run": "run25", "m1": [33584, 67080], "m2": [154, 257]}
+{"arm": "bribe1", "src": "coal2", "run": "run26", "m1": [32107, 64262], "m2": [141, 245]}
+{"arm": "bribe1", "src": "coal2", "run": "run27", "m1": [33316, 66563], "m2": [162, 255]}
+{"arm": "bribe1", "src": "coal2", "run": "run28", "m1": [34249, 68643], "m2": [142, 259]}
+{"arm": "bribe1", "src": "coal2", "run": "run29", "m1": [34681, 69696], "m2": [145, 258]}
+{"arm": "bribe1", "src": "coal2", "run": "run3", "m1": [32902, 67081], "m2": [136, 254]}
+{"arm": "bribe1", "src": "coal2", "run": "run30", "m1": [32830, 66048], "m2": [157, 245]}
+{"arm": "bribe1", "src": "coal2", "run": "run31", "m1": [32853, 66792], "m2": [143, 250]}
+{"arm": "bribe1", "src": "coal2", "run": "run32", "m1": [32681, 65280], "m2": [132, 247]}
+{"arm": "bribe1", "src": "coal2", "run": "run33", "m1": [34010, 68121], "m2": [136, 259]}
+{"arm": "bribe1", "src": "coal2", "run": "run34", "m1": [33221, 66822], "m2": [141, 246]}
+{"arm": "bribe1", "src": "coal2", "run": "run35", "nopairs": 1}
+{"arm": "bribe1", "src": "coal2", "run": "run36", "m1": [33586, 67340], "m2": [150, 258]}
+{"arm": "bribe1", "src": "coal2", "run": "run37", "m1": [32777, 65536], "m2": [146, 255]}
+{"arm": "bribe1", "src": "coal2", "run": "run38", "m1": [32971, 66049], "m2": [133, 245]}
+{"arm": "bribe1", "src": "coal2", "run": "run39", "m1": [33782, 67334], "m2": [143, 252]}
+{"arm": "bribe1", "src": "coal2", "run": "run4", "m1": [33585, 67080], "m2": [149, 257]}
+{"arm": "bribe1", "src": "coal2", "run": "run5", "m1": [33063, 66560], "m2": [149, 247]}
+{"arm": "bribe1", "src": "coal2", "run": "run6", "m1": [33538, 66822], "m2": [145, 257]}
+{"arm": "bribe1", "src": "coal2", "run": "run7", "m1": [31465, 63495], "m2": [152, 244]}
+{"arm": "bribe1", "src": "coal2", "run": "run8", "m1": [33508, 66822], "m2": [143, 258]}
+{"arm": "bribe1", "src": "coal2", "run": "run9", "m1": [32921, 65792], "m2": [143, 256]}
+{"arm": "bribe2", "src": "coal2", "run": "run0", "m1": [33055, 66563], "m2": [148, 252]}
+{"arm": "bribe2", "src": "coal2", "run": "run1", "m1": [33493, 67340], "m2": [168, 258]}
+{"arm": "bribe2", "src": "coal2", "run": "run10", "m1": [35305, 70755], "m2": [151, 265]}
+{"arm": "bribe2", "src": "coal2", "run": "run11", "m1": [34557, 69168], "m2": [157, 261]}
+{"arm": "bribe2", "src": "coal2", "run": "run12", "m1": [35223, 70488], "m2": [160, 263]}
+{"arm": "bribe2", "src": "coal2", "run": "run13", "m1": [32419, 65024], "m2": [147, 250]}
+{"arm": "bribe2", "src": "coal2", "run": "run14", "m1": [30702, 62000], "m2": [163, 245]}
+{"arm": "bribe2", "src": "coal2", "run": "run15", "m1": [32414, 65280], "m2": [147, 253]}
+{"arm": "bribe2", "src": "coal2", "run": "run16", "m1": [32761, 65024], "m2": [140, 252]}
+{"arm": "bribe2", "src": "coal2", "run": "run17", "m1": [31261, 63240], "m2": [146, 247]}
+{"arm": "bribe2", "src": "coal2", "run": "run18", "m1": [32814, 65536], "m2": [143, 252]}
+{"arm": "bribe2", "src": "coal2", "run": "run19", "m1": [32451, 65024], "m2": [154, 254]}
+{"arm": "bribe2", "src": "coal2", "run": "run2", "m1": [33323, 66564], "m2": [144, 250]}
+{"arm": "bribe2", "src": "coal2", "run": "run20", "m1": [32767, 65535], "m2": [153, 255]}
+{"arm": "bribe2", "src": "coal2", "run": "run21", "m1": [31210, 62738], "m2": [147, 246]}
+{"arm": "bribe2", "src": "coal2", "run": "run22", "m1": [32319, 65274], "m2": [143, 248]}
+{"arm": "bribe2", "src": "coal2", "run": "run23", "m1": [33014, 65274], "m2": [157, 252]}
+{"arm": "bribe2", "src": "coal2", "run": "run24", "m1": [34380, 69168], "m2": [154, 261]}
+{"arm": "bribe2", "src": "coal2", "run": "run25", "m1": [36008, 71550], "m2": [167, 264]}
+{"arm": "bribe2", "src": "coal2", "run": "run26", "m1": [32095, 64262], "m2": [149, 244]}
+{"arm": "bribe2", "src": "coal2", "run": "run27", "m1": [33506, 67340], "m2": [148, 251]}
+{"arm": "bribe2", "src": "coal2", "run": "run28", "m1": [30104, 60760], "m2": [140, 245]}
+{"arm": "bribe2", "src": "coal2", "run": "run29", "m1": [28159, 56644], "m2": [138, 234]}
+{"arm": "bribe2", "src": "coal2", "run": "run3", "m1": [32766, 65280], "m2": [151, 255]}
+{"arm": "bribe2", "src": "coal2", "run": "run30", "m1": [29768, 61236], "m2": [131, 236]}
+{"arm": "bribe2", "src": "coal2", "run": "run31", "m1": [31317, 62750], "m2": [149, 248]}
+{"arm": "bribe2", "src": "coal2", "run": "run32", "m1": [29804, 59780], "m2": [152, 243]}
+{"arm": "bribe2", "src": "coal2", "run": "run33", "m1": [30171, 60264], "m2": [142, 238]}
+{"arm": "bribe2", "src": "coal2", "run": "run34", "nopairs": 1}
+{"arm": "bribe2", "src": "coal2", "run": "run35", "m1": [28778, 57599], "m2": [142, 239]}
+{"arm": "bribe2", "src": "coal2", "run": "run36", "m1": [28982, 57348], "m2": [131, 236]}
+{"arm": "bribe2", "src": "coal2", "run": "run37", "m1": [32501, 64770], "m2": [146, 254]}
+{"arm": "bribe2", "src": "coal2", "run": "run38", "m1": [31588, 62992], "m2": [151, 247]}
+{"arm": "bribe2", "src": "coal2", "run": "run39", "m1": [30706, 61256], "m2": [144, 246]}
+{"arm": "bribe2", "src": "coal2", "run": "run4", "m1": [35217, 70490], "m2": [156, 264]}
+{"arm": "bribe2", "src": "coal2", "run": "run5", "m1": [33022, 65792], "m2": [161, 253]}
+{"arm": "bribe2", "src": "coal2", "run": "run6", "m1": [32355, 64770], "m2": [147, 252]}
+{"arm": "bribe2", "src": "coal2", "run": "run7", "m1": [32255, 64516], "m2": [150, 251]}
+{"arm": "bribe2", "src": "coal2", "run": "run8", "m1": [36454, 72899], "m2": [173, 261]}
+{"arm": "bribe2", "src": "coal2", "run": "run9", "m1": [32487, 65278], "m2": [160, 244]}
+{"arm": "bribe", "src": "coal", "run": "run0", "m1": [32058, 64009], "m2": [170, 253]}
+{"arm": "bribe", "src": "coal", "run": "run1", "m1": [33170, 65535], "m2": [160, 252]}
+{"arm": "bribe", "src": "coal", "run": "run10", "m1": [33489, 66563], "m2": [167, 256]}
+{"arm": "bribe", "src": "coal", "run": "run11", "m1": [31418, 63250], "m2": [150, 245]}
+{"arm": "bribe", "src": "coal", "run": "run12", "m1": [32872, 66048], "m2": [164, 254]}
+{"arm": "bribe", "src": "coal", "run": "run13", "m1": [9404, 10290], "m2": [23, 42]}
+{"arm": "bribe", "src": "coal", "run": "run14", "m1": [34097, 67858], "m2": [178, 258]}
+{"arm": "bribe", "src": "coal", "run": "run15", "m1": [31203, 61997], "m2": [153, 246]}
+{"arm": "bribe", "src": "coal", "run": "run2", "m1": [30849, 59511], "m2": [155, 238]}
+{"arm": "bribe", "src": "coal", "run": "run3", "m1": [33034, 65250], "m2": [166, 246]}
+{"arm": "bribe", "src": "coal", "run": "run4", "nopairs": 1}
+{"arm": "bribe", "src": "coal", "run": "run5", "m1": [33540, 68105], "m2": [150, 247]}
+{"arm": "bribe", "src": "coal", "run": "run6", "m1": [33331, 66563], "m2": [165, 256]}
+{"arm": "bribe", "src": "coal", "run": "run7", "m1": [33211, 66048], "m2": [156, 254]}
+{"arm": "bribe", "src": "coal", "run": "run8", "m1": [32780, 65280], "m2": [166, 255]}
+{"arm": "bribe", "src": "coal", "run": "run9", "m1": [33280, 66563], "m2": [159, 256]}
+{"arm": "bribe", "src": "coal2", "run": "run0", "m1": [25434, 51525], "m2": [136, 220]}
+{"arm": "bribe", "src": "coal2", "run": "run1", "m1": [27684, 54984], "m2": [146, 230]}
+{"arm": "bribe", "src": "coal2", "run": "run10", "m1": [31881, 64262], "m2": [169, 251]}
+{"arm": "bribe", "src": "coal2", "run": "run11", "m1": [8530, 9282], "m2": [26, 39]}
+{"arm": "bribe", "src": "coal2", "run": "run12", "m1": [30301, 61008], "m2": [157, 244]}
+{"arm": "bribe", "src": "coal2", "run": "run13", "m1": [32119, 64516], "m2": [167, 253]}
+{"arm": "bribe", "src": "coal2", "run": "run14", "m1": [32703, 65280], "m2": [160, 254]}
+{"arm": "bribe", "src": "coal2", "run": "run15", "m1": [20753, 28413], "m2": [85, 123]}
+{"arm": "bribe", "src": "coal2", "run": "run16", "m1": [26624, 53590], "m2": [148, 227]}
+{"arm": "bribe", "src": "coal2", "run": "run17", "m1": [25616, 52192], "m2": [135, 217]}
+{"arm": "bribe", "src": "coal2", "run": "run18", "m1": [7666, 8316], "m2": [18, 33]}
+{"arm": "bribe", "src": "coal2", "run": "run19", "m1": [27735, 55460], "m2": [148, 234]}
+{"arm": "bribe", "src": "coal2", "run": "run2", "m1": [30344, 61009], "m2": [156, 244]}
+{"arm": "bribe", "src": "coal2", "run": "run20", "m1": [28121, 56168], "m2": [152, 235]}
+{"arm": "bribe", "src": "coal2", "run": "run21", "m1": [28407, 56404], "m2": [155, 235]}
+{"arm": "bribe", "src": "coal2", "run": "run22", "m1": [32102, 64262], "m2": [165, 253]}
+{"arm": "bribe", "src": "coal2", "run": "run23", "m1": [27455, 53550], "m2": [136, 224]}
+{"arm": "bribe", "src": "coal2", "run": "run3", "m1": [27476, 55680], "m2": [147, 231]}
+{"arm": "bribe", "src": "coal2", "run": "run4", "m1": [31407, 63001], "m2": [157, 249]}
+{"arm": "bribe", "src": "coal2", "run": "run5", "m1": [31874, 63504], "m2": [161, 251]}
+{"arm": "bribe", "src": "coal2", "run": "run6", "m1": [26733, 53361], "m2": [159, 228]}
+{"arm": "bribe", "src": "coal2", "run": "run7", "m1": [28246, 56644], "m2": [158, 235]}
+{"arm": "bribe", "src": "coal2", "run": "run8", "m1": [26780, 53820], "m2": [143, 221]}
+{"arm": "bribe", "src": "coal2", "run": "run9", "m1": [29038, 58081], "m2": [156, 239]}
+{"arm": "f4", "src": "coal", "run": "run0", "m1": [32653, 65532], "m2": [163, 252]}
+{"arm": "f4", "src": "coal", "run": "run1", "m1": [32085, 64770], "m2": [156, 253]}
+{"arm": "f4", "src": "coal", "run": "run10", "nopairs": 1}
+{"arm": "f4", "src": "coal", "run": "run11", "m1": [12577, 14080], "m2": [35, 54]}
+{"arm": "f4", "src": "coal", "run": "run12", "m1": [31576, 63252], "m2": [161, 250]}
+{"arm": "f4", "src": "coal", "run": "run13", "nopairs": 1}
+{"arm": "f4", "src": "coal", "run": "run14", "m1": [31548, 63252], "m2": [155, 250]}
+{"arm": "f4", "src": "coal", "run": "run15", "m1": [33319, 67340], "m2": [169, 257]}
+{"arm": "f4", "src": "coal", "run": "run2", "m1": [32474, 65024], "m2": [162, 253]}
+{"arm": "f4", "src": "coal", "run": "run3", "m1": [34284, 68644], "m2": [165, 261]}
+{"arm": "f4", "src": "coal", "run": "run4", "m1": [31931, 64262], "m2": [155, 241]}
+{"arm": "f4", "src": "coal", "run": "run5", "m1": [32325, 64770], "m2": [153, 254]}
+{"arm": "f4", "src": "coal", "run": "run6", "m1": [33328, 66563], "m2": [160, 256]}
+{"arm": "f4", "src": "coal", "run": "run7", "m1": [31381, 63250], "m2": [156, 245]}
+{"arm": "f4", "src": "coal", "run": "run8", "m1": [30493, 61250], "m2": [164, 242]}
+{"arm": "f4", "src": "coal", "run": "run9", "m1": [32052, 64009], "m2": [165, 253]}
+{"arm": "f4", "src": "coal2", "run": "run0", "m1": [30169, 60516], "m2": [166, 245]}
+{"arm": "f4", "src": "coal2", "run": "run1", "m1": [30504, 60762], "m2": [161, 246]}
+{"arm": "f4", "src": "coal2", "run": "run10", "m1": [27017, 54056], "m2": [154, 230]}
+{"arm": "f4", "src": "coal2", "run": "run11", "m1": [29448, 59292], "m2": [139, 239]}
+{"arm": "f4", "src": "coal2", "run": "run12", "m1": [27569, 55930], "m2": [153, 233]}
+{"arm": "f4", "src": "coal2", "run": "run13", "m1": [27981, 55930], "m2": [148, 234]}
+{"arm": "f4", "src": "coal2", "run": "run14", "nopairs": 1}
+{"arm": "f4", "src": "coal2", "run": "run15", "m1": [31598, 63504], "m2": [154, 250]}
+{"arm": "f4", "src": "coal2", "run": "run16", "m1": [28993, 57600], "m2": [161, 239]}
+{"arm": "f4", "src": "coal2", "run": "run17", "m1": [27920, 56169], "m2": [157, 235]}
+{"arm": "f4", "src": "coal2", "run": "run18", "m1": [24681, 39270], "m2": [108, 162]}
+{"arm": "f4", "src": "coal2", "run": "run19", "m1": [29137, 58322], "m2": [153, 240]}
+{"arm": "f4", "src": "coal2", "run": "run2", "m1": [28116, 56640], "m2": [154, 235]}
+{"arm": "f4", "src": "coal2", "run": "run20", "m1": [24446, 40406], "m2": [105, 176]}
+{"arm": "f4", "src": "coal2", "run": "run21", "m1": [30799, 61504], "m2": [151, 241]}
+{"arm": "f4", "src": "coal2", "run": "run22", "m1": [28886, 59436], "m2": [148, 233]}
+{"arm": "f4", "src": "coal2", "run": "run23", "m1": [30322, 60270], "m2": [149, 243]}
+{"arm": "f4", "src": "coal2", "run": "run3", "m1": [27314, 53562], "m2": [148, 226]}
+{"arm": "f4", "src": "coal2", "run": "run4", "m1": [28875, 57840], "m2": [154, 238]}
+{"arm": "f4", "src": "coal2", "run": "run5", "m1": [28602, 55660], "m2": [154, 223]}
+{"arm": "f4", "src": "coal2", "run": "run6", "m1": [29950, 61226], "m2": [154, 241]}
+{"arm": "f4", "src": "coal2", "run": "run7", "m1": [30544, 61005], "m2": [158, 239]}
+{"arm": "f4", "src": "coal2", "run": "run8", "m1": [29903, 60025], "m2": [158, 242]}
+{"arm": "f4", "src": "coal2", "run": "run9", "m1": [29825, 59535], "m2": [164, 243]}
+{"arm": "f6", "src": "coal", "run": "run0", "nopairs": 1}
+{"arm": "f6", "src": "coal", "run": "run1", "m1": [32925, 66049], "m2": [175, 255]}
+{"arm": "f6", "src": "coal", "run": "run10", "m1": [33724, 67081], "m2": [179, 258]}
+{"arm": "f6", "src": "coal", "run": "run11", "m1": [31796, 63504], "m2": [184, 251]}
+{"arm": "f6", "src": "coal", "run": "run12", "m1": [32227, 64262], "m2": [170, 253]}
+{"arm": "f6", "src": "coal", "run": "run13", "m1": [33628, 66563], "m2": [173, 256]}
+{"arm": "f6", "src": "coal", "run": "run14", "m1": [33342, 66822], "m2": [179, 258]}
+{"arm": "f6", "src": "coal", "run": "run15", "m1": [36234, 72090], "m2": [190, 266]}
+{"arm": "f6", "src": "coal", "run": "run2", "m1": [32782, 65535], "m2": [183, 255]}
+{"arm": "f6", "src": "coal", "run": "run3", "m1": [34118, 68121], "m2": [178, 261]}
+{"arm": "f6", "src": "coal", "run": "run4", "m1": [32473, 65025], "m2": [180, 253]}
+{"arm": "f6", "src": "coal", "run": "run5", "m1": [30270, 61005], "m2": [172, 244]}
+{"arm": "f6", "src": "coal", "run": "run6", "m1": [9615, 19321], "m2": [98, 137]}
+{"arm": "f6", "src": "coal", "run": "run7", "m1": [33345, 66306], "m2": [175, 255]}
+{"arm": "f6", "src": "coal", "run": "run8", "m1": [31775, 63756], "m2": [167, 250]}
+{"arm": "f6", "src": "coal", "run": "run9", "m1": [33346, 66306], "m2": [186, 256]}
+{"arm": "f6", "src": "coal2", "run": "run0", "m1": [29177, 58322], "m2": [177, 240]}
+{"arm": "f6", "src": "coal2", "run": "run1", "m1": [28142, 56406], "m2": [167, 237]}
+{"arm": "f6", "src": "coal2", "run": "run10", "m1": [31087, 62496], "m2": [180, 248]}
+{"arm": "f6", "src": "coal2", "run": "run11", "m1": [28974, 58080], "m2": [173, 240]}
+{"arm": "f6", "src": "coal2", "run": "run12", "m1": [26107, 53118], "m2": [161, 222]}
+{"arm": "f6", "src": "coal2", "run": "run13", "m1": [30584, 61495], "m2": [167, 244]}
+{"arm": "f6", "src": "coal2", "run": "run14", "m1": [33386, 66816], "m2": [183, 255]}
+{"arm": "f6", "src": "coal2", "run": "run15", "m1": [825, 1640], "m2": [25, 32]}
+{"arm": "f6", "src": "coal2", "run": "run16", "m1": [14420, 29744], "m2": [124, 169]}
+{"arm": "f6", "src": "coal2", "run": "run17", "m1": [27883, 55695], "m2": [178, 235]}
+{"arm": "f6", "src": "coal2", "run": "run18", "m1": [28564, 57599], "m2": [178, 238]}
+{"arm": "f6", "src": "coal2", "run": "run19", "m1": [26517, 53128], "m2": [161, 225]}
+{"arm": "f6", "src": "coal2", "run": "run2", "m1": [29192, 58564], "m2": [176, 240]}
+{"arm": "f6", "src": "coal2", "run": "run20", "m1": [30810, 61752], "m2": [174, 248]}
+{"arm": "f6", "src": "coal2", "run": "run21", "m1": [26840, 53592], "m2": [166, 229]}
+{"arm": "f6", "src": "coal2", "run": "run22", "m1": [26815, 52425], "m2": [163, 225]}
+{"arm": "f6", "src": "coal2", "run": "run23", "m1": [29872, 59774], "m2": [168, 241]}
+{"arm": "f6", "src": "coal2", "run": "run3", "m1": [28137, 56406], "m2": [175, 236]}
+{"arm": "f6", "src": "coal2", "run": "run4", "m1": [28497, 58280], "m2": [165, 234]}
+{"arm": "f6", "src": "coal2", "run": "run5", "m1": [32871, 65535], "m2": [179, 252]}
+{"arm": "f6", "src": "coal2", "run": "run6", "nopairs": 1}
+{"arm": "f6", "src": "coal2", "run": "run7", "m1": [29940, 58555], "m2": [171, 236]}
+{"arm": "f6", "src": "coal2", "run": "run8", "m1": [28425, 56644], "m2": [175, 231]}
+{"arm": "f6", "src": "coal2", "run": "run9", "m1": [32544, 65250], "m2": [158, 249]}
+{"arm": "f6ind", "src": "coal", "run": "run0", "m1": [32895, 65792], "m2": [138, 256]}
+{"arm": "f6ind", "src": "coal", "run": "run1", "m1": [31587, 63756], "m2": [135, 247]}
+{"arm": "f6ind", "src": "coal", "run": "run10", "m1": [31769, 63504], "m2": [131, 251]}
+{"arm": "f6ind", "src": "coal", "run": "run11", "m1": [31942, 64262], "m2": [137, 251]}
+{"arm": "f6ind", "src": "coal", "run": "run12", "m1": [10647, 21316], "m2": [74, 145]}
+{"arm": "f6ind", "src": "coal", "run": "run13", "m1": [31864, 63756], "m2": [141, 252]}
+{"arm": "f6ind", "src": "coal", "run": "run14", "m1": [34083, 68643], "m2": [138, 258]}
+{"arm": "f6ind", "src": "coal", "run": "run15", "m1": [32786, 65536], "m2": [127, 242]}
+{"arm": "f6ind", "src": "coal", "run": "run2", "m1": [32732, 65535], "m2": [128, 255]}
+{"arm": "f6ind", "src": "coal", "run": "run3", "m1": [31633, 64000], "m2": [134, 249]}
+{"arm": "f6ind", "src": "coal", "run": "run4", "m1": [29850, 60021], "m2": [136, 241]}
+{"arm": "f6ind", "src": "coal", "run": "run5", "m1": [34715, 68906], "m2": [136, 261]}
+{"arm": "f6ind", "src": "coal", "run": "run6", "m1": [32353, 64770], "m2": [133, 254]}
+{"arm": "f6ind", "src": "coal", "run": "run7", "m1": [1928, 3844], "m2": [34, 62]}
+{"arm": "f6ind", "src": "coal", "run": "run8", "m1": [34085, 67858], "m2": [136, 259]}
+{"arm": "f6ind", "src": "coal", "run": "run9", "m1": [23766, 47957], "m2": [108, 215]}
+{"arm": "f6ind", "src": "coal2", "run": "run0", "m1": [28537, 56882], "m2": [127, 237]}
+{"arm": "f6ind", "src": "coal2", "run": "run1", "m1": [26339, 52899], "m2": [115, 229]}
+{"arm": "f6ind", "src": "coal2", "run": "run10", "m1": [29875, 59780], "m2": [134, 244]}
+{"arm": "f6ind", "src": "coal2", "run": "run11", "m1": [27253, 54755], "m2": [140, 233]}
+{"arm": "f6ind", "src": "coal2", "run": "run12", "m1": [28774, 58320], "m2": [134, 235]}
+{"arm": "f6ind", "src": "coal2", "run": "run13", "m1": [19271, 38415], "m2": [91, 189]}
+{"arm": "f6ind", "src": "coal2", "run": "run14", "m1": [29730, 59292], "m2": [132, 238]}
+{"arm": "f6ind", "src": "coal2", "run": "run15", "m1": [29550, 58804], "m2": [134, 240]}
+{"arm": "f6ind", "src": "coal2", "run": "run16", "m1": [28728, 58322], "m2": [123, 237]}
+{"arm": "f6ind", "src": "coal2", "run": "run17", "m1": [28378, 56882], "m2": [137, 236]}
+{"arm": "f6ind", "src": "coal2", "run": "run18", "m1": [29396, 58065], "m2": [130, 237]}
+{"arm": "f6ind", "src": "coal2", "run": "run19", "m1": [27404, 54756], "m2": [122, 233]}
+{"arm": "f6ind", "src": "coal2", "run": "run2", "m1": [28165, 55671], "m2": [110, 229]}
+{"arm": "f6ind", "src": "coal2", "run": "run20", "m1": [26282, 53352], "m2": [113, 226]}
+{"arm": "f6ind", "src": "coal2", "run": "run21", "m1": [28993, 57600], "m2": [123, 233]}
+{"arm": "f6ind", "src": "coal2", "run": "run22", "m1": [1458, 2862], "m2": [30, 53]}
+{"arm": "f6ind", "src": "coal2", "run": "run23", "m1": [31539, 62750], "m2": [141, 248]}
+{"arm": "f6ind", "src": "coal2", "run": "run3", "m1": [28336, 56404], "m2": [119, 236]}
+{"arm": "f6ind", "src": "coal2", "run": "run4", "m1": [26747, 52899], "m2": [121, 227]}
+{"arm": "f6ind", "src": "coal2", "run": "run5", "m1": [2846, 5700], "m2": [41, 72]}
+{"arm": "f6ind", "src": "coal2", "run": "run6", "m1": [28908, 57600], "m2": [130, 239]}
+{"arm": "f6ind", "src": "coal2", "run": "run7", "m1": [474, 930], "m2": [12, 30]}
+{"arm": "f6ind", "src": "coal2", "run": "run8", "m1": [26591, 52670], "m2": [133, 226]}
+{"arm": "f6ind", "src": "coal2", "run": "run9", "m1": [27999, 56394], "m2": [133, 234]}
+{"arm": "f6rival", "src": "coal", "run": "run0", "m1": [687, 1332], "m2": [19, 33]}
+{"arm": "f6rival", "src": "coal", "run": "run1", "m1": [36316, 72630], "m2": [153, 268]}
+{"arm": "f6rival", "src": "coal", "run": "run10", "m1": [33723, 69088], "m2": [154, 253]}
+{"arm": "f6rival", "src": "coal", "run": "run11", "m1": [32974, 65536], "m2": [148, 255]}
+{"arm": "f6rival", "src": "coal", "run": "run12", "m1": [34056, 68121], "m2": [156, 260]}
+{"arm": "f6rival", "src": "coal", "run": "run13", "nopairs": 1}
+{"arm": "f6rival", "src": "coal", "run": "run14", "m1": [13827, 27224], "m2": [98, 163]}
+{"arm": "f6rival", "src": "coal", "run": "run15", "m1": [34972, 69960], "m2": [162, 264]}
+{"arm": "f6rival", "src": "coal", "run": "run2", "m1": [33033, 66049], "m2": [167, 255]}
+{"arm": "f6rival", "src": "coal", "run": "run3", "m1": [33779, 67599], "m2": [157, 259]}
+{"arm": "f6rival", "src": "coal", "run": "run4", "m1": [35923, 71823], "m2": [159, 260]}
+{"arm": "f6rival", "src": "coal", "run": "run5", "m1": [34039, 67860], "m2": [148, 260]}
+{"arm": "f6rival", "src": "coal", "run": "run6", "m1": [33578, 67081], "m2": [158, 259]}
+{"arm": "f6rival", "src": "coal", "run": "run7", "m1": [34048, 67860], "m2": [155, 260]}
+{"arm": "f6rival", "src": "coal", "run": "run8", "m1": [33756, 67600], "m2": [139, 259]}
+{"arm": "f6rival", "src": "coal", "run": "run9", "m1": [33335, 67080], "m2": [156, 257]}
+{"arm": "f6rival", "src": "coal2", "run": "run0", "m1": [26658, 54044], "m2": [133, 227]}
+{"arm": "f6rival", "src": "coal2", "run": "run1", "m1": [27220, 54756], "m2": [137, 228]}
+{"arm": "f6rival", "src": "coal2", "run": "run10", "m1": [28871, 57840], "m2": [153, 239]}
+{"arm": "f6rival", "src": "coal2", "run": "run11", "m1": [27617, 54984], "m2": [148, 232]}
+{"arm": "f6rival", "src": "coal2", "run": "run12", "m1": [26939, 52640], "m2": [132, 219]}
+{"arm": "f6rival", "src": "coal2", "run": "run13", "m1": [27159, 54054], "m2": [144, 231]}
+{"arm": "f6rival", "src": "coal2", "run": "run14", "m1": [29460, 60228], "m2": [138, 231]}
+{"arm": "f6rival", "src": "coal2", "run": "run15", "m1": [1553, 3135], "m2": [36, 55]}
+{"arm": "f6rival", "src": "coal2", "run": "run16", "m1": [31414, 62750], "m2": [146, 244]}
+{"arm": "f6rival", "src": "coal2", "run": "run17", "m1": [28107, 56406], "m2": [132, 236]}
+{"arm": "f6rival", "src": "coal2", "run": "run18", "m1": [32706, 64491], "m2": [153, 247]}
+{"arm": "f6rival", "src": "coal2", "run": "run19", "m1": [31764, 63504], "m2": [137, 251]}
+{"arm": "f6rival", "src": "coal2", "run": "run2", "m1": [30471, 60762], "m2": [160, 246]}
+{"arm": "f6rival", "src": "coal2", "run": "run20", "m1": [33364, 66564], "m2": [155, 255]}
+{"arm": "f6rival", "src": "coal2", "run": "run21", "m1": [32312, 64516], "m2": [171, 254]}
+{"arm": "f6rival", "src": "coal2", "run": "run22", "m1": [31485, 63001], "m2": [152, 244]}
+{"arm": "f6rival", "src": "coal2", "run": "run23", "m1": [31782, 63504], "m2": [150, 251]}
+{"arm": "f6rival", "src": "coal2", "run": "run3", "m1": [28822, 57112], "m2": [132, 235]}
+{"arm": "f6rival", "src": "coal2", "run": "run4", "m1": [30948, 61504], "m2": [142, 243]}
+{"arm": "f6rival", "src": "coal2", "run": "run5", "m1": [33750, 67080], "m2": [154, 258]}
+{"arm": "f6rival", "src": "coal2", "run": "run6", "m1": [32324, 64262], "m2": [154, 247]}
+{"arm": "f6rival", "src": "coal2", "run": "run7", "m1": [27528, 54990], "m2": [146, 233]}
+{"arm": "f6rival", "src": "coal2", "run": "run8", "m1": [32042, 64009], "m2": [154, 253]}
+{"arm": "f6rival", "src": "coal2", "run": "run9", "m1": [28976, 58081], "m2": [147, 240]}

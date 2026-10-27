@@ -1,0 +1,179 @@
+23:47:27 start base1
+00:05:16 start base4
+00:23:04 start base6
+00:40:54 start solo
+00:58:44 start bribe
+01:16:31 start f4
+01:34:17 start f6
+01:52:06 start f6ind
+02:09:52 start f6rival
+02:27:39 COAL DONE
+base1 16
+base4 16
+base6 16
+solo 16
+bribe 16
+f4 16
+f6 16
+f6ind 16
+f6rival 16
+{"arm": "base1", "run": "run0", "succ": 7, "total": 16, "committed": 3237}
+{"arm": "base1", "run": "run1", "succ": 4, "total": 9, "committed": 3413}
+{"arm": "base1", "run": "run10", "succ": 5, "total": 11, "committed": 3312}
+{"arm": "base1", "run": "run11", "succ": 7, "total": 22, "committed": 3270}
+{"arm": "base1", "run": "run12", "succ": 1, "total": 2, "committed": 3292}
+{"arm": "base1", "run": "run13", "succ": 7, "total": 10, "committed": 3319}
+{"arm": "base1", "run": "run14", "succ": 2, "total": 6, "committed": 3296}
+{"arm": "base1", "run": "run15", "succ": 3, "total": 4, "committed": 3398}
+{"arm": "base1", "run": "run2", "succ": 3, "total": 4, "committed": 3302}
+{"arm": "base1", "run": "run3", "succ": 4, "total": 5, "committed": 3276}
+{"arm": "base1", "run": "run4", "succ": 2, "total": 9, "committed": 3261}
+{"arm": "base1", "run": "run5", "succ": 0, "total": 1, "committed": 3268}
+{"arm": "base1", "run": "run6", "succ": 5, "total": 12, "committed": 3428}
+{"arm": "base1", "run": "run7", "succ": 2, "total": 5, "committed": 3312}
+{"arm": "base1", "run": "run8", "succ": 4, "total": 10, "committed": 3284}
+{"arm": "base1", "run": "run9", "succ": 10, "total": 17, "committed": 3389}
+{"arm": "base4", "run": "run0", "succ": 4, "total": 10, "committed": 3337}
+{"arm": "base4", "run": "run1", "succ": 7, "total": 13, "committed": 3363}
+{"arm": "base4", "run": "run10", "succ": 7, "total": 14, "committed": 3287}
+{"arm": "base4", "run": "run11", "succ": 0, "total": 0, "committed": 3359}
+{"arm": "base4", "run": "run12", "succ": 9, "total": 18, "committed": 3324}
+{"arm": "base4", "run": "run13", "succ": 2, "total": 11, "committed": 3456}
+{"arm": "base4", "run": "run14", "succ": 0, "total": 1, "committed": 3234}
+{"arm": "base4", "run": "run15", "succ": 5, "total": 7, "committed": 3301}
+{"arm": "base4", "run": "run2", "succ": 3, "total": 11, "committed": 3375}
+{"arm": "base4", "run": "run3", "succ": 0, "total": 0, "committed": 3321}
+{"arm": "base4", "run": "run4", "succ": 3, "total": 5, "committed": 3310}
+{"arm": "base4", "run": "run5", "succ": 4, "total": 7, "committed": 3289}
+{"arm": "base4", "run": "run6", "succ": 2, "total": 5, "committed": 3445}
+{"arm": "base4", "run": "run7", "succ": 5, "total": 9, "committed": 3278}
+{"arm": "base4", "run": "run8", "succ": 1, "total": 4, "committed": 3310}
+{"arm": "base4", "run": "run9", "succ": 0, "total": 1, "committed": 3223}
+{"arm": "base6", "run": "run0", "succ": 3, "total": 6, "committed": 3318}
+{"arm": "base6", "run": "run1", "succ": 14, "total": 25, "committed": 3286}
+{"arm": "base6", "run": "run10", "succ": 4, "total": 11, "committed": 3334}
+{"arm": "base6", "run": "run11", "succ": 8, "total": 13, "committed": 3318}
+{"arm": "base6", "run": "run12", "succ": 6, "total": 15, "committed": 3343}
+{"arm": "base6", "run": "run13", "succ": 5, "total": 12, "committed": 3308}
+{"arm": "base6", "run": "run14", "succ": 8, "total": 13, "committed": 3320}
+{"arm": "base6", "run": "run15", "succ": 0, "total": 1, "committed": 3314}
+{"arm": "base6", "run": "run2", "succ": 4, "total": 6, "committed": 3369}
+{"arm": "base6", "run": "run3", "succ": 5, "total": 5, "committed": 3427}
+{"arm": "base6", "run": "run4", "succ": 8, "total": 17, "committed": 3408}
+{"arm": "base6", "run": "run5", "succ": 1, "total": 6, "committed": 3466}
+{"arm": "base6", "run": "run6", "succ": 1, "total": 6, "committed": 3269}
+{"arm": "base6", "run": "run7", "succ": 5, "total": 7, "committed": 3369}
+{"arm": "base6", "run": "run8", "succ": 6, "total": 19, "committed": 3259}
+{"arm": "base6", "run": "run9", "succ": 3, "total": 6, "committed": 3302}
+{"arm": "solo", "run": "run0", "succ": 2, "total": 10, "committed": 3305}
+{"arm": "solo", "run": "run1", "succ": 9, "total": 12, "committed": 3295}
+{"arm": "solo", "run": "run10", "succ": 5, "total": 7, "committed": 3349}
+{"arm": "solo", "run": "run11", "succ": 5, "total": 12, "committed": 3334}
+{"arm": "solo", "run": "run12", "succ": 4, "total": 11, "committed": 3238}
+{"arm": "solo", "run": "run13", "succ": 5, "total": 7, "committed": 3471}
+{"arm": "solo", "run": "run14", "succ": 10, "total": 13, "committed": 3272}
+{"arm": "solo", "run": "run15", "succ": 8, "total": 10, "committed": 3381}
+{"arm": "solo", "run": "run2", "succ": 6, "total": 11, "committed": 3304}
+{"arm": "solo", "run": "run3", "succ": 0, "total": 1, "committed": 3275}
+{"arm": "solo", "run": "run4", "succ": 3, "total": 6, "committed": 3308}
+{"arm": "solo", "run": "run5", "succ": 12, "total": 21, "committed": 3245}
+{"arm": "solo", "run": "run6", "succ": 14, "total": 20, "committed": 3319}
+{"arm": "solo", "run": "run7", "succ": 0, "total": 0, "committed": 3330}
+{"arm": "solo", "run": "run8", "succ": 1, "total": 5, "committed": 3314}
+{"arm": "solo", "run": "run9", "succ": 6, "total": 11, "committed": 3291}
+{"arm": "bribe", "run": "run0", "succ": 4, "total": 5, "committed": 3273}
+{"arm": "bribe", "run": "run1", "succ": 17, "total": 20, "committed": 3307}
+{"arm": "bribe", "run": "run10", "succ": 7, "total": 11, "committed": 3361}
+{"arm": "bribe", "run": "run11", "succ": 4, "total": 6, "committed": 3293}
+{"arm": "bribe", "run": "run12", "succ": 2, "total": 5, "committed": 3348}
+{"arm": "bribe", "run": "run13", "succ": 2, "total": 5, "committed": 2371}
+{"arm": "bribe", "run": "run14", "succ": 9, "total": 14, "committed": 3377}
+{"arm": "bribe", "run": "run15", "succ": 13, "total": 19, "committed": 3256}
+{"arm": "bribe", "run": "run2", "succ": 2, "total": 5, "committed": 3206}
+{"arm": "bribe", "run": "run3", "succ": 5, "total": 7, "committed": 3380}
+{"arm": "bribe", "run": "run4", "succ": 0, "total": 0, "committed": 2296}
+{"arm": "bribe", "run": "run5", "succ": 5, "total": 9, "committed": 3429}
+{"arm": "bribe", "run": "run6", "succ": 1, "total": 4, "committed": 3353}
+{"arm": "bribe", "run": "run7", "succ": 15, "total": 21, "committed": 3322}
+{"arm": "bribe", "run": "run8", "succ": 13, "total": 17, "committed": 3326}
+{"arm": "bribe", "run": "run9", "succ": 4, "total": 11, "committed": 3350}
+{"arm": "f4", "run": "run0", "succ": 17, "total": 26, "committed": 3335}
+{"arm": "f4", "run": "run1", "succ": 5, "total": 6, "committed": 3293}
+{"arm": "f4", "run": "run10", "succ": 0, "total": 0, "committed": 2319}
+{"arm": "f4", "run": "run11", "succ": 1, "total": 2, "committed": 2525}
+{"arm": "f4", "run": "run12", "succ": 17, "total": 20, "committed": 3268}
+{"arm": "f4", "run": "run13", "succ": 0, "total": 0, "committed": 2634}
+{"arm": "f4", "run": "run14", "succ": 5, "total": 8, "committed": 3274}
+{"arm": "f4", "run": "run15", "succ": 7, "total": 11, "committed": 3379}
+{"arm": "f4", "run": "run2", "succ": 5, "total": 6, "committed": 3315}
+{"arm": "f4", "run": "run3", "succ": 6, "total": 6, "committed": 3402}
+{"arm": "f4", "run": "run4", "succ": 10, "total": 18, "committed": 3300}
+{"arm": "f4", "run": "run5", "succ": 10, "total": 15, "committed": 3297}
+{"arm": "f4", "run": "run6", "succ": 13, "total": 21, "committed": 3337}
+{"arm": "f4", "run": "run7", "succ": 12, "total": 17, "committed": 3284}
+{"arm": "f4", "run": "run8", "succ": 15, "total": 20, "committed": 3259}
+{"arm": "f4", "run": "run9", "succ": 0, "total": 1, "committed": 3279}
+{"arm": "f6", "run": "run0", "succ": 0, "total": 0, "committed": 3355}
+{"arm": "f6", "run": "run1", "succ": 8, "total": 12, "committed": 3342}
+{"arm": "f6", "run": "run10", "succ": 7, "total": 8, "committed": 3340}
+{"arm": "f6", "run": "run11", "succ": 4, "total": 6, "committed": 3279}
+{"arm": "f6", "run": "run12", "succ": 5, "total": 7, "committed": 3283}
+{"arm": "f6", "run": "run13", "succ": 7, "total": 10, "committed": 3352}
+{"arm": "f6", "run": "run14", "succ": 2, "total": 3, "committed": 3336}
+{"arm": "f6", "run": "run15", "succ": 5, "total": 8, "committed": 3499}
+{"arm": "f6", "run": "run2", "succ": 9, "total": 14, "committed": 3318}
+{"arm": "f6", "run": "run3", "succ": 6, "total": 8, "committed": 3389}
+{"arm": "f6", "run": "run4", "succ": 5, "total": 6, "committed": 3305}
+{"arm": "f6", "run": "run5", "succ": 6, "total": 10, "committed": 3235}
+{"arm": "f6", "run": "run6", "succ": 4, "total": 7, "committed": 1808}
+{"arm": "f6", "run": "run7", "succ": 6, "total": 10, "committed": 3328}
+{"arm": "f6", "run": "run8", "succ": 3, "total": 7, "committed": 3294}
+{"arm": "f6", "run": "run9", "succ": 4, "total": 4, "committed": 3325}
+{"arm": "f6ind", "run": "run0", "succ": 8, "total": 15, "committed": 3336}
+{"arm": "f6ind", "run": "run1", "succ": 5, "total": 6, "committed": 3264}
+{"arm": "f6ind", "run": "run10", "succ": 2, "total": 6, "committed": 3267}
+{"arm": "f6ind", "run": "run11", "succ": 6, "total": 13, "committed": 3296}
+{"arm": "f6ind", "run": "run12", "succ": 8, "total": 12, "committed": 1894}
+{"arm": "f6ind", "run": "run13", "succ": 6, "total": 12, "committed": 3286}
+{"arm": "f6ind", "run": "run14", "succ": 6, "total": 10, "committed": 3401}
+{"arm": "f6ind", "run": "run15", "succ": 3, "total": 6, "committed": 3328}
+{"arm": "f6ind", "run": "run2", "succ": 14, "total": 19, "committed": 3329}
+{"arm": "f6ind", "run": "run3", "succ": 7, "total": 16, "committed": 3309}
+{"arm": "f6ind", "run": "run4", "succ": 7, "total": 14, "committed": 3193}
+{"arm": "f6ind", "run": "run5", "succ": 16, "total": 27, "committed": 3386}
+{"arm": "f6ind", "run": "run6", "succ": 3, "total": 5, "committed": 3288}
+{"arm": "f6ind", "run": "run7", "succ": 2, "total": 2, "committed": 807}
+{"arm": "f6ind", "run": "run8", "succ": 8, "total": 19, "committed": 3376}
+{"arm": "f6ind", "run": "run9", "succ": 6, "total": 12, "committed": 2869}
+{"arm": "f6rival", "run": "run0", "succ": 1, "total": 3, "committed": 470}
+{"arm": "f6rival", "run": "run1", "succ": 3, "total": 4, "committed": 3499}
+{"arm": "f6rival", "run": "run10", "succ": 1, "total": 2, "committed": 3508}
+{"arm": "f6rival", "run": "run11", "succ": 14, "total": 25, "committed": 3325}
+{"arm": "f6rival", "run": "run12", "succ": 12, "total": 20, "committed": 3388}
+{"arm": "f6rival", "run": "run13", "succ": 0, "total": 0, "committed": 3447}
+{"arm": "f6rival", "run": "run14", "succ": 7, "total": 10, "committed": 2150}
+{"arm": "f6rival", "run": "run15", "succ": 9, "total": 14, "committed": 3440}
+{"arm": "f6rival", "run": "run2", "succ": 10, "total": 18, "committed": 3346}
+{"arm": "f6rival", "run": "run3", "succ": 8, "total": 11, "committed": 3381}
+{"arm": "f6rival", "run": "run4", "succ": 7, "total": 8, "committed": 3472}
+{"arm": "f6rival", "run": "run5", "succ": 14, "total": 28, "committed": 3373}
+{"arm": "f6rival", "run": "run6", "succ": 7, "total": 11, "committed": 3346}
+{"arm": "f6rival", "run": "run7", "succ": 26, "total": 32, "committed": 3374}
+{"arm": "f6rival", "run": "run8", "succ": 12, "total": 17, "committed": 3366}
+{"arm": "f6rival", "run": "run9", "succ": 9, "total": 12, "committed": 3374}
+{"arm": "base4mv", "run": "run0", "succ": 2, "total": 8, "committed": 3411}
+{"arm": "base4mv", "run": "run1", "succ": 0, "total": 1, "committed": 3400}
+{"arm": "base4mv", "run": "run10", "succ": 2, "total": 3, "committed": 3380}
+{"arm": "base4mv", "run": "run11", "succ": 2, "total": 6, "committed": 3405}
+{"arm": "base4mv", "run": "run12", "succ": 6, "total": 10, "committed": 3416}
+{"arm": "base4mv", "run": "run13", "succ": 0, "total": 2, "committed": 3334}
+{"arm": "base4mv", "run": "run14", "succ": 2, "total": 8, "committed": 3326}
+{"arm": "base4mv", "run": "run15", "succ": 1, "total": 4, "committed": 3370}
+{"arm": "base4mv", "run": "run2", "succ": 9, "total": 18, "committed": 3307}
+{"arm": "base4mv", "run": "run3", "succ": 4, "total": 11, "committed": 3363}
+{"arm": "base4mv", "run": "run4", "succ": 3, "total": 9, "committed": 3339}
+{"arm": "base4mv", "run": "run5", "succ": 6, "total": 8, "committed": 3425}
+{"arm": "base4mv", "run": "run6", "succ": 3, "total": 9, "committed": 3345}
+{"arm": "base4mv", "run": "run7", "succ": 1, "total": 5, "committed": 3515}
+{"arm": "base4mv", "run": "run8", "succ": 4, "total": 5, "committed": 3461}
+{"arm": "base4mv", "run": "run9", "succ": 3, "total": 5, "committed": 3362}

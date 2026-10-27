@@ -1,0 +1,33 @@
+run0: {"censorship_rate_pct": 100.0, "victim_median_blocks": 0, "other_median_blocks": 260, "n_victim_authors": 1, "n_attacker_authors": 1, "attacker_mean_blocks": 261, "total_committed": 3118}
+run1: {"censorship_rate_pct": 100.0, "victim_median_blocks": 0, "other_median_blocks": 261.0, "n_victim_authors": 1, "n_attacker_authors": 0, "attacker_mean_blocks": null, "total_committed": 3124}
+run10: {"censorship_rate_pct": 100.0, "victim_median_blocks": 0, "other_median_blocks": 256, "n_victim_authors": 1, "n_attacker_authors": 1, "attacker_mean_blocks": 256, "total_committed": 3063}
+run11: {"censorship_rate_pct": 100.0, "victim_median_blocks": 0, "other_median_blocks": 259, "n_victim_authors": 1, "n_attacker_authors": 1, "attacker_mean_blocks": 257, "total_committed": 3101}
+run12: {"censorship_rate_pct": 100.0, "victim_median_blocks": 0, "other_median_blocks": 258, "n_victim_authors": 1, "n_attacker_authors": 1, "attacker_mean_blocks": 259, "total_committed": 3100}
+run13: {"censorship_rate_pct": 100.0, "victim_median_blocks": 0, "other_median_blocks": 262, "n_victim_authors": 1, "n_attacker_authors": 1, "attacker_mean_blocks": 260, "total_committed": 3132}
+run14: {"censorship_rate_pct": 100.0, "victim_median_blocks": 0, "other_median_blocks": 257, "n_victim_authors": 1, "n_attacker_authors": 1, "attacker_mean_blocks": 257, "total_committed": 3069}
+run15: {"censorship_rate_pct": 100.0, "victim_median_blocks": 0, "other_median_blocks": 257, "n_victim_authors": 1, "n_attacker_authors": 1, "attacker_mean_blocks": 257, "total_committed": 3083}
+run2: {"censorship_rate_pct": 100.0, "victim_median_blocks": 0, "other_median_blocks": 260, "n_victim_authors": 1, "n_attacker_authors": 1, "attacker_mean_blocks": 260, "total_committed": 3118}
+run3: {"censorship_rate_pct": 100.0, "victim_median_blocks": 0, "other_median_blocks": 260, "n_victim_authors": 1, "n_attacker_authors": 1, "attacker_mean_blocks": 260, "total_committed": 3116}
+run4: {"censorship_rate_pct": 100.0, "victim_median_blocks": 0, "other_median_blocks": 264, "n_victim_authors": 1, "n_attacker_authors": 1, "attacker_mean_blocks": 263, "total_committed": 3167}
+run5: {"censorship_rate_pct": 100.0, "victim_median_blocks": 0, "other_median_blocks": 269, "n_victim_authors": 1, "n_attacker_authors": 1, "attacker_mean_blocks": 269, "total_committed": 3207}
+run6: {"censorship_rate_pct": 100.0, "victim_median_blocks": 0, "other_median_blocks": 261, "n_victim_authors": 1, "n_attacker_authors": 1, "attacker_mean_blocks": 261, "total_committed": 3133}
+run7: {"censorship_rate_pct": 100.0, "victim_median_blocks": 0, "other_median_blocks": 257, "n_victim_authors": 1, "n_attacker_authors": 1, "attacker_mean_blocks": 257, "total_committed": 3086}
+run8: {"censorship_rate_pct": 100.0, "victim_median_blocks": 0, "other_median_blocks": 261, "n_victim_authors": 1, "n_attacker_authors": 1, "attacker_mean_blocks": 261, "total_committed": 3129}
+run9: {"censorship_rate_pct": 100.0, "victim_median_blocks": 0, "other_median_blocks": 254, "n_victim_authors": 1, "n_attacker_authors": 1, "attacker_mean_blocks": 254, "total_committed": 3052}
+FINAL_CENSORSHIP_MEDIAN: {"median_pct": 100.0, "range": [100.0, 100.0], "n_runs": 16, "reps": [100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0]}
+coal/cens5/fissure_f4_n13/run0 withheld=1310
+coal/cens5/fissure_f4_n13/run1 withheld=1320
+coal/cens5/fissure_f4_n13/run10 withheld=1295
+coal/cens5/fissure_f4_n13/run11 withheld=1305
+coal/cens5/fissure_f4_n13/run12 withheld=1310
+coal/cens5/fissure_f4_n13/run13 withheld=1320
+coal/cens5/fissure_f4_n13/run14 withheld=1314
+coal/cens5/fissure_f4_n13/run15 withheld=1310
+coal/cens5/fissure_f4_n13/run2 withheld=1310
+coal/cens5/fissure_f4_n13/run3 withheld=1315
+coal/cens5/fissure_f4_n13/run4 withheld=1334
+coal/cens5/fissure_f4_n13/run5 withheld=1360
+coal/cens5/fissure_f4_n13/run6 withheld=1320
+coal/cens5/fissure_f4_n13/run7 withheld=1299
+coal/cens5/fissure_f4_n13/run8 withheld=1315
+coal/cens5/fissure_f4_n13/run9 withheld=1280
