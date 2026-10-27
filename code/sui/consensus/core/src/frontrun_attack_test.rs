@@ -179,10 +179,21 @@ async fn test_frontrun_reactive() {
                     ));
                 }
             }
-            let c = clients[v].clone();
-            tokio::spawn(async move {
-                let _ = c.submit(vec![vtx]).await;
-            });
+            // FRONTRUN_VICTIM_BROADCAST=1: the victim, as a client, also sends its transaction to
+            // every validator (the defense of the transaction-level study). Client behavior only.
+            if env::var("FRONTRUN_VICTIM_BROADCAST").map(|v| v == "1").unwrap_or(false) {
+                for c in clients.iter().cloned() {
+                    let t = vtx.clone();
+                    tokio::spawn(async move {
+                        let _ = c.submit(vec![t]).await;
+                    });
+                }
+            } else {
+                let c = clients[v].clone();
+                tokio::spawn(async move {
+                    let _ = c.submit(vec![vtx]).await;
+                });
+            }
             if blind {
                 // Control arm: same instant, attacker's own validator, no information.
                 let mut ftx = vec![FRONTRUN_ATTACKER_TAG];
