@@ -33,7 +33,8 @@ DEFAULT_CSV = "results/sui_valuemodel_results.csv"
 DEFAULT_SUMMARY = "results/sui_valuemodel_summary.json"
 DEFAULT_REPS = 5
 BASE_SEED = 600
-_ATTACKERS = [0, 1, 2, 3]
+# V2_ATTACKERS / V2_ATTACKER_RATIO override the attacker set (default: four attackers, 4/13).
+_ATTACKERS = [int(x) for x in os.environ.get("V2_ATTACKERS", "0,1,2,3").split(",")]
 
 # (label, victims.profit spec) — heavy-tailed models per the plan; never Gaussian.
 _MODELS = [
@@ -50,7 +51,7 @@ def _cfg(strategy: str, profit: dict, reps: int) -> schema.V2Config:
     raw = {
         "protocol": {"name": "sui", "path": "sui"},
         "environment": {
-            "NUM_NODES": "13", "ATTACKER_RATIO": "0.308", "VICTIM_RATIO": "0.231",
+            "NUM_NODES": "13", "ATTACKER_RATIO": os.environ.get("V2_ATTACKER_RATIO", "0.308"), "VICTIM_RATIO": "0.231",
             "GC_DEPTH": "10", "COLLECTION_DURATION": os.environ.get("V2_COLLECTION_DURATION", "45"), "MIN_COMMITS": os.environ.get("V2_MIN_COMMITS", "25"),
         },
         "adversary": {
