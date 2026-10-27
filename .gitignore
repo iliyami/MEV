@@ -74,10 +74,6 @@ config/tmp*.yaml
 config/tmp*.json
 Sui_Interview_*.*
 
-# Nested clone of the Flash Boys artifact (real Narwhal-Bullshark). It carries its
-# own git history and is committed there, not here.
-code/bullshark-flashboys/
-
 # Session scratch space
 scratchpad/
 
@@ -89,3 +85,6 @@ ttca_silence_test.sh
 ttca_verify.sh
 ttca_verify_results.txt
 interview_prep_birdai_sui.md
+
+# Run outputs of the Sui front-running drivers
+scripts/frontrun_sui/runs*/
