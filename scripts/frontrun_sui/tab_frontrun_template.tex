@@ -1,0 +1,17 @@
+\begin{table*}[t]
+\centering\footnotesize
+\caption{Transaction-level front-running, $n{=}13$. Victim transactions stream to one validator;
+an attacker puts its own copy of each one ahead of it only after it has seen it, in the victim's
+batch (Bullshark), in the victim's block, or pending in the network $50$\,ms after submission
+(Sui). \emph{Won}: the attacker's copy executes first, as a share of all committed victim
+transactions. Medians over runs, about $580$ (Bullshark) and $276$ (Sui) victim transactions per run, with the run range.}
+\label{tab:frontrun}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}llrrl@{}}
+\toprule
+Attacker & Sees the victim & Runs & Won (\%) & Range\\
+\midrule
+%%ROWS%%
+\bottomrule
+\end{tabular}
+\end{table*}
