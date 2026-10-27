@@ -1,0 +1,1428 @@
+diff --git a/benchmark/benchmark/commands.py b/benchmark/benchmark/commands.py
+index cbffcac..206400f 100644
+--- a/benchmark/benchmark/commands.py
++++ b/benchmark/benchmark/commands.py
+@@ -46,14 +46,15 @@ class CommandMaker:
+                 f'--store {store} --parameters {parameters} worker --id {id}')
+ 
+     @staticmethod
+-    def run_client(address, size, rate, nodes):
++    def run_client(address, size, rate, nodes, victim=False):
+         assert isinstance(address, str)
+         assert isinstance(size, int) and size > 0
+         assert isinstance(rate, int) and rate >= 0
+         assert isinstance(nodes, list)
+         assert all(isinstance(x, str) for x in nodes)
+         nodes = f'--nodes {" ".join(nodes)}' if nodes else ''
+-        return f'./benchmark_client {address} --size {size} --rate {rate} {nodes}'
++        flag = ' --victim' if victim else ''
++        return f'./benchmark_client {address} --size {size} --rate {rate} {nodes}{flag}'
+ 
+     @staticmethod
+     def kill():
+diff --git a/benchmark/benchmark/local.py b/benchmark/benchmark/local.py
+index 5d20bce..b7917ce 100644
+--- a/benchmark/benchmark/local.py
++++ b/benchmark/benchmark/local.py
+@@ -1,4 +1,6 @@
+ # Copyright(C) Facebook, Inc. and its affiliates.
++import base64
++import os
+ import subprocess
+ from math import ceil
+ from os.path import basename, splitext
+@@ -102,6 +104,32 @@ class LocalBench:
+                     log_file = PathMaker.client_log_file(i, id)
+                     self._background_run(cmd, log_file)
+ 
++            # Front-running experiment (env FR_VICTIM_RATE): one extra client streams
++            # victim-tagged transactions to worker 0 of the victim, the honest node with
++            # the smallest public key (the Rust side's `victims()[0]`).
++            fr_rate = int(os.environ.get("FR_VICTIM_RATE", "0"))
++            if fr_rate > 0:
++                types = [a["attack_type"] for a in committee.json["authorities"].values()]
++                honest = [i for i, t in enumerate(types[: len(workers_addresses)]) if t == 0]
++                victim = min(honest, key=lambda i: base64.b64decode(names[i]))
++                vaddr = workers_addresses[victim][0][1]
++                Print.info(f"Front-run victim: node {victim}, worker 0 at {vaddr}")
++                # FR_VICTIM_SPRAY=1: the victim, like the attacker, also submits each
++                # transaction to every validator (one client per validator, same ids).
++                targets = [victim]
++                if os.environ.get("FR_VICTIM_SPRAY") == "1":
++                    targets += [i for i in range(len(workers_addresses)) if i != victim]
++                for k, i in enumerate(targets):
++                    cmd = CommandMaker.run_client(
++                        workers_addresses[i][0][1],
++                        self.tx_size,
++                        fr_rate,
++                        [x for y in workers_addresses for _, x in y],
++                        victim=True,
++                    )
++                    name = "fr-victim.log" if k == 0 else f"fr-victim-copy-{i}.log"
++                    self._background_run(cmd, f"{PathMaker.logs_path()}/{name}")
++
+             # Run the primaries (except the faulty ones).
+             for i, address in enumerate(committee.primary_addresses(self.faults)):
+                 cmd = CommandMaker.run_primary(
+diff --git a/consensus/src/lib.rs b/consensus/src/lib.rs
+index 3e9ba50..e8aadf1 100644
+--- a/consensus/src/lib.rs
++++ b/consensus/src/lib.rs
+@@ -187,10 +187,23 @@ impl Consensus {
+                 
+ 
+                 #[cfg(feature = "benchmark")]
+-                for digest in certificate.header.payload.keys() {
+-                    // NOTE: This log entry is used to compute performance.
+-                    info!("Committed {} -> {:?}", certificate.header, digest);
+-                    info!("FairDag Committed {} in height {}", certificate.header.id, self.block_height);
++                {
++                    for digest in certificate.header.payload.keys() {
++                        // NOTE: This log entry is used to compute performance.
++                        info!("Committed {} -> {:?}", certificate.header, digest);
++                        info!("FairDag Committed {} in height {}", certificate.header.id, self.block_height);
++                    }
++                    // Scoring metadata (logging only, no protocol effect): author and
++                    // round per committed block, emitted once per certificate even when
++                    // the payload is empty. Enables all-pairs (M1) and same-round (M2)
++                    // scoring from the same committed order that yields M3.
++                    info!(
++                        "FairDag CommitMeta {} author {} round {} height {}",
++                        certificate.header.id,
++                        certificate.header.author,
++                        certificate.header.round,
++                        self.block_height
++                    );
+                 }
+ 
+                 self.tx_primary
+diff --git a/node/src/benchmark_client.rs b/node/src/benchmark_client.rs
+index 35703bf..2b78d09 100644
+--- a/node/src/benchmark_client.rs
++++ b/node/src/benchmark_client.rs
+@@ -22,6 +22,7 @@ async fn main() -> Result<()> {
+         .args_from_usage("--size=<INT> 'The size of each transaction in bytes'")
+         .args_from_usage("--rate=<INT> 'The rate (txs/s) at which to send the transactions'")
+         .args_from_usage("--nodes=[ADDR]... 'Network addresses that must be reachable before starting the benchmark.'")
++        .args_from_usage("--victim 'Send only victim-tagged transactions (front-running experiment)'")
+         .setting(AppSettings::ArgRequiredElseHelp)
+         .get_matches();
+ 
+@@ -65,6 +66,7 @@ async fn main() -> Result<()> {
+         size,
+         rate,
+         nodes,
++        victim: matches.is_present("victim"),
+     };
+ 
+     // Wait for all nodes to be online and synchronized.
+@@ -79,6 +81,7 @@ struct Client {
+     size: usize,
+     rate: u64,
+     nodes: Vec<SocketAddr>,
++    victim: bool,
+ }
+ 
+ impl Client {
+@@ -98,6 +101,10 @@ impl Client {
+             .await
+             .context(format!("failed to connect to {}", self.target))?;
+ 
++        if self.victim {
++            return self.send_victim(stream).await;
++        }
++
+         // Submit all transactions.
+         let burst = self.rate / PRECISION;
+         let mut tx = BytesMut::with_capacity(self.size);
+@@ -143,6 +150,30 @@ impl Client {
+         Ok(())
+     }
+ 
++    /// Victim stream: one transaction tagged 2 with an increasing id every
++    /// 1000/rate ms. The attacker can only learn of it from the victim's batch.
++    async fn send_victim(&self, stream: TcpStream) -> Result<()> {
++        let mut transport = Framed::new(stream, LengthDelimitedCodec::new());
++        let period = Duration::from_millis((1000 / self.rate.max(1)).max(1));
++        let interval = interval(period);
++        tokio::pin!(interval);
++        let mut counter: u64 = 0;
++        let mut tx = BytesMut::with_capacity(self.size);
++        info!("Start sending victim transactions");
++        loop {
++            interval.as_mut().tick().await;
++            tx.put_u8(2u8);
++            tx.put_u64(counter);
++            tx.resize(self.size, 0u8);
++            info!("Sending victim tx {}", counter);
++            if let Err(e) = transport.send(tx.split().freeze()).await {
++                warn!("Failed to send victim transaction: {}", e);
++                return Ok(());
++            }
++            counter += 1;
++        }
++    }
++
+     pub async fn wait(&self) {
+         // Wait for all nodes to be online.
+         info!("Waiting for all nodes to be online...");
+diff --git a/our_harness/frontrun_score.py b/our_harness/frontrun_score.py
+new file mode 100644
+index 0000000..e9d0467
+--- /dev/null
++++ b/our_harness/frontrun_score.py
+@@ -0,0 +1,77 @@
++#!/usr/bin/env python3
++"""Transaction-level front-running on Bullshark (review #64A, point A1).
++
++For one run's logs/ directory:
++  * worker logs give, per batch digest, the tagged transactions it carries
++    ("Batch <D> contains fr tx <tag> <id>", tag 2 = victim, 3 = attacker copy);
++  * the longest primary log gives the committed order of certificates and their
++    batches ("Committed B<round>(<author>) -> <D>"), i.e. the committing height.
++A victim transaction is front-run when the attacker's copy of it is committed at a
++lower height. Every copy exists only because the attacker's worker received the
++victim's batch first ("FR_SEEN victim tx <id>"), so each success is causal.
++
++Usage: frontrun_score.py <run_dir> [<run_dir> ...]   (prints one JSON row per run)
++"""
++import glob, json, os, re, sys
++
++BATCH = re.compile(r"Batch (\S+) contains fr tx (\d) (\d+)")
++COMMIT = re.compile(r"Committed B(\d+)\((\S+)\) -> (\S+)")
++SEEN = re.compile(r"FR_SEEN victim tx (\d+)")
++SENT = re.compile(r"Sending victim tx (\d+)")
++
++def score(d):
++    where = {}                                   # (tag, id) -> set of digests
++    seen = set()
++    for f in glob.glob(os.path.join(d, "worker-*.log")):
++        for line in open(f, errors="replace"):
++            m = BATCH.search(line)
++            if m:
++                where.setdefault((int(m.group(2)), int(m.group(3))), set()).add(m.group(1))
++            m = SEEN.search(line)
++            if m:
++                seen.add(int(m.group(1)))
++    sent = 0
++    vf = os.path.join(d, "fr-victim.log")
++    if os.path.exists(vf):
++        sent = sum(1 for l in open(vf, errors="replace") if SENT.search(l))
++    best = []
++    for f in glob.glob(os.path.join(d, "primary-*.log")):
++        rows, last, h = [], None, -1
++        for line in open(f, errors="replace"):
++            m = COMMIT.search(line)
++            if m:
++                cert = (m.group(1), m.group(2))
++                if cert != last:
++                    h += 1
++                    last = cert
++                rows.append((m.group(3), h, int(m.group(1))))
++        if len(rows) > len(best):
++            best = rows
++    pos = {}
++    for digest, h, rnd in best:
++        pos.setdefault(digest, (h, rnd))
++    def first(tag, i):
++        c = [pos[x] for x in where.get((tag, i), ()) if x in pos]
++        return min(c) if c else None
++    vids = sorted({i for t, i in where if t == 2})
++    committed = [i for i in vids if first(2, i) is not None]
++    reacted = [i for i in committed if first(3, i) is not None]
++    won = set(i for i in reacted if first(3, i)[0] < first(2, i)[0])
++    same_round = [i for i in reacted if first(3, i)[1] == first(2, i)[1]]
++    sr_won = [i for i in same_round if i in won]
++    later = [i for i in reacted if first(3, i)[1] > first(2, i)[1]]
++    later_won = [i for i in later if i in won]
++    pct = lambda a, b: round(100.0 * a / b, 2) if b else None
++    return {"run": d, "sent": sent, "victim_committed": len(committed), "seen": len(seen),
++            "reacted_committed": len(reacted), "won": len(won),
++            "success_pct": pct(len(won), len(committed)),
++            "cond_success_pct": pct(len(won), len(reacted)),
++            "same_round_pct": pct(len(same_round), len(reacted)),
++            "in_round_win_pct": pct(len(sr_won), len(same_round)),
++            "later_round_pct": pct(len(later), len(reacted)),
++            "later_round_win_pct": pct(len(later_won), len(later)),
++            "certs": (best[-1][1] + 1) if best else 0}
++
++if __name__ == "__main__":
++    for d in sys.argv[1:]:
++        print(json.dumps(score(d)))
+diff --git a/our_harness/measure.py b/our_harness/measure.py
+new file mode 100644
+index 0000000..90d93b8
+--- /dev/null
++++ b/our_harness/measure.py
+@@ -0,0 +1,245 @@
++#!/usr/bin/env python3
++"""Unified MEV scorer for the real Bullshark (Flash Boys fork).
++
++Computes THREE metrics from ONE committed order, so a single run can be scored
++under every definition and the metric dimension (T4) becomes measurable rather
++than anecdotal.
++
++  M3  targeted-pair committing-height ASR   <-- the "No Fish Is Too Big for Flash
++      Boys" metric. For each logged (attacker header A, victim header V) pair,
++      success iff height[V] > height[A] (attacker committed earlier in the global
++      linear order). Cross-round. PROVEN identical to their benchmark/logs.py.
++
++  M1  all-pairs ASR. Over ALL committed blocks: every (attacker-authored block,
++      target-victim-authored block) pair, success iff height[att] < height[vic].
++      Cross-round, positional; fair ordering ~= 50%.
++
++  M2  same-round ASR. M1 restricted to pairs in the same round. Isolates the
++      intra-round tiebreak (the "index tax").
++
++Roles are inferred from the logs themselves (no committee file needed):
++  - attacker authors  = authors of the logged attacking headers
++  - target victim     = author of the logged victim headers referenced by those pairs
++Author/round/height per committed block come from the benchmark-only line
++  "FairDag CommitMeta <id> author <a> round <r> height <h>"
++and heights also from the original
++  "FairDag Committed <id> in height <h>"   (kept for M3 fidelity with their parser).
++
++Usage:  measure.py <logs_dir> [--attack fissure|sluggish|speculative|baseline] [--json]
++"""
++import argparse
++import glob
++import json
++import os
++import re
++import sys
++
++RE_SILENT = re.compile(r"FairDag SILENT skip round \d+ \(not leader\) by (\S+)")
++RE_VICTIM_HDR = re.compile(r"FairDag Created a victim header (\S+) in round (\d+)")
++RE_HEIGHT = re.compile(r"FairDag Committed (\S+) in height (\d+)")
++RE_META = re.compile(r"FairDag CommitMeta (\S+) author (\S+) round (\d+) height (\d+)")
++RE_PAIR = {
++    "baseline":    re.compile(r"FairDag Monitor attacking header (\S+), victim header (\S+), in round (\d+)"),
++    "fissure":     re.compile(r"FairDag Created a fissure attacking header (\S+), victim header (\S+), in round (\d+)"),
++    "sluggish":    re.compile(r"FairDag Created a sluggish attacking header (\S+), victim header (\S+), in round (\d+)"),
++    "speculative": re.compile(r"FairDag Created a speculative attacking header (\S+), victim header (\S+), in round (\d+)"),
++}
++
++
++def load_silent_roles(logs_dir, meta):
++    """Roles for the silent-except-leader cell, where no attack pairs are logged.
++
++    attackers = authors that emitted a `FairDag SILENT skip ... by <author>` marker
++    victims   = every other author seen in the committed order
++    Returns (attacker_authors, victim_authors, marker_count). A zero marker count
++    means the hook never fired and the cell must NOT be scored.
++    """
++    att, markers = set(), 0
++    files = sorted(glob.glob(os.path.join(logs_dir, "primary-*.log"))) or \
++            sorted(glob.glob(os.path.join(logs_dir, "*.log")))
++    for f in files:
++        try:
++            txt = open(f, "r", errors="replace").read()
++        except OSError:
++            continue
++        for m in RE_SILENT.finditer(txt):
++            att.add(m.group(1))
++            markers += 1
++    all_authors = {b["author"] for b in meta.values()}
++    return att, (all_authors - att), markers
++
++
++def load(logs_dir):
++    heights, meta = {}, {}
++    pairs = {k: {} for k in RE_PAIR}
++    files = sorted(glob.glob(os.path.join(logs_dir, "primary-*.log"))) or \
++            sorted(glob.glob(os.path.join(logs_dir, "*.log")))
++    for f in files:
++        try:
++            txt = open(f, "r", errors="replace").read()
++        except OSError:
++            continue
++        for m in RE_HEIGHT.finditer(txt):
++            heights.setdefault(m.group(1), int(m.group(2)))
++        for m in RE_META.finditer(txt):
++            bid = m.group(1)
++            if bid not in meta:
++                meta[bid] = {"author": m.group(2), "round": int(m.group(3)), "height": int(m.group(4))}
++            heights.setdefault(bid, int(m.group(4)))
++        for atk, rx in RE_PAIR.items():
++            for m in rx.finditer(txt):
++                pairs[atk].setdefault(m.group(2), m.group(1))   # victim -> attacker, first-seen
++    return heights, meta, pairs, files
++
++
++def m3(heights, victim_to_attack):
++    """Targeted-pair committing-height ASR (their metric)."""
++    total = succ = 0
++    for v, a in victim_to_attack.items():
++        if v in heights and a in heights:
++            total += 1
++            if heights[v] > heights[a]:
++                succ += 1
++    return succ, total
++
++
++def roles(meta, victim_to_attack):
++    """Infer attacker authors and the target-victim author from the logged pairs."""
++    att_authors, vic_authors = set(), set()
++    for v, a in victim_to_attack.items():
++        if a in meta:
++            att_authors.add(meta[a]["author"])
++        if v in meta:
++            vic_authors.add(meta[v]["author"])
++    return att_authors, vic_authors
++
++
++def m1_m2(meta, att_authors, vic_authors):
++    """All-pairs (cross-round) and same-round ASR over every committed block."""
++    att = [b for b in meta.values() if b["author"] in att_authors]
++    vic = [b for b in meta.values() if b["author"] in vic_authors]
++    ap_s = ap_t = sr_s = sr_t = 0
++    for a in att:
++        for v in vic:
++            ap_t += 1
++            if a["height"] < v["height"]:
++                ap_s += 1
++            if a["round"] == v["round"]:
++                sr_t += 1
++                if a["height"] < v["height"]:
++                    sr_s += 1
++    return (ap_s, ap_t), (sr_s, sr_t)
++
++
++def pct(s, t):
++    return (100.0 * s / t) if t else None
++
++
++# ---------------------------------------------------------------------------
++# Sui / Mysticeti support. The uncertified fork emits the whole committed order
++# as  FINAL_COMMITTED_ORDER: [{"creator":C,"position":P,"round":R}, ...].
++# We convert it into the SAME (author, round, height) block records used above
++# and score it with the SAME m1_m2() function, so cross-protocol M1/M2 numbers
++# come from one implementation and are genuinely commensurable.
++# ---------------------------------------------------------------------------
++RE_SUI_ORDER = re.compile(r"FINAL_COMMITTED_ORDER:\s*(\[.*?\])", re.S)
++
++
++def load_sui(path, attacker_ids, victim_ids):
++    """Parse a Sui/Mysticeti run log/order file into block records + role sets."""
++    txt = open(path, "r", errors="replace").read()
++    m = RE_SUI_ORDER.search(txt)
++    if not m:
++        return {}, set(), set()
++    order = json.loads(m.group(1))
++    meta = {}
++    for i, e in enumerate(order):
++        # position in the committed sequence IS the committing height
++        meta[f"b{i}"] = {
++            "author": str(e["creator"]),
++            "round": int(e["round"]),
++            "height": int(e.get("position", i)),
++        }
++    return meta, {str(a) for a in attacker_ids}, {str(v) for v in victim_ids}
++
++
++def main(argv=None):
++    ap = argparse.ArgumentParser()
++    ap.add_argument("logs_dir")
++    ap.add_argument("--attack", choices=list(RE_PAIR), default=None)
++    ap.add_argument("--json", action="store_true")
++    ap.add_argument("--format", choices=["bullshark", "sui"], default="bullshark",
++                    help="sui: parse FINAL_COMMITTED_ORDER from a single file (M1/M2 only)")
++    ap.add_argument("--attackers", default="", help="sui: comma-separated attacker indices")
++    ap.add_argument("--victims", default="", help="sui: comma-separated victim indices")
++    ap.add_argument("--silent-roles", action="store_true",
++                    help="bullshark: derive roles from SILENT skip markers (for the silent cell)")
++    args = ap.parse_args(argv)
++
++    if args.format == "sui":
++        ids = lambda s: [int(x) for x in s.split(",") if x.strip() != ""]
++        meta, att_a, vic_a = load_sui(args.logs_dir, ids(args.attackers), ids(args.victims))
++        if not meta:
++            print("[scorer] no FINAL_COMMITTED_ORDER found"); return 1
++        (s1, t1), (s2, t2) = m1_m2(meta, att_a, vic_a)
++        res = {"M1_all_pairs": {"pct": pct(s1, t1), "succ": s1, "total": t1},
++               "M2_same_round": {"pct": pct(s2, t2), "succ": s2, "total": t2},
++               "blocks": len(meta)}
++        if args.json:
++            print(json.dumps(res, indent=2))
++        else:
++            g = lambda d: (f"{d['pct']:.2f}% ({d['succ']}/{d['total']})" if d["pct"] is not None else "n/a")
++            print(f"[scorer/sui] {len(meta)} committed blocks | attackers={sorted(att_a)} victims={sorted(vic_a)}")
++            print(f"     M1 all-pairs  : {g(res['M1_all_pairs'])}")
++            print(f"     M2 same-round : {g(res['M2_same_round'])}")
++        return 0
++
++    heights, meta, pairs, files = load(args.logs_dir)
++
++    if args.silent_roles:
++        att_a, vic_a, markers = load_silent_roles(args.logs_dir, meta)
++        print(f"[scorer/silent] {len(files)} logs | {len(meta)} blocks with meta | "
++              f"{markers} SILENT markers | {len(att_a)} silent author(s)")
++        if markers == 0:
++            print("  REFUSING TO SCORE: hook never fired (0 markers)")
++            return 1
++        (s1, t1), (s2, t2) = m1_m2(meta, att_a, vic_a)
++        g = lambda s, t: (f"{100.0*s/t:.2f}% ({s}/{t})" if t else "n/a")
++        print(f"     M1 all-pairs  : {g(s1, t1)}")
++        print(f"     M2 same-round : {g(s2, t2)}")
++        return 0
++
++    out = {"log_files": len(files), "committed_blocks": len(heights), "with_meta": len(meta), "cells": {}}
++    if not args.json:
++        print(f"[scorer] {len(files)} logs | {len(heights)} committed blocks | {len(meta)} with author/round meta")
++        if not meta:
++            print("  WARNING: no CommitMeta lines -> M1/M2 unavailable (rebuild with the CommitMeta log line)")
++
++    for atk in ([args.attack] if args.attack else list(RE_PAIR)):
++        vp = pairs[atk]
++        if not vp:
++            continue
++        s3, t3 = m3(heights, vp)
++        att_a, vic_a = roles(meta, vp)
++        (s1, t1), (s2, t2) = m1_m2(meta, att_a, vic_a) if meta else ((0, 0), (0, 0))
++        cell = {
++            "M3_targeted_committing_height": {"pct": pct(s3, t3), "succ": s3, "total": t3},
++            "M1_all_pairs":                  {"pct": pct(s1, t1), "succ": s1, "total": t1},
++            "M2_same_round":                 {"pct": pct(s2, t2), "succ": s2, "total": t2},
++            "attacker_authors": len(att_a), "victim_authors": len(vic_a),
++        }
++        out["cells"][atk] = cell
++        if not args.json:
++            f = lambda d: (f"{d['pct']:.2f}% ({d['succ']}/{d['total']})" if d["pct"] is not None else "n/a")
++            print(f"  {atk}:")
++            print(f"     M3 targeted committing-height : {f(cell['M3_targeted_committing_height'])}")
++            print(f"     M1 all-pairs                  : {f(cell['M1_all_pairs'])}")
++            print(f"     M2 same-round                 : {f(cell['M2_same_round'])}")
++            print(f"     roles: {len(att_a)} attacker author(s), {len(vic_a)} victim author(s)")
++    if args.json:
++        print(json.dumps(out, indent=2))
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/our_harness/per_run_stats.py b/our_harness/per_run_stats.py
+new file mode 100644
+index 0000000..a23c90b
+--- /dev/null
++++ b/our_harness/per_run_stats.py
+@@ -0,0 +1,72 @@
++#!/usr/bin/env python3
++"""Per-run metric distributions for a preserved run-log directory.
++
++Pooled ratios weight runs by pair count and can hide run-to-run variance, so for
++any headline cell we report the per-run median and IQR alongside the pooled value.
++
++Usage: per_run_stats.py <run_logs/cell_dir> [--attack fissure|baseline|...]
++"""
++import argparse
++import os
++import statistics as st
++import sys
++
++sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
++import measure  # noqa: E402
++
++
++def main():
++    ap = argparse.ArgumentParser()
++    ap.add_argument("cell_dir")
++    ap.add_argument("--attack", default=None)
++    args = ap.parse_args()
++
++    rows = []
++    pooled = {k: [0, 0] for k in ("M1", "M2", "M3")}
++    for d in sorted(os.listdir(args.cell_dir)):
++        rd = os.path.join(args.cell_dir, d)
++        if not os.path.isdir(rd):
++            continue
++        heights, meta, pairs, _ = measure.load(rd)
++        atk = args.attack
++        if atk is None:
++            atk = next((k for k, v in pairs.items() if v), None)
++        if not atk or not pairs.get(atk):
++            continue
++        vp = pairs[atk]
++        s3, t3 = measure.m3(heights, vp)
++        att_a, vic_a = measure.roles(meta, vp)
++        (s1, t1), (s2, t2) = measure.m1_m2(meta, att_a, vic_a) if meta else ((0, 0), (0, 0))
++        for k, (s, t) in (("M1", (s1, t1)), ("M2", (s2, t2)), ("M3", (s3, t3))):
++            pooled[k][0] += s
++            pooled[k][1] += t
++        rows.append({
++            "run": d,
++            "M1": (100.0 * s1 / t1) if t1 else None,
++            "M2": (100.0 * s2 / t2) if t2 else None,
++            "M3": (100.0 * s3 / t3) if t3 else None,
++            "m3n": t3,
++        })
++
++    print(f"=== {os.path.basename(args.cell_dir)} | {len(rows)} runs with pairs ===")
++    for k in ("M1", "M2", "M3"):
++        vals = [r[k] for r in rows if r[k] is not None]
++        s, t = pooled[k]
++        pooled_pct = (100.0 * s / t) if t else float("nan")
++        if not vals:
++            print(f"  {k}: no data")
++            continue
++        med = st.median(vals)
++        lo, hi = min(vals), max(vals)
++        iqr = ""
++        if len(vals) >= 4:
++            q = st.quantiles(vals, n=4)
++            iqr = f" IQR[{q[0]:.1f},{q[2]:.1f}]"
++        print(f"  {k}: median={med:6.2f}%  pooled={pooled_pct:6.2f}%  range[{lo:.1f},{hi:.1f}]{iqr}  n_runs={len(vals)}  pairs={t}")
++    tot_m3 = sum(r["m3n"] for r in rows)
++    print(f"  (M3 targeted pairs total = {tot_m3})")
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/our_harness/run_and_score.py b/our_harness/run_and_score.py
+new file mode 100644
+index 0000000..815df7a
+--- /dev/null
++++ b/our_harness/run_and_score.py
+@@ -0,0 +1,86 @@
++#!/usr/bin/env python3
++"""Run N single-run benchmark configs, preserving each run's logs, then score
++every run under M1/M2/M3 and aggregate.
++
++The stock benchmark overwrites `logs/` on every run, so the stock flow cannot
++produce M1/M2/M3 from the *same* committed orders (their cumulative results file
++aggregates M3 only). This driver snapshots `logs/` after each run so all three
++metrics are computed over an identical set of orders -- which is what the metric
++dimension (T4) requires to be an honest comparison.
++
++Usage (from the benchmark/ dir, with the venv python):
++    python ../our_harness/run_and_score.py --attack 1 --fa 4 --nodes 13 --runs 12 [--env K=V ...]
++attack: 10=baseline 1=fissure 2=sluggish 3=speculative
++"""
++import argparse
++import os
++import shutil
++import sys
++
++sys.path.insert(0, os.getcwd())          # benchmark/ so `fabfile` imports
++sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
++import measure                            # noqa: E402
++
++
++def main():
++    ap = argparse.ArgumentParser()
++    ap.add_argument("--attack", type=int, required=True)
++    ap.add_argument("--fa", type=int, default=4)
++    ap.add_argument("--crash", type=int, default=0)
++    ap.add_argument("--workers", type=int, default=2)
++    ap.add_argument("--nodes", type=int, default=13)
++    ap.add_argument("--runs", type=int, default=12)
++    ap.add_argument("--keep", default="/mnt/data/flashboys/run_logs")
++    args = ap.parse_args()
++
++    name = {10: "baseline", 1: "fissure", 2: "sluggish", 3: "speculative"}[args.attack]
++    keep = os.path.join(args.keep, f"{name}_f{args.fa}_n{args.nodes}")
++    shutil.rmtree(keep, ignore_errors=True)
++    os.makedirs(keep, exist_ok=True)
++
++    from fabfile import run_with_configurations   # noqa: E402
++
++    for i in range(args.runs):
++        cfg = [(args.attack, args.fa, args.crash, args.workers, args.nodes, 1)]
++        try:
++            run_with_configurations(cfg)
++        except Exception as e:                     # a failed run must not kill the sweep
++            print(f"[run {i}] FAILED: {e}", file=sys.stderr)
++            continue
++        dst = os.path.join(keep, f"run{i}")
++        shutil.rmtree(dst, ignore_errors=True)
++        try:
++            shutil.copytree("logs", dst)
++        except OSError as e:
++            print(f"[run {i}] could not snapshot logs: {e}", file=sys.stderr)
++
++    # Aggregate every preserved run under all three metrics.
++    agg = {k: {"s": 0, "t": 0} for k in ("M1_all_pairs", "M2_same_round", "M3_targeted_committing_height")}
++    scored = 0
++    for d in sorted(os.listdir(keep)):
++        rd = os.path.join(keep, d)
++        if not os.path.isdir(rd):
++            continue
++        heights, meta, pairs, _ = measure.load(rd)
++        vp = pairs[name]
++        if not vp:
++            continue
++        s3, t3 = measure.m3(heights, vp)
++        att_a, vic_a = measure.roles(meta, vp)
++        (s1, t1), (s2, t2) = measure.m1_m2(meta, att_a, vic_a) if meta else ((0, 0), (0, 0))
++        for k, (s, t) in (("M1_all_pairs", (s1, t1)),
++                          ("M2_same_round", (s2, t2)),
++                          ("M3_targeted_committing_height", (s3, t3))):
++            agg[k]["s"] += s
++            agg[k]["t"] += t
++        scored += 1
++
++    print(f"\n=== {name} f_a={args.fa} n={args.nodes} | {scored} runs scored (logs kept in {keep}) ===")
++    for k, v in agg.items():
++        p = (100.0 * v["s"] / v["t"]) if v["t"] else None
++        print(f"  {k:32s}: " + (f"{p:.2f}% ({v['s']}/{v['t']})" if p is not None else "n/a"))
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/primary/src/aggregators.rs b/primary/src/aggregators.rs
+index 76f3abb..d68b5dd 100644
+--- a/primary/src/aggregators.rs
++++ b/primary/src/aggregators.rs
+@@ -53,6 +53,12 @@ pub struct CertificatesAggregator {
+     weight: Stake,
+     certificates: Vec<Certificate>,
+     used: HashSet<PublicKey>,
++    /// FISSURE_RATIONAL only: whether a quorum has already been emitted for this round.
++    /// The proposer accumulates what the core sends (`last_parents.extend`), so after the
++    /// first quorum every later certificate is an extra. Without this flag a victim
++    /// certificate arriving after quorum would look like "quorum unreachable without it"
++    /// and be referenced anyway, silently disabling the attack on that round.
++    emitted_quorum: bool,
+ }
+ 
+ impl CertificatesAggregator {
+@@ -61,6 +67,7 @@ impl CertificatesAggregator {
+             weight: 0,
+             certificates: Vec::new(),
+             used: HashSet::new(),
++            emitted_quorum: false,
+         }
+     }
+ 
+@@ -92,7 +99,43 @@ impl CertificatesAggregator {
+         victim: PublicKey,
+     ) -> DagResult<Option<Vec<Certificate>>> {
+         let origin = certificate.origin();
+-        if origin == victim {
++        // MULTI_VICTIM=K (K>1): exclude the first K honest authorities (multi-victim
++        // attack) instead of the single target victim. Default (unset or 1) keeps the
++        // original single-victim exclusion, so the default path is byte-identical.
++        let excluded = match std::env::var("MULTI_VICTIM").ok().and_then(|v| v.parse::<usize>().ok()) {
++            Some(k) if k > 1 => committee
++                .authorities
++                .iter()
++                .filter(|(_, a)| a.attack_type == 0)
++                .map(|(name, _)| *name)
++                .take(k)
++                .any(|v| v == origin),
++            _ => origin == victim,
++        };
++        // RATIONAL FISSURE (env FISSURE_RATIONAL=1).
++        //
++        // The upstream hook below drops the victim's certificate before it is ever counted,
++        // so an attacker must reach quorum from the remaining n-1 authorities. Because every
++        // attacker excludes the SAME victim, attackers depend on one another's certificates:
++        // at n=13 the honest non-victim pool is 8 against a quorum of 9, so each attacker
++        // needs at least one other attacker's certificate to advance at all. Attackers are
++        // systematically slower than honest nodes (they wait on 9 of 12 rather than 9 of 13),
++        // so they drift behind together, the available pool falls to 8, and they deadlock
++        // permanently. We measured exactly this: attackers stop advancing at round 11 of ~300
++        // and commit 8 blocks against every honest validator's ~294.
++        //
++        // A rational attacker would never halt itself: refusing to make progress is not an
++        // attack, it is a self-inflicted crash, and it produces a committed order in which
++        // the attacker is simply absent. Under FISSURE_RATIONAL we therefore accumulate every
++        // certificate and omit the victim only when the parents that remain still satisfy the
++        // quorum, falling back to including it when they do not. Omitting a parent one can
++        // afford to omit is precisely the legitimate action (i) of the threat model; the
++        // attack's intent (deny the victim support) is preserved on every round where it is
++        // achievable, and abandoned only where the alternative is to stop proposing.
++        let rational = std::env::var("FISSURE_RATIONAL")
++            .map(|v| v != "0")
++            .unwrap_or(false);
++        if excluded && !rational {
+             #[cfg(feature = "benchmark")]
+             info!("This is the victim block, victim is {}", origin);
+             return Ok(None)
+@@ -104,13 +147,97 @@ impl CertificatesAggregator {
+ 
+         self.certificates.push(certificate);
+         self.weight += committee.stake(&origin);
++        if rational && self.weight >= committee.quorum_threshold() {
++            let kept: Vec<Certificate> = self
++                .certificates
++                .iter()
++                .filter(|c| c.origin() != victim)
++                .cloned()
++                .collect();
++            // After the first quorum the proposer only extends what it already has, so every
++            // later certificate is an extra: emit the non-victim ones and never re-admit the
++            // victim on the "unreachable" path, which would otherwise fire whenever the
++            // victim's certificate simply arrived late.
++            if self.emitted_quorum {
++                self.certificates.clear();
++                return if kept.is_empty() { Ok(None) } else { Ok(Some(kept)) };
++            }
++            let kept_weight: Stake = kept.iter().map(|c| committee.stake(&c.origin())).sum();
++            if kept_weight >= committee.quorum_threshold() {
++                #[cfg(feature = "benchmark")]
++                info!(
++                    "FISSURE_RATIONAL excluded victim {} keeping {} parents",
++                    victim,
++                    kept.len()
++                );
++                self.emitted_quorum = true;
++                self.certificates.clear();
++                return Ok(Some(kept));
++            }
++            // Genuinely cannot form a quorum without the victim: include it rather than halt.
++            #[cfg(feature = "benchmark")]
++            info!(
++                "FISSURE_RATIONAL kept victim {} (quorum unreachable without it)",
++                victim
++            );
++            self.emitted_quorum = true;
++            return Ok(Some(self.certificates.drain(..).collect()));
++        }
+         if self.weight >= committee.quorum_threshold() {
+             // self.weight = 0; // Ensures quorum is only reached once.
++            // COLLUSION (env COLLUDE=1): instead of referencing every certificate
++            // that arrived before quorum, the colluding attacker set preferentially
++            // links co-attackers (a tight attacker sub-DAG) and fills with the
++            // minimum honest certificates needed to reach a VALID quorum. The victim
++            // is still excluded (it never entered self.certificates). Choosing which
++            // valid parents to include is a legitimate honest action, so this stays
++            // inside the protocol invariant. Default path (COLLUDE unset) is unchanged.
++            if std::env::var("COLLUDE").map(|v| v == "1").unwrap_or(false) {
++                let parents = self.select_colluder_quorum(committee);
++                #[cfg(feature = "benchmark")]
++                info!("FairDag COLLUDE selected {} colluder-preferring parents", parents.len());
++                self.certificates.clear();
++                return Ok(Some(parents));
++            }
+             return Ok(Some(self.certificates.drain(..).collect()));
+         }
+         Ok(None)
+     }
+ 
++    /// Build a valid quorum from the accumulated (victim-excluded) certificates,
++    /// preferring co-attacker certificates (authorities with attack_type != 0) and
++    /// adding the minimum number of honest certificates required to reach quorum.
++    fn select_colluder_quorum(&self, committee: &Committee) -> Vec<Certificate> {
++        let colluders: HashSet<PublicKey> = committee
++            .authorities
++            .iter()
++            .filter(|(_, authority)| authority.attack_type != 0)
++            .map(|(name, _)| *name)
++            .collect();
++        let mut result: Vec<Certificate> = Vec::new();
++        let mut weight: Stake = 0;
++        // Co-attacker certificates first.
++        for cert in self.certificates.iter() {
++            if colluders.contains(&cert.origin()) {
++                weight += committee.stake(&cert.origin());
++                result.push(cert.clone());
++            }
++        }
++        // Fill with the minimum honest certificates to reach a valid quorum.
++        if weight < committee.quorum_threshold() {
++            for cert in self.certificates.iter() {
++                if !colluders.contains(&cert.origin()) {
++                    weight += committee.stake(&cert.origin());
++                    result.push(cert.clone());
++                    if weight >= committee.quorum_threshold() {
++                        break;
++                    }
++                }
++            }
++        }
++        result
++    }
++
+     // maybe can do more things here
+     pub fn speculative_attack_append(
+         &mut self,
+diff --git a/primary/src/core.rs b/primary/src/core.rs
+index f28bcd0..eafaa46 100644
+--- a/primary/src/core.rs
++++ b/primary/src/core.rs
+@@ -199,7 +199,7 @@ impl Core {
+             || self.attacker.attack_type() == FISSURE_NOT_ACTIVE_ATTACK
+         {
+             if self.attacker.victims().contains(&header.author)
+-                && self.attacker.is_target_victim(header.author)
++                && self.fissure_target_victim() == Some(header.author)
+                 && header.round % ATTACKING_INTERVAL == 0
+             // && self.current_header.round + 1 <= header.round
+             {
+@@ -244,6 +244,48 @@ impl Core {
+                     .expect("Failed to send victim header to proposer");
+             }
+         }
++        // CENSORSHIP (env CENSOR=k): the first k non-victim authorities decline to vote for
++        // headers authored by a victim. Voting is not compulsory. A validator that has not
++        // voted is indistinguishable from one that has not yet received the header, and the
++        // protocol already tolerates validators that do not vote, so a censoring node stays
++        // inside its legal options and the invariant holds: no honest node is asked to accept
++        // anything it would normally reject, and no validity rule is touched. On a certified
++        // DAG a header needs a quorum of votes before its certificate exists, which makes
++        // declining to vote the only action in the legitimate set that can keep a victim's
++        // block out of the committed order entirely rather than merely moving it later.
++        // Default (unset or 0) leaves the path below byte-identical to upstream.
++        // The target is victims()[0], matching this fork's own single-victim convention
++        // (see is_target_victim). The censoring set is the first k authorities in committee
++        // order other than the target, so it is well defined for any k up to n-1 and is
++        // independent of how many authorities are configured as attackers: the point of the
++        // sweep is the number of validators declining to vote, not how they were recruited.
++        let censor_k = std::env::var("CENSOR")
++            .ok()
++            .and_then(|v| v.parse::<usize>().ok())
++            .unwrap_or(0);
++        if censor_k > 0 {
++            if let Some(target) = self.attacker.victims().first().copied() {
++                if header.author == target {
++                    let censoring: Vec<PublicKey> = self
++                        .committee
++                        .authorities
++                        .iter()
++                        .map(|(name, _)| *name)
++                        .filter(|n| *n != target)
++                        .take(censor_k)
++                        .collect();
++                    if censoring.iter().any(|n| *n == self.name) {
++                        #[cfg(feature = "benchmark")]
++                        log::info!(
++                            "CENSOR_VOTE_WITHHELD round {} target {}",
++                            header.round, target
++                        );
++                        return Ok(());
++                    }
++                }
++            }
++        }
++
+         // Check if we can vote for this header.
+         if self
+             .last_voted
+@@ -310,6 +352,73 @@ impl Core {
+         Ok(())
+     }
+ 
++    /// A3 RELATIONSHIP dimension. By default every attacker targets the same
++    /// victim (`victims()[0]`), i.e. the attacker set is already *colluding*.
++    /// With INDEPENDENT=1 each attacker instead targets a distinct victim
++    /// (attacker at position j targets victims()[j % |victims|]), so the
++    /// attackers act *uncoordinated* and each fights alone. Comparing the two
++    /// isolates what coordination is actually worth. Default path unchanged.
++    fn fissure_target_victim(&self) -> Option<PublicKey> {
++        if std::env::var("INDEPENDENT").map(|v| v == "1").unwrap_or(false) {
++            let victims: Vec<PublicKey> = self
++                .committee
++                .authorities
++                .iter()
++                .filter(|(_, a)| a.attack_type == 0)
++                .map(|(name, _)| *name)
++                .collect();
++            let attackers: Vec<PublicKey> = self
++                .committee
++                .authorities
++                .iter()
++                .filter(|(_, a)| a.attack_type != 0)
++                .map(|(name, _)| *name)
++                .collect();
++            if !victims.is_empty() {
++                if let Some(pos) = attackers.iter().position(|a| *a == self.name) {
++                    return Some(victims[pos % victims.len()]);
++                }
++            }
++        }
++        // A3 RELATIONSHIP, multi-group value. RIVAL_GROUPS=G partitions the attacker set
++        // into G groups that each coordinate internally on their own victim, so the set is
++        // neither fully colluding (all on victims()[0]) nor fully independent (one victim
++        // each). Attacker at position j joins group j % G, and group g targets
++        // victims()[g % |victims|]. This is the middle of the A3 dimension: it measures
++        // whether rival groups interfere with one another, or whether each simply gets the
++        // benefit its own size would buy.
++        //
++        // Only *which* victim an attacker targets changes; the exclusion mechanism and
++        // every consensus rule are untouched. Default path unchanged when unset.
++        if let Some(groups) = std::env::var("RIVAL_GROUPS")
++            .ok()
++            .and_then(|v| v.parse::<usize>().ok())
++            .filter(|g| *g > 1)
++        {
++            let victims: Vec<PublicKey> = self
++                .committee
++                .authorities
++                .iter()
++                .filter(|(_, a)| a.attack_type == 0)
++                .map(|(name, _)| *name)
++                .collect();
++            let attackers: Vec<PublicKey> = self
++                .committee
++                .authorities
++                .iter()
++                .filter(|(_, a)| a.attack_type != 0)
++                .map(|(name, _)| *name)
++                .collect();
++            if !victims.is_empty() {
++                if let Some(pos) = attackers.iter().position(|a| *a == self.name) {
++                    let group = pos % groups;
++                    return Some(victims[group % victims.len()]);
++                }
++            }
++        }
++        self.attacker.target_victim()
++    }
++
+     #[async_recursion]
+     async fn process_certificate(&mut self, certificate: Certificate) -> DagResult<()> {
+         debug!("Processing {:?}", certificate);
+@@ -346,7 +455,7 @@ impl Core {
+             || self.attacker.attack_type() == FISSURE_NOT_ACTIVE_ATTACK
+         {
+             // Fissure front-running attack: don't link the victim block
+-            if let Some(target_victim) = self.attacker.target_victim() {
++            if let Some(target_victim) = self.fissure_target_victim() {
+                 if let Some(parents) = self
+                     .certificates_aggregators
+                     .entry(certificate.round())
+@@ -401,12 +510,46 @@ impl Core {
+             //     panic!("Attack failure: no speculative attacker.");
+             // }
+         } else {
+-            if let Some(parents) = self
+-                .certificates_aggregators
+-                .entry(certificate.round())
+-                .or_insert_with(|| Box::new(CertificatesAggregator::new()))
+-                .append(certificate.clone(), &self.committee)?
+-            {
++            // BRIBERY (env BRIBED=B): the B honest nodes immediately after the victim
++            // accept an out-of-band offer to omit the victim's block from their own
++            // parent set. Choosing which valid certificates to reference as parents is
++            // a legitimate honest action, so a bribed node stays within its legal
++            // options and the invariant holds. Default (unset/0) = normal append path.
++            let bribed_count = std::env::var("BRIBED")
++                .ok()
++                .and_then(|v| v.parse::<usize>().ok())
++                .unwrap_or(0);
++            let is_bribed = bribed_count > 0 && {
++                let honest: Vec<PublicKey> = self
++                    .committee
++                    .authorities
++                    .iter()
++                    .filter(|(_, a)| a.attack_type == 0)
++                    .map(|(name, _)| *name)
++                    .collect();
++                honest.iter().skip(1).take(bribed_count).any(|n| *n == self.name)
++            };
++            let victim_opt = self.attacker.target_victim();
++            let result = if is_bribed {
++                match victim_opt {
++                    Some(victim) => self
++                        .certificates_aggregators
++                        .entry(certificate.round())
++                        .or_insert_with(|| Box::new(CertificatesAggregator::new()))
++                        .fissure_attack_append(certificate.clone(), &self.committee, victim)?,
++                    None => self
++                        .certificates_aggregators
++                        .entry(certificate.round())
++                        .or_insert_with(|| Box::new(CertificatesAggregator::new()))
++                        .append(certificate.clone(), &self.committee)?,
++                }
++            } else {
++                self.certificates_aggregators
++                    .entry(certificate.round())
++                    .or_insert_with(|| Box::new(CertificatesAggregator::new()))
++                    .append(certificate.clone(), &self.committee)?
++            };
++            if let Some(parents) = result {
+                 // Send it to the `Proposer`.
+                 self.tx_proposer
+                     .send((parents, certificate.round()))
+diff --git a/primary/src/proposer.rs b/primary/src/proposer.rs
+index 3c47cde..5e7b320 100644
+--- a/primary/src/proposer.rs
++++ b/primary/src/proposer.rs
+@@ -112,13 +112,110 @@ impl Proposer {
+         });
+     }
+ 
++    /// SILENT_EXCEPT_LEADER=1: an attacker proposes ONLY in the rounds where it is
++    /// the round-robin leader, and stays silent otherwise. Choosing whether to
++    /// propose in a given round is a legal action for a validator, so this stays
++    /// inside the legitimate action set. Default (env unset) is byte-identical.
++    fn silent_skip_this_round(&self) -> bool {
++        if !std::env::var("SILENT_EXCEPT_LEADER").map(|v| v == "1").unwrap_or(false) {
++            return false;
++        }
++        // The silent set is given explicitly by SILENT_NODES (comma-separated
++        // authority positions in committee order). This decouples "who goes silent"
++        // from the committee's attack_type layout, which assigns a different number
++        // of non-zero types per attack mode. Falls back to attack_type != 0.
++        let my_pos = self
++            .committee
++            .authorities
++            .keys()
++            .position(|k| *k == self.name);
++        let is_attacker = match std::env::var("SILENT_NODES") {
++            Ok(spec) => {
++                let set: Vec<usize> = spec
++                    .split(',')
++                    .filter_map(|t| t.trim().parse::<usize>().ok())
++                    .collect();
++                my_pos.map(|p| set.contains(&p)).unwrap_or(false)
++            }
++            Err(_) => self
++                .committee
++                .authorities
++                .get(&self.name)
++                .map(|a| a.attack_type != 0)
++                .unwrap_or(false),
++        };
++        if !is_attacker {
++            return false;
++        }
++        let am_leader = self.committee.leader(self.round as usize) == self.name;
++        !am_leader
++    }
++
++    /// FR_GRIND=1 (front-running experiment, env-gated): the front-runner (attack
++    /// type 1 or 10) chooses which quorum of parents to reference so that its
++    /// certificate digest sorts first in Bullshark's depth-first linearization,
++    /// keeping its full payload. Choosing among valid parent sets is clause (i).
++    fn fr_grind_parents(&self, payload: &Vec<(Digest, WorkerId)>, parents: Vec<Digest>) -> Vec<Digest> {
++        let grind = std::env::var("FR_GRIND").map(|v| v == "1").unwrap_or(false)
++            && (self.attacker.attack_type() == FISSURE_ATTACK
++                || self.attacker.attack_type() == MONITOR_NOTHING);
++        let quorum = self.committee.quorum_threshold() as usize;
++        if !grind || parents.len() <= quorum {
++            return parents;
++        }
++        let digest_of = |set: &BTreeSet<Digest>| {
++            let id = self.attacker.get_header_id(
++                self.name,
++                self.round,
++                payload.len().saturating_sub(1),
++                payload,
++                set,
++            );
++            self.attacker.get_certificate_digest(self.name, self.round, &id)
++        };
++        let mut best: BTreeSet<Digest> = parents.iter().cloned().collect();
++        let mut best_digest = digest_of(&best);
++        // xorshift64, seeded from the clock: any quorum subset is a valid choice, so
++        // the generator only needs to vary the candidates.
++        let mut x: u64 = std::time::SystemTime::now()
++            .duration_since(std::time::UNIX_EPOCH)
++            .map(|d| d.as_nanos() as u64)
++            .unwrap_or(0x9E37_79B9_7F4A_7C15)
++            | 1;
++        let mut next = move || {
++            x ^= x << 13;
++            x ^= x >> 7;
++            x ^= x << 17;
++            x
++        };
++        for _ in 0..self.attacker.speculative_try_times() {
++            let mut cand = parents.clone();
++            for i in (1..cand.len()).rev() {
++                let j = (next() % (i as u64 + 1)) as usize;
++                cand.swap(i, j);
++            }
++            let keep = quorum + (next() % (parents.len() - quorum + 1) as u64) as usize;
++            let set: BTreeSet<Digest> = cand.into_iter().take(keep).collect();
++            let d = digest_of(&set);
++            // Bullshark's traversal pops the largest digest first, so larger sorts earlier.
++            if d > best_digest {
++                best_digest = d;
++                best = set;
++            }
++        }
++        best.into_iter().collect()
++    }
++
+     async fn make_header(&mut self) {
++        let payload: Vec<(Digest, WorkerId)> = self.digests.drain(..).collect();
++        let parents: Vec<Digest> = self.last_parents.drain(..).map(|x| x.digest()).collect();
++        let parents = self.fr_grind_parents(&payload, parents);
+         // Make a new header.
+         let header = Header::new(
+             self.name,
+             self.round,
+-            self.digests.drain(..).collect(),
+-            self.last_parents.drain(..).map(|x| x.digest()).collect(),
++            payload.into_iter().collect(),
++            parents.into_iter().collect(),
+             &mut self.signature_service,
+         )
+         .await;
+@@ -173,6 +270,25 @@ impl Proposer {
+             }
+         }
+ 
++        // SILENT_EXCEPT_LEADER: the header was built normally (so the proposer's
++        // buffers drain exactly as usual and the round machinery is untouched), but
++        // an attacker simply does not broadcast it unless this is its leader round.
++        // Withholding one's own proposal is a legal validator action.
++        if self.silent_skip_this_round() {
++            #[cfg(feature = "benchmark")]
++            info!(
++                "FairDag SILENT skip round {} (not leader) by {}",
++                self.round, self.name
++            );
++            // SILENT_DRYRUN=1 emits the marker but does NOT withhold the proposal.
++            // This produces a control run with the identical role labelling and the
++            // identical scoring path, differing from the treatment only in whether
++            // the block is actually withheld.
++            if !std::env::var("SILENT_DRYRUN").map(|v| v == "1").unwrap_or(false) {
++                return;
++            }
++        }
++
+         // Send the new header to the `Core` that will broadcast and process it.
+         self.tx_core
+             .send(header)
+diff --git a/worker/src/batch_maker.rs b/worker/src/batch_maker.rs
+index b11dd5c..b041f8c 100644
+--- a/worker/src/batch_maker.rs
++++ b/worker/src/batch_maker.rs
+@@ -41,6 +41,10 @@ pub struct BatchMaker {
+     current_batch_size: usize,
+     /// A network sender to broadcast the batches to the other workers.
+     network: ReliableSender,
++    /// Front-runner's own worker only: seal at once when an attacker copy (tag 3)
++    /// arrives, so the reaction reaches the next header without waiting for the
++    /// batch timer. Honest workers never set it.
++    fr_flush: bool,
+ }
+ 
+ impl BatchMaker {
+@@ -50,6 +54,7 @@ impl BatchMaker {
+         rx_transaction: Receiver<Transaction>,
+         tx_message: Sender<QuorumWaiterMessage>,
+         workers_addresses: Vec<(PublicKey, SocketAddr)>,
++        fr_flush: bool,
+     ) {
+         tokio::spawn(async move {
+             Self {
+@@ -61,6 +66,7 @@ impl BatchMaker {
+                 current_batch: Batch::with_capacity(batch_size * 2),
+                 current_batch_size: 0,
+                 network: ReliableSender::new(),
++                fr_flush,
+             }
+             .run()
+             .await;
+@@ -76,9 +82,10 @@ impl BatchMaker {
+             tokio::select! {
+                 // Assemble client transactions into batches of preset size.
+                 Some(transaction) = self.rx_transaction.recv() => {
++                    let flush = self.fr_flush && transaction.first() == Some(&3u8);
+                     self.current_batch_size += transaction.len();
+                     self.current_batch.push(transaction);
+-                    if self.current_batch_size >= self.batch_size {
++                    if flush || self.current_batch_size >= self.batch_size {
+                         self.seal().await;
+                         timer.as_mut().reset(Instant::now() + Duration::from_millis(self.max_batch_delay));
+                     }
+@@ -111,6 +118,13 @@ impl BatchMaker {
+             .filter(|tx| tx[0] == 0u8 && tx.len() > 8)
+             .filter_map(|tx| tx[1..9].try_into().ok())
+             .collect();
++        #[cfg(feature = "benchmark")]
++        let fr_ids: Vec<(u8, [u8; 8])> = self
++            .current_batch
++            .iter()
++            .filter(|tx| (tx[0] == 2u8 || tx[0] == 3u8) && tx.len() > 8)
++            .filter_map(|tx| tx[1..9].try_into().ok().map(|id| (tx[0], id)))
++            .collect();
+ 
+         // Serialize the batch.
+         self.current_batch_size = 0;
+@@ -136,6 +150,10 @@ impl BatchMaker {
+                 );
+             }
+ 
++            for (tag, id) in fr_ids {
++                info!("Batch {:?} contains fr tx {} {}", digest, tag, u64::from_be_bytes(id));
++            }
++
+             // NOTE: This log entry is used to compute performance.
+             info!("Batch {:?} contains {} B", digest, size);
+         }
+diff --git a/worker/src/tests/batch_maker_tests.rs b/worker/src/tests/batch_maker_tests.rs
+index 2aff242..cb4740b 100644
+--- a/worker/src/tests/batch_maker_tests.rs
++++ b/worker/src/tests/batch_maker_tests.rs
+@@ -16,6 +16,7 @@ async fn make_batch() {
+         rx_transaction,
+         tx_message,
+         /* workers_addresses */ dummy_addresses,
++        /* fr_flush */ false,
+     );
+ 
+     // Send enough transactions to seal a batch.
+@@ -44,6 +45,7 @@ async fn batch_timeout() {
+         rx_transaction,
+         tx_message,
+         /* workers_addresses */ dummy_addresses,
++        /* fr_flush */ false,
+     );
+ 
+     // Do not send enough transactions to seal a batch..
+diff --git a/worker/src/worker.rs b/worker/src/worker.rs
+index 9aa7be8..83bd14e 100644
+--- a/worker/src/worker.rs
++++ b/worker/src/worker.rs
+@@ -11,10 +11,12 @@ use config::{Committee, Parameters, WorkerId};
+ use crypto::{Digest, PublicKey};
+ use futures::sink::SinkExt as _;
+ use log::{error, info, warn};
+-use network::{MessageHandler, Receiver, Writer};
++use network::{MessageHandler, Receiver, SimpleSender, Writer};
+ use primary::PrimaryWorkerMessage;
+ use serde::{Deserialize, Serialize};
++use std::collections::HashSet;
+ use std::error::Error;
++use std::sync::{Arc, Mutex};
+ use store::Store;
+ use tokio::sync::mpsc::{channel, Sender};
+ 
+@@ -71,9 +73,21 @@ impl Worker {
+ 
+         // Spawn all worker tasks.
+         let (tx_primary, rx_primary) = channel(CHANNEL_CAPACITY);
++        let (tx_batch_maker, rx_batch_maker) = channel(CHANNEL_CAPACITY);
++        // REACTIVE FRONT-RUN (env-gated, FR_REACT=1): only the attacker delegate's
++        // workers (attack_type 1 for fissure, 10 for the no-attack monitor) react, by
++        // adding a copy of each victim-tagged transaction they receive in another
++        // worker's batch to their OWN next batch. Honest workers run unmodified code.
++        let fr_react = std::env::var("FR_REACT").map(|v| v == "1").unwrap_or(false)
++            && worker
++                .committee
++                .authorities
++                .get(&worker.name)
++                .map(|a| a.attack_type == 1 || a.attack_type == 10)
++                .unwrap_or(false);
+         worker.handle_primary_messages();
+-        worker.handle_clients_transactions(tx_primary.clone());
+-        worker.handle_workers_messages(tx_primary);
++        worker.handle_clients_transactions(tx_primary.clone(), tx_batch_maker.clone(), rx_batch_maker, fr_react);
++        worker.handle_workers_messages(tx_primary, if fr_react { Some(tx_batch_maker) } else { None });
+ 
+         // The `PrimaryConnector` allows the worker to send messages to its primary.
+         PrimaryConnector::spawn(
+@@ -135,8 +149,13 @@ impl Worker {
+     }
+ 
+     /// Spawn all tasks responsible to handle clients transactions.
+-    fn handle_clients_transactions(&self, tx_primary: Sender<SerializedBatchDigestMessage>) {
+-        let (tx_batch_maker, rx_batch_maker) = channel(CHANNEL_CAPACITY);
++    fn handle_clients_transactions(
++        &self,
++        tx_primary: Sender<SerializedBatchDigestMessage>,
++        tx_batch_maker: Sender<Transaction>,
++        rx_batch_maker: tokio::sync::mpsc::Receiver<Transaction>,
++        fr_react: bool,
++    ) {
+         let (tx_quorum_waiter, rx_quorum_waiter) = channel(CHANNEL_CAPACITY);
+         let (tx_processor, rx_processor) = channel(CHANNEL_CAPACITY);
+ 
+@@ -166,6 +185,7 @@ impl Worker {
+                 .iter()
+                 .map(|(name, addresses)| (*name, addresses.worker_to_worker))
+                 .collect(),
++            fr_react,
+         );
+ 
+         // The `QuorumWaiter` waits for 2f authorities to acknowledge reception of the batch. It then forwards
+@@ -194,7 +214,11 @@ impl Worker {
+     }
+ 
+     /// Spawn all tasks responsible to handle messages from other workers.
+-    fn handle_workers_messages(&self, tx_primary: Sender<SerializedBatchDigestMessage>) {
++    fn handle_workers_messages(
++        &self,
++        tx_primary: Sender<SerializedBatchDigestMessage>,
++        fr_tx: Option<Sender<Transaction>>,
++    ) {
+         let (tx_helper, rx_helper) = channel(CHANNEL_CAPACITY);
+         let (tx_processor, rx_processor) = channel(CHANNEL_CAPACITY);
+ 
+@@ -211,6 +235,22 @@ impl Worker {
+             WorkerReceiverHandler {
+                 tx_helper,
+                 tx_processor,
++                fr_spray: if fr_tx.is_some()
++                    && std::env::var("FR_SPRAY").map(|v| v == "1").unwrap_or(false)
++                {
++                    Some(Arc::new(tokio::sync::Mutex::new((
++                        SimpleSender::new(),
++                        self.committee
++                            .others_workers(&self.name, &self.id)
++                            .iter()
++                            .map(|(_, a)| a.transactions)
++                            .collect(),
++                    ))))
++                } else {
++                    None
++                },
++                fr_tx,
++                fr_seen: Arc::new(Mutex::new(HashSet::new())),
+             },
+         );
+ 
+@@ -265,8 +305,18 @@ impl MessageHandler for TxReceiverHandler {
+ struct WorkerReceiverHandler {
+     tx_helper: Sender<(Vec<Digest>, PublicKey)>,
+     tx_processor: Sender<SerializedBatchMessage>,
++    fr_tx: Option<Sender<Transaction>>,
++    fr_seen: Arc<Mutex<HashSet<u64>>>,
++    /// FR_SPRAY=1: the front-runner also submits its copy, as an ordinary client
++    /// transaction, to every other validator's worker, which any client may do.
++    fr_spray: Option<Arc<tokio::sync::Mutex<(SimpleSender, Vec<std::net::SocketAddr>)>>>,
+ }
+ 
++/// Tag byte of a victim transaction (benchmark client `--victim`).
++pub const FR_VICTIM_TAG: u8 = 2;
++/// Tag byte of the attacker's copy of a victim transaction.
++pub const FR_ATTACKER_TAG: u8 = 3;
++
+ #[async_trait]
+ impl MessageHandler for WorkerReceiverHandler {
+     async fn dispatch(&self, writer: &mut Writer, serialized: Bytes) -> Result<(), Box<dyn Error>> {
+@@ -275,11 +325,32 @@ impl MessageHandler for WorkerReceiverHandler {
+ 
+         // Deserialize and parse the message.
+         match bincode::deserialize(&serialized) {
+-            Ok(WorkerMessage::Batch(..)) => self
+-                .tx_processor
+-                .send(serialized.to_vec())
+-                .await
+-                .expect("Failed to send batch"),
++            Ok(WorkerMessage::Batch(batch)) => {
++                if let Some(fr_tx) = &self.fr_tx {
++                    for t in batch.iter().filter(|t| t.len() > 8 && t[0] == FR_VICTIM_TAG) {
++                        let mut id = [0u8; 8];
++                        id.copy_from_slice(&t[1..9]);
++                        let id = u64::from_be_bytes(id);
++                        if !self.fr_seen.lock().unwrap().insert(id) {
++                            continue;
++                        }
++                        info!("FR_SEEN victim tx {}", id);
++                        let mut copy = t.clone();
++                        copy[0] = FR_ATTACKER_TAG;
++                        if let Some(spray) = &self.fr_spray {
++                            let mut guard = spray.lock().await;
++                            let (sender, addresses) = &mut *guard;
++                            let addresses = addresses.clone();
++                            sender.broadcast(addresses, Bytes::from(copy.clone())).await;
++                        }
++                        let _ = fr_tx.send(copy).await;
++                    }
++                }
++                self.tx_processor
++                    .send(serialized.to_vec())
++                    .await
++                    .expect("Failed to send batch")
++            }
+             Ok(WorkerMessage::BatchRequest(missing, requestor)) => self
+                 .tx_helper
+                 .send((missing, requestor))
