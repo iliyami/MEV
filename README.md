@@ -285,26 +285,37 @@ These files are the inputs consumed by the plot generator.
 
 ## Attack Hooks
 
-Every attacker behaviour is an environment-gated hook on the proposing path. With the variable
-unset the hook returns before the default path, so the compiled binary is byte-identical to
-upstream and honest validators always run the disarmed build. No hook alters a validity
+Every attacker behaviour is an environment-gated hook. With its variable unset the hook returns
+before the default path, so the executed path is the upstream one. No hook alters a validity
 predicate, a quorum-intersection check or a signature path: each one only chooses among options
 an honest validator could legally take, such as which valid parents to reference, when to
-broadcast, or which of its own candidate blocks to publish.
+broadcast, what to put in its own block, or whether to sign a header. Variables are exported to
+every node of a run; each node decides from the committee layout whether it is an attacker, a
+bribed validator or a censor, and all others run the default path.
 
-| variable | file | what it does |
-|---|---|---|
-| `FISSURE_ATTACK` | `sui`, `bullshark-flashboys` | omit the victim from the attacker's parent set |
-| `SILENT_EXCEPT_LEADER` | `sui` | propose only in rounds the attacker leads |
-| `SLW` | `sui` | propose in every round except the attacker's own leader round |
-| `BRIBED` | `bullshark-flashboys` | honest nodes accept an offer to omit the victim |
-| `SPECULATIVE_SEED_AWARE` | `alephbft` | aim the grinder at the rank the election rotation selects |
-| `ALEPH_HASH_SORT_SEED` | `alephbft` | seed the election's candidate rotation |
-| `GLOBAL_VIEW`, `RIVAL_GROUPS` | `sui` | information and multi-group relationship cells |
-| `SANDWICH_INTERLEAVE` | `mysticeti` | close both sides of a sandwich around one victim |
+[`pseudocode/`](pseudocode) gives every primitive in full: its arming variables and defaults,
+numbered pseudocode, why its messages stay in the legitimate action set, and the file, function
+and lines that implement it in each tree.
 
-Ordering-rule variants used for the defense evaluation live in the same file
-(`sui/consensus/core/src/commit.rs`) and are gated the same way:
+| primitive | arming variables | trees | pseudocode |
+|---|---|---|---|
+| fissure | `ATTACK_MODE=fissure`; Bullshark: `attack_type` 1 or 2 in the committee | all | [01](pseudocode/01_fissure.md) |
+| speculative | `ATTACK_MODE=speculative`, `SPECULATIVE_P_MAX`; AlephBFT also `SPECULATIVE_SEED_AWARE` | Sui trees, Narwhal-Tusk, Mahi-Mahi, AlephBFT, Bullshark | [02](pseudocode/02_speculative.md) |
+| sluggish | `ATTACK_MODE=sluggish`, `SLUGGISH_TIMEOUT_MULTIPLIER` (Mahi-Mahi: `SLUGGISH_MULTIPLIER`; AlephBFT: `SLUGGISH_PROCESSING_DELAY_MS`) | all | [03](pseudocode/03_sluggish.md) |
+| silent-except-leader | `SILENT_EXCEPT_LEADER`; Sui v1.74 also `NUM_ATTACKERS`, `SEL_REAL_SCHEDULE`; Bullshark also `SILENT_NODES` | Sui v1.74, Sui v1.58, Bullshark | [04](pseudocode/04_silent_except_leader.md) |
+| SLW | `ATTACK_MODE=mysticeti_slw` (Sui v1.74); any mode containing `slw` (Sui v1.58) | Sui v1.74, Sui v1.58 | [05](pseudocode/05_slw.md) |
+| proposal-timestamp | `ATTACK_TIMESTAMP`, `NUM_ATTACKERS`, `BYZANTINE_TIMESTAMP_OFFSET_MS` | Sui v1.74 | [06](pseudocode/06_proposal_timestamp.md) |
+| LVW | `ATTACK_MODE=mysticeti_lvw`, `ATTACKER_RATIO`, `VICTIM_RATIO` | Sui v1.74 | [07](pseudocode/07_lvw.md) |
+| vote-withhold | `CENSOR=k` | Bullshark | [08](pseudocode/08_vote_withhold.md) |
+| bribery | Bullshark: `BRIBED=B`; Sui v1.74: `FISSURE_BRIBED_NODES`, `MLVW_BRIBED_NODES` | Bullshark, Sui v1.74 | [09](pseudocode/09_bribery.md) |
+| coordination | `INDEPENDENT`, `RIVAL_GROUPS`, `COLLUDE` (Bullshark); `RIVAL_GROUPS`, `GLOBAL_VIEW` (Sui v1.74); `V2_COORDINATOR_URL` (Sui trees) | Bullshark, Sui trees | [10](pseudocode/10_coalition.md) |
+| back-run, sandwich | `ATTACK_TYPE=backrun` or `sandwich` with an `ATTACK_MODE` | Sui trees, Mysticeti | [11](pseudocode/11_backrun.md), [12](pseudocode/12_sandwich.md) |
+| transaction-level front-running | `FRONTRUN*` (Sui v1.74); `FR_GRIND`, `FR_VICTIM_SPRAY` (Bullshark) | Sui v1.74, Bullshark | [13](pseudocode/13_tx_frontrun.md) |
+
+The Sui front-running drivers and scorers are in [`scripts/frontrun_sui/`](scripts/frontrun_sui).
+
+Ordering-rule variants used for the defense evaluation live in
+`code/sui/consensus/core/src/commit.rs` and are gated the same way, but run on every node by design:
 
 | variable | ordering rule |
 |---|---|
