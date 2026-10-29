@@ -1,7 +1,7 @@
 """Paper-2 v2 harness: multi-policy adversary on DAG-based BFT.
 
 This package extends the paper-1 single-policy harness without modifying any
-protocol core logic (see /Users/iliya/Dev/Blockchain/CLAUDE.md).
+protocol core logic (see CLAUDE.md at the repository root).
 
 Modules:
     schema   -- v2 YAML schema + validator, backward-compatible with paper 1

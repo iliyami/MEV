@@ -15,7 +15,7 @@ echo ""
 # Check if we're in the right directory
 if [ ! -f "Cargo.toml" ]; then
     echo "❌ Error: Not in the correct directory"
-    echo "Please run this from: /Users/iliya/Dev/Blockchain/code/mysticeti"
+    echo "Please run this from: code/mysticeti"
     exit 1
 fi
 

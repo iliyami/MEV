@@ -10,7 +10,7 @@ echo "  1. Run the dedicated 13-node Fissure test"
 echo "  2. Measure ASR (Victim Exclusion -> Attacker Priority)"
 
 # Configuration
-BS_DIR="/Users/iliya/Dev/Blockchain/code/bullshark"
+BS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ATTACK_OUTPUT_LOG="$BS_DIR/fissure_attack_output.log"
 
 export ATTACK_MODE="fissure"

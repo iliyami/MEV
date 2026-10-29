@@ -9,7 +9,7 @@ echo ""
 
 # Check directory
 if [ ! -f "Cargo.toml" ]; then
-    echo "❌ Error: Run from /Users/iliya/Dev/Blockchain/code/bullshark"
+    echo "❌ Error: Run from code/bullshark"
     exit 1
 fi
 

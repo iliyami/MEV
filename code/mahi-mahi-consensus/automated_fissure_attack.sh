@@ -20,7 +20,7 @@ echo ""
 # Check if we're in the right directory
 if [ ! -f "Cargo.toml" ]; then
     echo "❌ Error: Not in the correct directory"
-    echo "Please run this from: /Users/iliya/Dev/Blockchain/code/mahi-mahi-consensus"
+    echo "Please run this from: code/mahi-mahi-consensus"
     exit 1
 fi
 

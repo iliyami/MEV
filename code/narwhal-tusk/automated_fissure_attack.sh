@@ -19,7 +19,7 @@ if [ ! -f "benchmark/.committee.json" ]; then
         echo "⚠️ Running in /app, continuing..."
     else
         echo "❌ Error: Not in the correct directory"
-        echo "Please run this from: /Users/iliya/Dev/Blockchain/code/narwhal-tusk"
+        echo "Please run this from: code/narwhal-tusk"
         exit 1
     fi
 fi

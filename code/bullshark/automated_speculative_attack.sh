@@ -12,7 +12,7 @@ echo "  3. Measure the ASR (ordering bias in same-round blocks)"
 echo ""
 
 # Configuration
-BS_DIR="/Users/iliya/Dev/Blockchain/code/bullshark"
+BS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_DIR="$BS_DIR/benchmark/logs"
 ATTACK_OUTPUT_LOG="$BS_DIR/speculative_attack_output.log"
 

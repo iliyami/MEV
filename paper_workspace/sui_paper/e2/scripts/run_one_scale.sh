@@ -1,7 +1,7 @@
 #!/bin/bash
 # Mainnet-scale variant of run_one.sh. Adds committee size (TIE_N) and the geographic latency
 # matrix (TIE_GEO). usage: run_one_scale.sh MODE NET FAR FIX SEED TRIALS FEE N GEO
-source /gpfs/scratch/imirzaei/sui-www/env.sh
+source "${WORKDIR:?set WORKDIR to the run directory}/env.sh"
 BIN=$(ls -t $W/sui/target/simulator/deps/ordering_tie_tests-* | grep -v "\.d$" | head -1)
 OUT=$W/results_scale/$1-$2-far$3-fix$4-fee${7:-1}-n${8:-13}-geo${9:-0}-seed$5.log
 mkdir -p $W/results_scale

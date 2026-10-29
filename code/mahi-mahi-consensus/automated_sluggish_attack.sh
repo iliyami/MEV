@@ -10,7 +10,7 @@ echo "=========================================="
 echo ""
 
 # Change to project directory
-cd /Users/iliya/Dev/Blockchain/code/mahi-mahi-consensus
+cd "$(dirname "${BASH_SOURCE[0]}")"
 
 # Build once at the beginning
 echo "📦 Building Mahi-Mahi..."

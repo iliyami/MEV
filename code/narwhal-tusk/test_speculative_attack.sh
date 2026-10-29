@@ -4,7 +4,7 @@
 echo "🧪 Testing Speculative Attack Implementation"
 echo "==========================================="
 
-cd /Users/iliya/Dev/Blockchain/code/narwhal-tusk
+cd "$(dirname "${BASH_SOURCE[0]}")"
 
 # Test 1: Check if the code compiles
 echo "🔨 Testing compilation..."

@@ -12,7 +12,7 @@ echo "  3. Measure the ASR (ordering bias: Attacker < Victim)"
 echo ""
 
 # Configuration
-BS_DIR="/Users/iliya/Dev/Blockchain/code/bullshark"
+BS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ATTACK_OUTPUT_LOG="$BS_DIR/sluggish_attack_output.log"
 
 # Attack Parameters
