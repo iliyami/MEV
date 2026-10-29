@@ -17,7 +17,8 @@ def cell(vals):
     vals = [v for v in vals if v is not None and v == v]
     if len(vals) < 5:
         sys.exit(f"expected at least 5 runs, got {len(vals)}")
-    return f"{len(vals)} & ${st.median(vals):.1f}$ & \\scriptsize[{min(vals):.1f}, {max(vals):.1f}]"
+    q1, _, q3 = st.quantiles(vals, n=4, method="inclusive")  # interquartile range over runs
+    return f"{len(vals)} & ${st.median(vals):.1f}$ & \\scriptsize[{q1:.1f}, {q3:.1f}]"
 
 def bullshark(arm):
     rows = [json.loads(l) for l in open(BULLSHARK)]

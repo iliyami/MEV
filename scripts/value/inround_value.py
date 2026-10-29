@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """Value share with real trade sizes, over (i) all committed victim txs and (ii) races decided in the
 victim's round (attacker copy in the same round), run bootstrap x value draws; permutation p over runs
-for the count share. Usage: python3 inround_value.py [bootstrap resamples, default 2000]"""
+for the count share."""
 import json, random, statistics as st, sys
 from real_value import values, runs
-V = values(); R = runs(); rng = random.Random(7); B = int(sys.argv[1]) if len(sys.argv) > 1 else 2000
+R = runs(); rng = random.Random(7); B = int(sys.argv[1]) if len(sys.argv) > 1 else 2000
+# Optional second argument: a CSV (digest,usd) of values to draw from instead of the full census selection,
+# e.g. sui_swap_values.csv (the 1,229 selected transactions that contain a swap).
+V = [float(l.split(',')[1]) for l in open(sys.argv[2]).read().split('\n')[1:] if l] if len(sys.argv) > 2 else values()
 def share(txs, sel, draw):
     T = [t for t in txs if sel(t)]
     vals = [draw() for _ in T]; tot = sum(vals)

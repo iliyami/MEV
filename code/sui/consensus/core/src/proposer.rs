@@ -1163,8 +1163,12 @@ impl Proposer for ValidatorProposer {
         // bent and no timestamp is spoofed. It reproduces the same early-
         // clustered block pattern as the §8 timestamp attack without relying
         // on the missing-timestamp-validation flaw. force=true (leader
-        // timeout) is still honored so liveness is preserved.
-        if !force
+        // timeout) is still honored so liveness is preserved, unless
+        // SEL_STRICT=1: the attacker then stays silent at the timeout too
+        // (withholding is a legitimate action; the other validators keep
+        // the protocol live). Attacker-only, default path unchanged.
+        let sel_strict = std::env::var("SEL_STRICT").map(|v| v == "1").unwrap_or(false);
+        if (!force || sel_strict)
             && std::env::var("SILENT_EXCEPT_LEADER").ok().filter(|v| v != "0").is_some()
         {
             let num_atk: usize = std::env::var("NUM_ATTACKERS")

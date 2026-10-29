@@ -1,0 +1,72 @@
+cpu2_c0 run0 {"rate": 0.47, "victim_blocks": 107, "other_median": 107.5}
+cpu2_c0 run1 {"rate": -2.42, "victim_blocks": 127, "other_median": 124.0}
+cpu2_c0 run2 {"rate": 3.26, "victim_blocks": 104, "other_median": 107.5}
+cpu2_c0 run3 {"rate": 30.48, "victim_blocks": 73, "other_median": 105.0}
+cpu2_c0 run4 {"rate": 10.89, "victim_blocks": 90, "other_median": 101.0}
+cpu2_c0 MEDIAN {"median": 3.26, "n": 5, "reps": [0.47, -2.42, 3.26, 30.48, 10.89]}
+cpu2_c4 run0 {"rate": 67.27, "victim_blocks": 36, "other_median": 110.0}
+cpu2_c4 run1 {"rate": 50.0, "victim_blocks": 58, "other_median": 116.0}
+cpu2_c4 run2 {"rate": 66.82, "victim_blocks": 35, "other_median": 105.5}
+cpu2_c4 run3 {"rate": 45.29, "victim_blocks": 61, "other_median": 111.5}
+cpu2_c4 run4 {"rate": 68.56, "victim_blocks": 36, "other_median": 114.5}
+cpu2_c4 MEDIAN {"median": 66.82, "n": 5, "reps": [67.27, 50.0, 66.82, 45.29, 68.56]}
+cpu2_c5 run0 {"rate": 100.0, "victim_blocks": 0, "other_median": 110.0}
+cpu2_c5 run1 {"rate": 100.0, "victim_blocks": 0, "other_median": 115.0}
+cpu2_c5 run2 {"rate": 100.0, "victim_blocks": 0, "other_median": 118.5}
+cpu2_c5 run3 {"rate": 100.0, "victim_blocks": 0, "other_median": 113.0}
+cpu2_c5 run4 {"rate": 100.0, "victim_blocks": 0, "other_median": 117.0}
+cpu2_c5 MEDIAN {"median": 100.0, "n": 5, "reps": [100.0, 100.0, 100.0, 100.0, 100.0]}
+cpu3_c0 run0 {"rate": 39.34, "victim_blocks": 37, "other_median": 61.0}
+cpu3_c0 run1 {"rate": -2.86, "victim_blocks": 36, "other_median": 35.0}
+cpu3_c0 run2 {"rate": 9.09, "victim_blocks": 30, "other_median": 33.0}
+cpu3_c0 run3 {"rate": 39.33, "victim_blocks": 27, "other_median": 44.5}
+cpu3_c0 run4 {"rate": 24.14, "victim_blocks": 22, "other_median": 29.0}
+cpu3_c0 MEDIAN {"median": 24.14, "n": 5, "reps": [39.34, -2.86, 9.09, 39.33, 24.14]}
+cpu3_c4 run0 {"rate": 84.62, "victim_blocks": 7, "other_median": 45.5}
+cpu3_c4 run1 {"rate": 85.37, "victim_blocks": 6, "other_median": 41.0}
+cpu3_c4 run2 {"rate": 95.7, "victim_blocks": 2, "other_median": 46.5}
+cpu3_c4 run3 {"rate": 87.88, "victim_blocks": 6, "other_median": 49.5}
+cpu3_c4 run4 {"rate": 69.23, "victim_blocks": 14, "other_median": 45.5}
+cpu3_c4 MEDIAN {"median": 85.37, "n": 5, "reps": [84.62, 85.37, 95.7, 87.88, 69.23]}
+cpu4_c0 run0 {"rate": 0.0, "victim_blocks": 178, "other_median": 178.0}
+cpu4_c0 run1 {"rate": 0.0, "victim_blocks": 186, "other_median": 186.0}
+cpu4_c0 run2 {"rate": -0.53, "victim_blocks": 189, "other_median": 188.0}
+cpu4_c0 run3 {"rate": -0.86, "victim_blocks": 175, "other_median": 173.5}
+cpu4_c0 run4 {"rate": -0.51, "victim_blocks": 197, "other_median": 196.0}
+cpu4_c0 MEDIAN {"median": -0.51, "n": 5, "reps": [0.0, 0.0, -0.53, -0.86, -0.51]}
+cpu4_c4 run0 {"rate": 2.5, "victim_blocks": 156, "other_median": 160.0}
+cpu4_c4 run1 {"rate": 0.0, "victim_blocks": 162, "other_median": 162.0}
+cpu4_c4 run2 {"rate": 0.0, "victim_blocks": 61, "other_median": 61.0}
+cpu4_c4 run3 {"rate": 21.1, "victim_blocks": 144, "other_median": 182.5}
+cpu4_c4 run4 {"rate": 0.0, "victim_blocks": 160, "other_median": 160.0}
+cpu4_c4 MEDIAN {"median": 0.0, "n": 5, "reps": [2.5, 0.0, 0.0, 21.1, 0.0]}
+cpu56_c0 run0 {"rate": -0.65, "victim_blocks": 233, "other_median": 231.5}
+cpu56_c0 run1 {"rate": 0.61, "victim_blocks": 244, "other_median": 245.5}
+cpu56_c0 run2 {"rate": -0.21, "victim_blocks": 237, "other_median": 236.5}
+cpu56_c0 run3 {"rate": 0.0, "victim_blocks": 237, "other_median": 237.0}
+cpu56_c0 run4 {"rate": 0.0, "victim_blocks": 240, "other_median": 240.0}
+cpu56_c0 MEDIAN {"median": 0.0, "n": 5, "reps": [-0.65, 0.61, -0.21, 0.0, 0.0]}
+cpu56_c4 run0 {"rate": 0.0, "victim_blocks": 238, "other_median": 238.0}
+cpu56_c4 run1 {"rate": 5.12, "victim_blocks": 241, "other_median": 254.0}
+cpu56_c4 run2 {"rate": 4.33, "victim_blocks": 221, "other_median": 231.0}
+cpu56_c4 run3 {"rate": 6.64, "victim_blocks": 225, "other_median": 241.0}
+cpu56_c4 run4 {"rate": 3.66, "victim_blocks": 224, "other_median": 232.5}
+cpu56_c4 MEDIAN {"median": 4.33, "n": 5, "reps": [0.0, 5.12, 4.33, 6.64, 3.66]}
+cpu56_c5 run0 {"rate": 100.0, "victim_blocks": 0, "other_median": 251.0}
+cpu56_c5 run1 {"rate": 100.0, "victim_blocks": 0, "other_median": 249.5}
+cpu56_c5 run2 {"rate": 100.0, "victim_blocks": 0, "other_median": 254.0}
+cpu56_c5 run3 {"rate": 100.0, "victim_blocks": 0, "other_median": 244.0}
+cpu56_c5 run4 {"rate": 100.0, "victim_blocks": 0, "other_median": 246.0}
+cpu56_c5 MEDIAN {"median": 100.0, "n": 5, "reps": [100.0, 100.0, 100.0, 100.0, 100.0]}
+cpu8_c0 run0 {"rate": 0.0, "victim_blocks": 261, "other_median": 261.0}
+cpu8_c0 run1 {"rate": 0.0, "victim_blocks": 254, "other_median": 254.0}
+cpu8_c0 run2 {"rate": -0.78, "victim_blocks": 259, "other_median": 257.0}
+cpu8_c0 run3 {"rate": 0.0, "victim_blocks": 246, "other_median": 246.0}
+cpu8_c0 run4 {"rate": 0.0, "victim_blocks": 250, "other_median": 250.0}
+cpu8_c0 MEDIAN {"median": 0.0, "n": 5, "reps": [0.0, 0.0, -0.78, 0.0, 0.0]}
+cpu8_c4 run0 {"rate": 0.0, "victim_blocks": 249, "other_median": 249.0}
+cpu8_c4 run1 {"rate": 0.4, "victim_blocks": 246, "other_median": 247.0}
+cpu8_c4 run2 {"rate": -0.41, "victim_blocks": 243, "other_median": 242.0}
+cpu8_c4 run3 {"rate": -0.2, "victim_blocks": 253, "other_median": 252.5}
+cpu8_c4 run4 {"rate": 0.59, "victim_blocks": 251, "other_median": 252.5}
+cpu8_c4 MEDIAN {"median": 0.0, "n": 5, "reps": [0.0, 0.4, -0.41, -0.2, 0.59]}
