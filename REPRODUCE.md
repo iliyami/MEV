@@ -31,14 +31,14 @@ starting **Not in this repository**.
 
 ## Machines
 
-The paper reports four machines. An attack arm always ran on the same machine as its control.
+All runs used four CloudLab machines. An attack arm always ran on the same machine as its control.
 
 | Name used below | Hardware | Used for |
 |---|---|---|
 | Xeon node | CloudLab node, two 14-core Intel Xeon E5-2683 v3, 251 GB | every Bullshark campaign below except the first censorship cell |
 | AMD node | CloudLab node, 64 cores, 125 GB | the first censorship testbed (A1.4 = A2.8, 84.4%) |
 | c6525 nodes | CloudLab `c6525-25g`: 16-core AMD 7302P, 128 GB | the other cluster runs (the per-cell CSVs already in `data/cloudlab_*`) |
-| Laptop | Apple M3 Pro, 12 cores, 36 GB | every Sui v1.74 run; all validators of a run share one process |
+| Sui node | CloudLab node | every Sui v1.74 run; all validators of a run share one process |
 
 ## Common setup
 
@@ -279,7 +279,7 @@ same-round (T2.1, T2.2): `data/bullshark/coal/t2_pooled_runs.txt` and `m2_all_ru
 attacker at validator 0, one attacker plus three bribed validators lifts a tiebreak-neutral
 committing-height rate from 50.83 to 57.57 (+6.74), the same as four Byzantine attackers (57.44).
 
-**Tree.** `code/sui`, test `test_fissure_attack_asr_dynamic`, unmodified. Machine: laptop.
+**Tree.** `code/sui`, test `test_fissure_attack_asr_dynamic`, unmodified. Machine: Sui node.
 
 ```bash
 bash scripts/frontrun_sui/run_mlaw.sh          # 6 arms x 5 reps (SEED 1-5), MIN_COMMITS=400
@@ -359,7 +359,7 @@ races, so its share of victim value under a uniform value model falls from 92.4%
 and `test_withhold_silent_attack_asr_dynamic` (attack) in
 `consensus/core/src/withholding_attack_test.rs`. Every run stops at 290 commits, before Sui's
 first leader-reputation update at commit 300, and follows the protocol's real leader schedule
-(`SEL_REAL_SCHEDULE=1`). Machine: laptop. A run takes about 20 seconds.
+(`SEL_REAL_SCHEDULE=1`). Machine: Sui node. A run takes about 20 seconds.
 
 ### Same-round (A2.4)
 
@@ -527,7 +527,7 @@ wins 91.3%. A victim that sends its own transaction to every validator cuts that
 `consensus/core/src/proposer.rs`; the test streams tagged victim transactions every 200 ms to the
 three highest-numbered validators). Each run collects for 60 s. Every panel except the first sets
 `FRONTRUN_VIEW=1`, which reads the committed order at honest validator 1; the first panel reads it
-at the attacker. Machine: laptop. Drivers and scorers are in
+at the attacker. Machine: Sui node. Drivers and scorers are in
 `scripts/frontrun_sui/`; each loops over its arms and over `SEED` 1 to 5 (1 to 20 where noted).
 
 | Table IV panel | Driver(s) | Log directory | Order |
@@ -582,7 +582,7 @@ at 48.9% (P3.2). Replacing the author key removes the advantage: digest 48.8% (P
 **Tree.** `code/sui` for P3.1 and P3.3 to P3.5. The alternative tiebreaks are env-gated in
 `consensus/core/src/commit.rs` and, unlike the attack hooks, run on every node when set:
 `FIX_TIEBREAK=1` (digest), `SEEDED_TIEBREAK=1`, `ORDER_FAIR_TIEBREAK=1`. P3.2 runs on
-`code/bullshark-flashboys`. Machines: laptop (Sui), Xeon node (Bullshark).
+`code/bullshark-flashboys`. Machines: Sui node (Sui), Xeon node (Bullshark).
 
 Sui: P3.1 is the control arm of (e) (`rr_base`). The other three are the same control test with
 one variable added, five runs each; they are the last loop of `scripts/sui/sel290_run.sh`, which

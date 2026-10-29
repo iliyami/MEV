@@ -67,4 +67,4 @@ Python caches that the nested history carries are left out of the patch.
   `cargo test -p consensus-core --lib <test> -- --nocapture`. All validators of a run share one
   process.
 - Every `cargo` invocation in our scripts sets `CARGO_BUILD_JOBS`, `RUST_TEST_THREADS=1` and
-  `nice`. Keep those caps: an unconstrained build of the Sui workspace can exhaust a laptop.
+  `nice`. Keep those caps: an unconstrained build of the Sui workspace can exhaust the machine.

@@ -9,14 +9,14 @@ over the Bullshark files are in `scripts/analysis/`, which read `bullshark/coal/
 
 ## Machines
 
-The paper's runs used three machines, and an attack arm always ran on the same machine as its
+All runs used four CloudLab machines, and an attack arm always ran on the same machine as its
 control:
 
 - a CloudLab node with two 14-core Intel Xeon E5-2683 v3 CPUs and 251 GB (the Bullshark
   campaigns in `bullshark/`, and the Narwhal-family, bribery, coordination and n = 100 / 125 runs);
-- dedicated CloudLab `c6525-25g` nodes, 16-core AMD 7302P, 128 GB (the other cluster runs,
-  including the first censorship cell, A1.4 = A2.8);
-- an Apple M3 Pro laptop, 12 cores, 36 GB (the Sui and Mysticeti runs in `sui_frontrun/` and
+- dedicated CloudLab `c6525-25g` nodes, 16-core AMD 7302P, 128 GB (the other cluster runs);
+- a CloudLab AMD node, 64 cores, 125 GB (the first censorship cell, A1.4 = A2.8);
+- the Sui node, a CloudLab node (the Sui and Mysticeti runs in `sui_frontrun/` and
   `sui_value/`; all validators of a run share one process).
 
 ## Directories
@@ -29,8 +29,8 @@ control:
 | `bullshark/coal/` | Xeon node | `cens5_scores.txt`: per-run censorship rate and withheld votes, k = 5 | A5.3, Figure 4d |
 | `bullshark/bullshark_frontrun/` | Xeon node | `scores.jsonl` (155 runs, the Bullshark panel of Table IV; arms `X`, `X_x`, `X_y` pool into one row); `txc_scores.jsonl` (80 runs, the corruption panel) and `txc_pertx.jsonl` (the same runs, one entry per victim transaction: id, copied, won, same round) | A1.1 = P1.1, Table IV (Bullshark) |
 | `bullshark/` | Xeon node | `sel_bull_scores.txt`: silent-except-leader and its dry-run control, scorer output per run | P3.2 |
-| `sui_frontrun/` | Laptop | `grid_scores.json` (first panel of Table IV, 5 runs per arm); `compete_scores.jsonl` (two front-runners against one); `mlaw_scores.jsonl` (refusal law on Mysticeti, 6 arms x 5 runs); `sample_scores.json` (an earlier grid read at the attacker's own view, not used in Table IV) | Table IV (first panel), A3.5, A5.4, Figure 4b (Mysticeti) |
-| `sui_value/` | Laptop | `valuemodel.csv`: silent-except-leader and control under three value models, one row per run (column `profit_weighted_asr`) | T2.4 = T3.1, T3.2, T3.3 |
+| `sui_frontrun/` | Sui node | `grid_scores.json` (first panel of Table IV, 5 runs per arm); `compete_scores.jsonl` (two front-runners against one); `mlaw_scores.jsonl` (refusal law on Mysticeti, 6 arms x 5 runs); `sample_scores.json` (an earlier grid read at the attacker's own view, not used in Table IV) | Table IV (first panel), A3.5, A5.4, Figure 4b (Mysticeti) |
+| `sui_value/` | Sui node | `valuemodel.csv`: silent-except-leader and control under three value models, one row per run (column `profit_weighted_asr`) | T2.4 = T3.1, T3.2, T3.3 |
 | `sui_value/` | not a run | `sui_mainnet_trade_values.csv`: the 1,752 stablecoin amounts (USD) of real Sui mainnet transactions on shared pool objects that `scripts/value/` assigns to victim transactions; `inround_value_4000.txt`: our output of `scripts/value/inround_value.py 4000` | the value-with-real-trade-sizes result of the Bullshark front-running campaign |
 | `cloudlab_withholding/`, `cloudlab_ds13_14_16/`, `cloudlab_ds8-18/`, `cloudlab_alpha/` | CloudLab (July 2026 campaign) | an earlier campaign on the two Sui trees: committee size and the withholding arms, stake, geo-distribution, value model, n = 49, relationship, incentive, victims, attacker fraction. `v2_*` files are the Sui v1.58 tree, `sui_*` the v1.74 tree | earlier versions of the D, A3, A5, A6 and T rows; the current Table II rows come from the runs listed in `../REPRODUCE.md` |
 | `index_tax/` | CloudLab (July 2026 campaign) | no-attacker tiebreak measurement at n = 13, 25, 49 with and without the digest tiebreak; `per_index.csv` is one row per validator, `summary.csv` one row per committee size. Rows labelled `Bullshark` are the Sui v1.58 tree (`code/bullshark`), not the certified Bullshark of `code/bullshark-flashboys` | an earlier no-attacker measurement; the current P3 rows come from the runs in `../REPRODUCE.md` (g) |
