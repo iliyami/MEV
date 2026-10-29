@@ -38,7 +38,7 @@ All runs used four CloudLab machines. An attack arm always ran on the same machi
 | Xeon node | CloudLab node, two 14-core Intel Xeon E5-2683 v3, 251 GB | every Bullshark campaign below except the first censorship cell |
 | AMD node | CloudLab node, 64 cores, 125 GB | the first censorship testbed (A1.4 = A2.8, 84.4%) |
 | c6525 nodes | CloudLab `c6525-25g`: 16-core AMD 7302P, 128 GB | the other cluster runs (the per-cell CSVs already in `data/cloudlab_*`) |
-| Sui node | CloudLab node | every Sui v1.74 run; all validators of a run share one process |
+| Sui node | CloudLab node, same hardware as the Xeon node: two 14-core Intel Xeon E5-2683 v3, 251 GB | every Sui v1.74 run; all validators of a run share one process |
 
 ## Common setup
 

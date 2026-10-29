@@ -16,7 +16,7 @@ control:
   campaigns in `bullshark/`, and the Narwhal-family, bribery, coordination and n = 100 / 125 runs);
 - dedicated CloudLab `c6525-25g` nodes, 16-core AMD 7302P, 128 GB (the other cluster runs);
 - a CloudLab AMD node, 64 cores, 125 GB (the first censorship cell, A1.4 = A2.8);
-- the Sui node, a CloudLab node (the Sui and Mysticeti runs in `sui_frontrun/` and
+- the Sui node, a second CloudLab node with the same hardware as the first (the Sui and Mysticeti runs in `sui_frontrun/` and
   `sui_value/`; all validators of a run share one process).
 
 ## Directories
