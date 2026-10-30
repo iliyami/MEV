@@ -6,8 +6,11 @@
 #  E7 (W1): refusal-model predictions: refusers {0,5} vs {0,1}; stake-weighted leaders, base vs {0,1}.
 # Waits for the Bullshark E3 campaign so timing-sensitive runs never overlap. 5 reps per arm.
 set -u
-ROOT=/mnt/data/sui_src; SUI=$ROOT/sui; O=/mnt/data/esui; mkdir -p $O/e2 $O/e5 $O/e7
-until grep -q "E3 DONE" /mnt/data/e3/e3.log 2>/dev/null; do sleep 60; done
+# Paths: REPO is this repository (found from the script's location), OUT the directory for run logs (required).
+REPO=${REPO:-$(cd "$(dirname "$0")/../.." && pwd)}
+: "${OUT:?set OUT to an output directory}"
+SUI=${SUI:-$REPO/code/sui}; O=$OUT/esui; mkdir -p $O/e2 $O/e5 $O/e7
+# (our run waited here for the Bullshark E3 campaign on the same machine to finish)
 export PATH=$HOME/.cargo/bin:$PATH CARGO_BUILD_JOBS=16 RUST_TEST_THREADS=1
 echo "$(date +%H:%M:%S) build start" >> $O/esui.log
 cd $SUI && nice -n 10 cargo test -p consensus-core --lib --no-run > $O/build.log 2>&1
@@ -16,7 +19,7 @@ echo "$(date +%H:%M:%S) build done exit=$? bin=$BIN" >> $O/esui.log
 [ -x "$BIN" ] || { echo "NO BINARY" >> $O/esui.log; exit 1; }
 
 # E2: value models, one silent attacker (v2_290_solo settings) and SLW (v2_290 settings), FixTiebreak on all nodes.
-cd $ROOT
+cd $REPO
 export SUI_TEST_BIN=$BIN V2_MIN_COMMITS=290 V2_COLLECTION_DURATION=300 SEL_REAL_SCHEDULE=1 FIX_TIEBREAK=1
 V2_ATTACKERS=0 V2_ATTACKER_RATIO=0.08 nice -n 10 python3 -m scripts.v2.p_valuemodel --reps 5 --out-csv $O/e2/valuemodel_fix.csv --out-summary $O/e2/valuemodel_fix.json > $O/e2/valuemodel_fix.out 2>&1
 echo "$(date +%H:%M:%S) e2 valuemodel done" >> $O/esui.log

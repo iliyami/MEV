@@ -2,12 +2,16 @@
 # E3 (reviewer W2): competition within f. Four fissure attackers, each refusing a DIFFERENT victim
 # (INDEPENDENT=1), against a no-attack control with the same four designated attackers; 40 runs per arm,
 # same settings as coal.sh/coal2.sh. Colluding at four is A6.2 (coal+coal2 f4 vs base4).
+# Paths: REPO is this repository (found from the script's location), OUT the directory for run
+# logs (required), PY the Python of the harness venv.
+REPO=${REPO:-$(cd "$(dirname "$0")/../.." && pwd)}
+PY=${PY:-python3}
+: "${OUT:?set OUT to an output directory}"
 export PATH=$HOME/.cargo/bin:$PATH CARGO_BUILD_JOBS=16
 unset FR_REACT FR_VICTIM_RATE FR_GRIND FR_SPRAY FR_VICTIM_SPRAY MULTI_VICTIM BRIBED COLLUDE INDEPENDENT RIVAL_GROUPS SILENT_EXCEPT_LEADER CENSOR
 sudo tc qdisc del dev lo root 2>/dev/null
-cd /mnt/data/flashboys/benchmark
-PY=/mnt/data/venv/bin/python
-R=/mnt/data/e3; mkdir -p $R
+cd $REPO/code/bullshark-flashboys/benchmark
+R=$OUT/e3; mkdir -p $R
 for spec in "base4e 10 4 X=1 40" "f4ind 1 4 INDEPENDENT=1 40"; do
   set -- $spec
   echo "$(date +%H:%M:%S) start $1" >> $R/e3.log

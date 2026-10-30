@@ -1,0 +1,7 @@
+longest honest omission streak, victim: 6  any target: 14
+per-run honest victim omission % (sorted): [0.0, 0.0, 0.0, 0.0, 0.0, 0.009, 0.009, 0.01, 0.01, 0.011, 0.011, 0.011, 0.011, 0.021, 0.021, 0.022, 0.022, 0.022, 0.022, 0.022, 0.028, 0.032, 0.032, 0.043, 0.087, 0.183, 0.239, 0.324, 0.714, 0.816, 0.834, 0.923, 1.179, 1.934, 2.102, 2.278, 3.569, 5.498, 6.271, 13.337]
+runs with victim omission > 2%: [('blk_none', 19, 2.278, 9570), ('blk_none', 7, 13.337, 10250), ('mp_none', 12, 6.271, 9679), ('mp_none', 18, 5.498, 9640), ('mp_none', 2, 3.569, 10172), ('mp_none', 9, 2.102, 10659)]
+fissure attacker 0: omits victim 81.8% of 34932 opportunities; longest inclusion streak 35
+fissure attacker 1: omits victim 87.3% of 34936 opportunities; longest inclusion streak 38
+fissure attacker 2: omits victim 93.9% of 34945 opportunities; longest inclusion streak 13
+fissure attacker 3: omits victim 93.5% of 34973 opportunities; longest inclusion streak 10

@@ -1,0 +1,16 @@
+honest selective omission of victim: 323/870687 = 0.037% wilson95 [0.033, 0.041]; longest streak 2
+fissure attacker selective omission of victim: 39745/52028 = 76.39%
+binomial: always-refuser flagged after 1 rounds (FA 3.71e-04); vs measured attacker 99% power: N,c=(4, 1); 95%: (3, 1)
+  N=  1 honest windows 870687 all-omitted FA 3.71e-04 | threshold c=1 FA 0.0003709714283089101 power(measured attacker) 0.7639155839163527
+  N=  2 honest windows 870597 all-omitted FA 4.59e-06 | threshold c=1 FA 0.0007374250083563348 power(measured attacker) 0.8152516933497537
+  N=  3 honest windows 870507 all-omitted FA 0.00e+00 | threshold c=1 FA 0.001099359338868039 power(measured attacker) 0.8296409031363181
+  N=  4 honest windows 870417 all-omitted FA 0.00e+00 | threshold c=1 FA 0.0014567730179902278 power(measured attacker) 0.8407074525536182
+  N=  5 honest windows 870327 all-omitted FA 0.00e+00 | threshold c=1 FA 0.0018108136367135572 power(measured attacker) 0.8509886460183826
+  N=  6 honest windows 870237 all-omitted FA 0.00e+00 | threshold c=1 FA 0.0021626292607645962 power(measured attacker) 0.8605397463656047
+  N=  8 honest windows 870057 all-omitted FA 0.00e+00 | threshold c=1 FA 0.002861881462938635 power(measured attacker) 0.8789528755231747
+  N= 10 honest windows 869877 all-omitted FA 0.00e+00 | threshold c=1 FA 0.003545328822350746 power(measured attacker) 0.8953931013051585
+  N= 15 honest windows 869427 all-omitted FA 0.00e+00 | threshold c=1 FA 0.005193075439341084 power(measured attacker) 0.924591701179964
+  N= 20 honest windows 868977 all-omitted FA 0.00e+00 | threshold c=1 FA 0.006799949826059838 power(measured attacker) 0.9436605879578682
+  N= 30 honest windows 868077 all-omitted FA 0.00e+00 | threshold c=1 FA 0.009862028368451186 power(measured attacker) 0.9660356347438753
+  N= 50 honest windows 866277 all-omitted FA 0.00e+00 | threshold c=2 FA 0.002874369283727953 power(measured attacker) 0.9611310299869622
+per (run, proposer): honest max 0.93% ('mp_none_v1', 1, 4) ; attacker min 5.54% ('mp_fissure', 5, 0) ; separated: True

@@ -2,8 +2,9 @@
 
 This file gives, for each headline finding of the paper, the code tree, the exact commands we ran,
 the arms and their matched controls, the number of runs, the scorer, the value to expect, and the
-machine it ran on. Cell IDs refer to Table II of the paper; "Table IV" is the transaction-level
-front-running table. Code versions and our patch are in [`VERSIONS.md`](VERSIONS.md). The per-run
+machine it ran on. Cell IDs refer to Table II of the paper. "The front-running table" is the per-arm table of
+transaction-level front-running that `scripts/frontrun_sui/make_table.py` writes; Fig. 5 of the paper
+plots its arms. Code versions and our patch are in [`VERSIONS.md`](VERSIONS.md). The per-run
 scores behind each finding are under [`data/`](data/README.md), so every expected value below can
 be recomputed without rerunning anything.
 
@@ -21,9 +22,12 @@ Where they are:
 |---|---|
 | `scripts/bullshark/` | Bullshark campaign drivers (`*.sh`) and per-run scorers (`coal_score_runs.py`, `coal2_score_runs.py`, `coalscore.py`, `txexport.py`) |
 | `scripts/analysis/` | run-level statistics over the shipped Bullshark score files (`analyze.py`, `trend.py`, `law.py`, `law2.py`, `law25.py`, `dsweep_analyze.py`); they read `data/bullshark/coal/` (override with `COAL_DATA`) |
-| `scripts/frontrun_sui/` | Sui front-running and refusal-law drivers and scorers, the Table IV generator `make_table.py` and `p1_stats.py` |
+| `scripts/frontrun_sui/` | Sui front-running and refusal-law drivers and scorers, the front-running table generator `make_table.py` and `p1_stats.py` |
 | `scripts/sui/` | Sui silent-except-leader and tiebreak driver (`sel290_run.sh`) and its scorer, and the 290-commit harness driver (`v2_290_run.sh`) |
 | `scripts/value/` | front-running value with real trade sizes (`real_value.py`, `inround_value.py`) |
+| `scripts/bullshark/e1_*`, `e3_*` | censorship against host load (E1, Fig. 4d) and competition within f (E3); see (h) |
+| `scripts/sui/e_sui.sh`, `sel_score.py` | the Sui runs of (h): digest tiebreak under value models (E2), strict silence (E5), refusal-law tests (E7) |
+| `scripts/review/` | the analyses behind the review-round numbers that need no new run: broadcast cost, refusal detection and price, swap profit, and the statistics of Table II; see (i) |
 
 Lines in the drivers where our run waited for the previous campaign on the same machine are
 replaced by a comment. Where a script we ran no longer exists, the section says so in a line
@@ -35,10 +39,10 @@ All runs used four CloudLab machines. An attack arm always ran on the same machi
 
 | Name used below | Hardware | Used for |
 |---|---|---|
-| Xeon node | CloudLab node, two 14-core Intel Xeon E5-2683 v3, 251 GB | every Bullshark campaign below except the first censorship cell |
+| Xeon node | CloudLab node, two 14-core Intel Xeon E5-2683 v3, 251 GB | every Bullshark campaign below except the first censorship cell, and the Sui runs of (h) |
 | AMD node | CloudLab node, 64 cores, 125 GB | the first censorship testbed (A1.4 = A2.8, 84.4%) |
 | c6525 nodes | CloudLab `c6525-25g`: 16-core AMD 7302P, 128 GB | the other cluster runs (the per-cell CSVs already in `data/cloudlab_*`) |
-| Sui node | CloudLab node, same hardware as the Xeon node: two 14-core Intel Xeon E5-2683 v3, 251 GB | every Sui v1.74 run; all validators of a run share one process |
+| Sui node | CloudLab node, same hardware as the Xeon node: two 14-core Intel Xeon E5-2683 v3, 251 GB | every Sui v1.74 run except those in (h); all validators of a run share one process |
 
 ## Common setup
 
@@ -417,7 +421,7 @@ gives its settings as our run records state them (`V2_ATTACKERS=0`, `V2_ATTACKER
 
 ---
 
-## (f) Transaction-level front-running (Table IV)
+## (f) Transaction-level front-running (the front-running table, Fig. 5)
 
 ### Bullshark
 
@@ -474,7 +478,7 @@ for a in tbase4 tf4 tbase1 tsolo tbribe3; do
 done > txc_scores.jsonl
 ```
 
-Each Table IV row is the median of `success_pct` over the runs of an arm (an arm and its `_x`,
+Each row of the front-running table is the median of `success_pct` over the runs of an arm (an arm and its `_x`,
 `_y` batches pooled), with the run range. `python3 scripts/frontrun_sui/make_table.py out.tex`
 writes these rows from `data/bullshark/bullshark_frontrun/scores.jsonl`, together with the Sui
 panels below, and `python3 scripts/frontrun_sui/p1_stats.py` gives the A1.1 and P1.2 tests (both
@@ -499,22 +503,28 @@ same round). Five runs took about 5.5 minutes.
 means with its own seed and gives p = 0.006 (tsolo), < 0.001 (tbribe3), 0.008 (tf4) and 0.038
 (tbribe3 over tsolo, where the paper cites 0.04).
 
-**Value with real trade sizes.** Each victim transaction is given the stablecoin amount of a real
-Sui mainnet transaction on a shared pool object, drawn independently from 1,752 such amounts
-(median 22 USD, mean 6,796 USD). In every arm the share of value the attacker wins is within 0.2 points
-of the share of races it wins; in-round value gains are +6.3 (tsolo), +10.0 (tbribe3) and +5.7
-(tf4) points.
+**Value with real swap sizes (Fig. 2c).** Each victim transaction is given the stablecoin amount of
+a real Sui mainnet swap on a shared pool object, drawn independently from 1,229 such amounts
+(median 7.36 USD, mean 76.72 USD; `data/sui_value/sui_swap_values.csv`). They are the transactions
+of the 1,752 in `sui_mainnet_trade_values.csv` that contain a swap; the other 523 add or remove
+liquidity or collect fees, and the paper does not use them. In every arm the share of value the
+attacker wins is within 0.1 points of the share of races it wins; in-round value gains are +6.5
+(tsolo), +10.2 (tbribe3) and +5.7 (tf4) points.
 
 ```bash
-python3 scripts/value/inround_value.py 4000     # all races and in-round races, 4,000 resamples
+python3 scripts/value/inround_value.py 4000 data/sui_value/sui_swap_values.csv   # swaps only, as in the paper
+python3 scripts/value/inround_value.py 4000     # all 1,752 amounts, for comparison
 python3 scripts/value/real_value.py 4000        # value share and USD per victim transaction, with and without a p99 cap
 ```
 
-Both read `data/bullshark/bullshark_frontrun/txc_pertx.jsonl` and
-`data/sui_value/sui_mainnet_trade_values.csv`. The amounts were extracted once from our read-only
+Our output of the first command is `data/sui_value/inround_value_swaps_4000.txt`.
+
+All three read `data/bullshark/bullshark_frontrun/txc_pertx.jsonl`; the amounts come from
+`data/sui_value/sui_swap_values.csv` (first command) or `data/sui_value/sui_mainnet_trade_values.csv`
+(the other two). The amounts were extracted once from our read-only
 census of Sui mainnet transactions (about 80 MB, not shipped) by `census_values()` in
 `real_value.py`; the CSV keeps them in that order, so the scripts reproduce our output exactly.
-Our output of the first command is `data/sui_value/inround_value_4000.txt`.
+Our output of the second command is `data/sui_value/inround_value_4000.txt`.
 
 ### Sui v1.74
 
@@ -530,7 +540,7 @@ three highest-numbered validators). Each run collects for 60 s. Every panel exce
 at the attacker. Machine: Sui node. Drivers and scorers are in
 `scripts/frontrun_sui/`; each loops over its arms and over `SEED` 1 to 5 (1 to 20 where noted).
 
-| Table IV panel | Driver(s) | Log directory | Order |
+| Front-running table panel | Driver(s) | Log directory | Order |
 |---|---|---|---|
 | Consensus order, no hook log, commits read at the attacker | `run_grid.sh` | `runs/` | consensus |
 | One attacker, three victims | `run_sluggish.sh` (controls `blk_none_v1`, `mp_none_v1`), `run_v1.sh`, `run_sluggish_nb.sh` (sluggish rows) | `runs/`, `runs_slug_nb/` | consensus |
@@ -565,7 +575,7 @@ broadcast: copy to all 89.5 [86.2, 95.3] to 20.3 [14.1, 25.7], copy in own block
 panels are scored from the run logs with the commands above.
 
 `scripts/frontrun_sui/make_table.py` applies the same two scorers to the first five panels of
-Table IV and prints them; the victim-broadcast, competition and Bullshark corruption panels were
+the front-running table and prints them; the victim-broadcast, competition and Bullshark corruption panels were
 added to the table by hand from the scorer outputs listed above.
 
 **Not in this repository:** the Sui run logs (about 7 GB).
@@ -611,4 +621,153 @@ with `scripts/v2/index_tax_analysis.py` and exported by `scripts/v2/index_tax_ex
 `scripts/v2/tiebreak_grind_sim.py` simulates digest grinding.
 
 **Not in this repository:** the driver of the `data/index_tax/` runs, and the pipeline behind
-the extended version's deployed-size index-tax table and figures (committees up to n = 125).
+the index-tax numbers at the deployed committee sizes, n = 100 and n = 125.
+
+---
+
+## (h) Runs added in the review round (E1, E2, E3, E5, E7)
+
+Each run below has five runs per arm unless stated, and its attack and control ran on the same
+machine. Drivers take `OUT` (and `PY` for Bullshark) as in the sections above.
+
+### E1: censorship at k = f against host load (Fig. 4d, A1.4, A5.3)
+
+**Claim.** With f = 4 validators withholding votes on the victim's headers, the victim's loss
+depends on how fast the other votes arrive: near zero while the validators have four or more
+cores, 67 to 85% on three or two. One more, bribed, withholder keeps every block out at both ends.
+
+**Tree and machine.** `code/bullshark-flashboys`, Xeon node. The whole local benchmark (every
+validator, worker and client) is confined to C cores with `taskset`; this is a host condition,
+not a code change. Arms: `c0` (no withholding), `c4` (`CENSOR=4`), `c5` (`CENSOR=5`).
+
+```bash
+PY=<venv python> bash scripts/bullshark/e1_cpu.sh <out> 5 "2 3 4 8 56" "c0 c4"
+PY=<venv python> bash scripts/bullshark/e1_cpu.sh <out> 5 "2 56" "c5"
+python3 scripts/bullshark/e1_score.py <out>/cpu2_c4/fissure_f4_n13 4   # one directory per (cores, arm)
+```
+
+**Expected** (median censorship rate, %, control / k = 4 / k = 5): 2 cores 3.26 / 66.82 / 100.0;
+3 cores 24.14 / 85.37; 4 cores -0.51 / 0.0; 8 cores 0.0 / 0.0; 56 cores 0.0 / 4.33 / 100.0. Our
+per-run output: `data/bullshark/e1/e1_runs.txt`. `e1_delay.sh` is a one-run pilot that injected
+loopback jitter instead; equal delay on every link slowed votes and certificates alike and showed
+no trend, so the paper does not use it.
+
+### E3: competition within f (A6.2 and the line after it)
+
+**Claim.** Four fissure attackers that each refuse a different victim do no better than no attack,
+while the same four on one victim (A6.2) gain about 14 points.
+
+**Tree and machine.** `code/bullshark-flashboys`, Xeon node, the settings of `coal.sh`. Arms:
+`base4e` (no attack, the same four designated attackers) and `f4ind` (`INDEPENDENT=1`: each
+attacker refuses its own victim), 40 runs each.
+
+```bash
+OUT=<dir> PY=<venv python> bash scripts/bullshark/e3_compete.sh
+python3 scripts/bullshark/e3_score_runs.py <dir>/e3 > runs.jsonl
+```
+
+**Expected.** Targeted committing-height, pooled over runs: 54.07% (control) and 51.76%
+(competing); our run-level permutation test gives p = 0.57. Colluding at four is A6.2, 65.53%,
+from `data/bullshark/coal/`. Our per-run scores: `data/bullshark/e3/runs.jsonl`.
+
+### E2: silent-except-leader value with the digest tiebreak (after T3.3)
+
+**Claim.** With the digest tiebreak on every validator, the no-attack control's value share drops
+to 49.0, 45.0 and 43.2% (uniform, Pareto, lognormal), and silent-except-leader still leaves the
+attacker 7.7, 5.9 and 5.2%.
+
+**Tree and machine.** `code/sui` (Sui v1.74 consensus-core, debug test build), Xeon node, the
+settings of `v2_290_solo` with `FIX_TIEBREAK=1`. This mitigation runs on every node by design.
+
+```bash
+OUT=<dir> bash scripts/sui/e_sui.sh      # E2, then E5, then E7; logs and CSVs under <dir>/esui/
+```
+
+**Expected.** Median `profit_weighted_asr` per arm in `data/sui/e2/valuemodel_fix.csv`
+(`withhold_baseline` and `withhold_silent`, by `victim_profit_distribution`): 49.0 / 7.7, 45.0 /
+5.9, 43.2 / 5.2; exact two-sided p = 0.008 for each pair. `withholding_fix.csv` holds an SLW arm
+with the same tiebreak, which the paper does not report.
+
+### E5: strict silence at n = 49 and under asymmetric links (D1.3, D3.3)
+
+**Claim.** An attacker that also stays silent through the leader timeout (`SEL_STRICT=1`,
+attacker-only) wins every same-round race at n = 49 and under asymmetric links.
+
+**Tree and machine.** `code/sui`, Xeon node, the settings of `sel290_run.sh`; n = 49, and n = 13
+with `LATENCY_MS=100 ASYMMETRIC_LATENCY=1`. The second block of `e_sui.sh` runs it; score with
+
+```bash
+python3 scripts/sui/sel_score.py '<dir>/esui/e5/n49_base_rep*.log'   # one pattern per arm
+```
+
+**Expected.** Median same-round rate: n = 49 82.81 (control) and 100.00 (strict silence),
+exact p = 0.008; asymmetric 100.00 and 100.00, the control already at the ceiling. Our scores:
+`data/sui/e5/scores.jsonl`.
+
+### E7: where the Mysticeti refusers sit (refusal law, Fig. 4b)
+
+**Claim.** The flat start of the Mysticeti refusal law does not depend on who refuses: moving
+the second refuser to validator 5, or electing leaders by stake, still buys under 2 points.
+
+**Tree and machine.** `code/sui`, Xeon node, the settings of `run_mlaw.sh`. Arms: `base` (no
+attack), `b2` (refusers 0 and 1), `b2at5` (refusers 0 and 5; `FISSURE_BRIBED_NODES` is an index
+list), `sbase` and `sb2` (the same with `STAKE_BASED_LEADER=1`). The third block of `e_sui.sh`
+runs it.
+
+```bash
+python3 scripts/frontrun_sui/score_mlaw.py <dir>/esui/e7 > scores.jsonl
+```
+
+**Expected.** Pooled rate (sum of `succ` over sum of `pairs`): base 49.47, b2 49.92, b2at5 51.34,
+sbase 49.35, sb2 51.10. b2at5 over base +1.87 (exact two-sided p = 0.16); sb2 over sbase +1.75
+(p = 0.42). Our scores: `data/sui/e7/scores.jsonl`.
+
+---
+
+## (i) Analyses added in the review round (no new runs)
+
+Each analysis reads small derived files under `data/review/` and runs in seconds to minutes
+from the repository root. Each script's docstring names its inputs; the scripts that start from
+raw logs say which driver produced them.
+
+**Victim broadcast cost (the defense paragraph).**
+`python3 scripts/review/bcast/aggregate.py` prints, for the Bullshark victim-broadcast runs, 13
+committed copies per victim transaction, victim copies at 0.44% of committed bytes, throughput
+29,614.9 against 29,583.3 tx/s (p = 0.24), consensus latency 562.9 against 561.6 ms, and the
+victim's own latency 799.0 against 585.5 ms (p < 0.001). Inputs: `data/review/bcast/bull_rows.jsonl`
+(made by `bull_cost.py` from the runs of section (f)) and `sui_rows.jsonl` (made by `sui_copies.py`
+from the logs of `scripts/frontrun_sui/run_vbcast.sh`). That Sui executes only the first copy is
+read from the code (`deduplicate_consensus_txns` in `code/sui`'s `consensus_handler.rs`).
+
+**Refusal detection (Proposition 5 remark).**
+`python3 scripts/review/bribe/detect_from_flags.py` prints, for 40 no-attack runs on Sui v1.74,
+an honest block leaving the victim's previous-round block out of its parents alone in 108 of
+383,384 rounds (0.03%), never in more than two consecutive rounds, and an every-round refuser
+flagged after two rounds at a 1% false-alarm rate. Input: `data/review/bribe/p1_victim_flags.json.gz`,
+one flag per round, proposer and victim, made by `make_victim_flags.py` from the parsed logs.
+To start from the logs instead: `parse_sui_ancestors.py`, then `omission_stats.py`, `selective.py`
+and `streaks.py` (arguments in their docstrings); our outputs are the other files in
+`data/review/bribe/`.
+
+**Price of a refusal.** `python3 scripts/review/bribe/price_of_refusal.py` prints the slope per
+refusal with run-bootstrap intervals (Bullshark within f: 4.22 [2.29, 6.13] points, the "about 4%
+of a race" of the remark). Its dollar table uses all 1,752 trade amounts; the paper prices a
+refusal with the swap profit below instead.
+
+**Swap profit (value paragraph).**
+`python3 scripts/review/amm/make_tables.py` prints the 1,229 swaps (median 7.36 USD, mean 76.72
+USD), a mean sandwich profit of 0.1365 USD per swap at 1% slippage tolerance over the 1,187 swaps
+whose pools follow a constant-product or concentrated-liquidity curve (median 0), a lone fissure
+attacker's gain of +0.0058 USD per victim transaction [-0.0069, 0.0189], and a largest gap of
+0.109 points between profit share and race share (77.8 against 77.9%). The other 42 swaps trade
+only on order books (13), oracle-priced pools (5), composite pools (5), bin-based pools (4), two
+such venues (12), or emit no pool-level swap event (3). `combine.py 4000 <out.json>` rebuilds
+`combine_B4000.json` (about 4 minutes). Pool states come from read-only Sui RPC queries
+(`fetch_events.py`, `fetch_objects.py`); the queried objects are shipped, so nothing is fetched.
+
+**Statistics of Table II.** `python3 scripts/review/stats/stats.py` (about 40 seconds) tests every
+row that has per-run data and applies Benjamini-Hochberg at q = 0.05 over the 42 distinct
+executions: 28 survive, and 27 of these also have a 95% interval that excludes zero. Every bold
+mark in Table II matches this rule. Input: `data/review/stats/results.json` (the per-run values);
+`--raw <dir>` recomputes it from the raw logs.
+

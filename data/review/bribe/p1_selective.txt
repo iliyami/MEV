@@ -1,0 +1,16 @@
+honest selective omission of victim: 108/383384 = 0.028% wilson95 [0.023, 0.034]; longest streak 2
+fissure attacker selective omission of victim: 121576/139786 = 86.97%
+binomial: always-refuser flagged after 1 rounds (FA 2.82e-04); vs measured attacker 99% power: N,c=(3, 1); 95%: (2, 1)
+  N=  1 honest windows 383384 all-omitted FA 2.82e-04 | threshold c=1 FA 0.00028170189679277175 power(measured attacker) 0.8697294435780407
+  N=  2 honest windows 383344 all-omitted FA 7.83e-06 | threshold c=1 FA 0.0005556367127175592 power(measured attacker) 0.9189744250282655
+  N=  3 honest windows 383304 all-omitted FA 0.00e+00 | threshold c=1 FA 0.0008244109114436583 power(measured attacker) 0.9268034300602694
+  N=  4 honest windows 383264 all-omitted FA 0.00e+00 | threshold c=1 FA 0.001085413709610086 power(measured attacker) 0.9318373834719975
+  N=  5 honest windows 383224 all-omitted FA 0.00e+00 | threshold c=1 FA 0.0013464709934659625 power(measured attacker) 0.9363442338819418
+  N=  6 honest windows 383184 all-omitted FA 0.00e+00 | threshold c=1 FA 0.0016075827800743246 power(measured attacker) 0.9406315819638073
+  N=  8 honest windows 383104 all-omitted FA 0.00e+00 | threshold c=1 FA 0.0021299699298362846 power(measured attacker) 0.9487979011655413
+  N= 10 honest windows 383024 all-omitted FA 0.00e+00 | threshold c=1 FA 0.0026473536906303522 power(measured attacker) 0.9561631259592902
+  N= 15 honest windows 382824 all-omitted FA 0.00e+00 | threshold c=1 FA 0.003918249639521033 power(measured attacker) 0.9692442503555371
+  N= 20 honest windows 382624 all-omitted FA 0.00e+00 | threshold c=1 FA 0.005164338880990215 power(measured attacker) 0.9774071037072203
+  N= 30 honest windows 382224 all-omitted FA 0.00e+00 | threshold c=1 FA 0.007595022813847377 power(measured attacker) 0.988119111854919
+  N= 50 honest windows 381424 all-omitted FA 0.00e+00 | threshold c=2 FA 0.0015651872981249215 power(measured attacker) 0.9856775934874407
+per (run, proposer): honest max 1.14% ('mp_none', 12, 10) ; attacker min 5.18% ('mp_fissure', 4, 0) ; separated: True
