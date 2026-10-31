@@ -160,13 +160,14 @@ control 48.1% [42.0, 54.3] on 104 pairs; +21.5, p = 0.002. Same-round +10.3, p <
 per-run scores are `data/bullshark/coal/dsweep_scores.jsonl` (80 runs; take the arm from the
 run path, not from the file's `arm` field). The 80 runs took 91 minutes.
 
-The n = 25 refusal law that the Deployment paragraph cites (2.5 points per refusal, 95% interval
-[1.1, 3.9]; eight attackers +15.7 over a 20-run control) adds `scripts/bullshark/lsweep.sh`
-(n = 25 with 1, 2, 4 and 6 attackers, and 10 more controls, interleaved, ten repetitions) and is
-analysed by `python3 scripts/analysis/law25.py`, which reads `lsweep_scores.jsonl` and
-`dsweep_scores.jsonl` and prints slope 2.52 [1.10, 3.92], run-level p = 0.00075, and +15.7
-[+4.8, +27.6], one-sided p = 0.014. Score the lsweep runs with the loop above over
-`$OUT/lsweep/*/r*/*/run0`.
+The n = 25 refusal sweep (1, 2, 4 and 6 attackers, and 10 more controls, interleaved, ten repetitions)
+adds `scripts/bullshark/lsweep.sh` and is analysed by `python3 scripts/analysis/law25.py`, which reads
+`lsweep_scores.jsonl` and `dsweep_scores.jsonl`. It prints each arm's pooled rate (1, 2, 4, 6 attackers:
+43.7, 51.0, 55.5, 51.7; the sweep's own control 53.6 is in the `b25x` rows) and the f = 8 result the
+paper cites: +15.7 [+4.8, +27.6] over the 20-run control, one-sided p = 0.014. Below f the sweep shows
+no gain; the slope the script also prints (2.52) comes from joining the f = 8 arm of the
+committee-size sweep to these arms, and the paper does not use it. Score the lsweep runs with the
+loop above over `$OUT/lsweep/*/r*/*/run0`.
 
 ### Fresh-copy check
 
