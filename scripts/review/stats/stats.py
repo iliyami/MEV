@@ -2,7 +2,7 @@
 """Benjamini-Hochberg FDR pass over every tested Table II row (and the Table V reproduction check).
 Default input (in the repo): per-run values stored in data/review/stats/results.json; all tests rerun.
 With --raw DIR it instead reads the raw run logs and the paper tables under DIR (not in the repo).
-Prints: 42 tested executions, 29 survive BH at q = 0.05, 28 also have a 95% CI that excludes 0.
+Prints: 43 tested executions, 29 survive BH at q = 0.05, 28 also have a 95% CI that excludes 0.
 """
 # Usage (from the repo root, about 2 to 4 minutes):
 #   python3 -I scripts/review/stats/stats.py [--results PATH] [--out results.json]
@@ -77,6 +77,24 @@ def bull_fr(arms):
 
 def txc(arm):
     return [r["success_pct"] for r in jl(f"{DATA}/bullshark/bullshark_frontrun/txc_scores.jsonl") if r["arm"] == arm]
+
+
+def inround_value(arm, D=40000):
+    """Per-run expected share of victim value the attacker wins, over the races decided in the victim's
+    round, each victim transaction valued by a draw from the 1,229 real Sui swap amounts (D draws per run,
+    seeded per arm). Bullshark's order never reads a value, so this is the in-round race share weighted
+    by value; scripts/value/inround_value.py bootstraps the same quantity."""
+    V = [float(l.split(",")[1]) for l in open(f"{DATA}/sui_value/sui_swap_values.csv").read().split("\n")[1:] if l]
+    rng = random.Random(f"inround-{arm}-7"); out = []
+    for r in jl(f"{DATA}/bullshark/bullshark_frontrun/txc_pertx.jsonl"):
+        if r["arm"] != arm:
+            continue
+        T = [t for t in r["txs"] if t[3]]; acc = 0.0
+        for _ in range(D):
+            v = [rng.choice(V) for _ in T]
+            acc += 100.0 * sum(x for x, t in zip(v, T) if t[2]) / sum(v)
+        out.append(acc / D)
+    return out
 
 
 def coal(arm):
@@ -228,6 +246,8 @@ def est_fn(est):
         return lambda a, b: st.median(b) - st.median(a)
     if est == "pooled":
         return lambda a, b: pooled(b) - pooled(a)
+    if est == "mean":
+        return lambda a, b: st.mean(b) - st.mean(a)
     raise ValueError(est)
 
 
@@ -385,7 +405,9 @@ EXECS = {
              f"base: {COAL} base4mv; attack: cache/t1_multi3_m3.json (measure.py m3 on fr_t1_logs.tgz t1_runs/multi3)"),
     "T2.1": ("pooled", lambda: t2("solo", "m1"), lambda: t2("bribe", "m1"), f"{DATA}/bullshark/coal/t2_pooled_runs.txt, solo vs bribe, m1"),
     "T2.2": ("pooled", lambda: t2("solo", "m2"), lambda: t2("bribe", "m2"), f"{DATA}/bullshark/coal/t2_pooled_runs.txt, solo vs bribe, m2"),
-    "T2.4": ("median", lambda: v2csv(f"{DATA}/sui_value/valuemodel.csv", "baseline_uniform", "profit_weighted_asr"),
+    "T2.4": ("mean", lambda: inround_value("tbase1"), lambda: inround_value("tbribe3"),
+             f"{DATA}/bullshark/bullshark_frontrun/txc_pertx.jsonl tbase1 vs tbribe3, in-round races, values from {DATA}/sui_value/sui_swap_values.csv"),
+    "T3.1": ("median", lambda: v2csv(f"{DATA}/sui_value/valuemodel.csv", "baseline_uniform", "profit_weighted_asr"),
              lambda: v2csv(f"{DATA}/sui_value/valuemodel.csv", "silent_uniform", "profit_weighted_asr"), f"{DATA}/sui_value/valuemodel.csv, uniform"),
     "T3.2": ("median", lambda: v2csv(f"{DATA}/sui_value/valuemodel.csv", "baseline_pareto", "profit_weighted_asr"),
              lambda: v2csv(f"{DATA}/sui_value/valuemodel.csv", "silent_pareto", "profit_weighted_asr"), f"{DATA}/sui_value/valuemodel.csv, pareto"),
@@ -407,7 +429,7 @@ SUPP = {
                    "scripts/score_censorship_bullshark.py on the CloudLab coal/{f4,cens4}/fissure_f4_n13 runs"),
 }
 ROW2EXEC = {"P1.1": "A1.1", "A2.8": "A1.4", "A4.1": "A2.1", "P2.4": "A2.2", "A3.1": "A2.4", "P2.1": "A2.4", "P4.1": "A2.4",
-            "D1.1": "A2.4", "D3.1": "A2.4", "A6.3": "A3.3", "A6.1": "A5.1", "T2.3": "A5.2", "T1.1": "A6.2", "T3.1": "T2.4"}
+            "D1.1": "A2.4", "D3.1": "A2.4", "A6.3": "A3.3", "A6.1": "A5.1", "T2.3": "A5.2", "T1.1": "A6.2"}
 NOT_IN_FAMILY = {"P3.1": "fixed 50% line; the caption tests it through P3.3-P3.5"}
 
 
@@ -444,9 +466,10 @@ def run_exec(eid):
     est, lb, la, src = EXECS[eid] if eid in EXECS else SUPP[eid]
     rec = {"exec": eid, "estimator": est, "source": src.replace(ROOT + "/", "")}
     if STORED is not None and est not in ("nodata", "none"):
-        s = STORED["executions"].get(eid) or STORED["supplementary"][eid]
-        conv = (lambda xs: [tuple(x) for x in xs]) if est == "pooled" else (lambda xs: list(xs))
-        lb = lambda: conv(s["base_runs"]); la = lambda: conv(s["attack_runs"])
+        s = STORED["executions"].get(eid) or STORED["supplementary"].get(eid)
+        if s is not None and s.get("source") == rec["source"]:
+            conv = (lambda xs: [tuple(x) for x in xs]) if est == "pooled" else (lambda xs: list(xs))
+            lb = lambda: conv(s["base_runs"]); la = lambda: conv(s["attack_runs"])
     if est in ("nodata", "none"):
         rec["status"] = est; return rec
     seed = f"{eid}-20261028"
@@ -466,6 +489,11 @@ def run_exec(eid):
         rec["base_runs"] = [list(r) for r in a]; rec["attack_runs"] = [list(r) for r in b]
         rec["base_rates"] = [round(v, 4) for v in rate(a)]; rec["attack_rates"] = [round(v, 4) for v in rate(b)]
         p, how = perm(a, b, f, seed + "p")
+        rec["p_secondary"] = None
+    elif est == "mean":
+        bpt, apt = st.mean(a), st.mean(b); ctrl = a
+        rec["base_runs"] = list(a); rec["attack_runs"] = list(b)
+        p, how = perm(a, b, f, seed + "p"); how += ", statistic = mean difference"
         rec["p_secondary"] = None
     else:
         bpt, apt = st.median(a), st.median(b); ctrl = a

@@ -358,7 +358,7 @@ node (only its two endpoints, 0.35 and 84.40, are recorded).
 same-round races against the three highest-numbered validators, against 92.4% without the attack
 (A2.4 = A3.1 = P2.1 = P4.1 = D1.1 = D3.1: 92.40 to 100.00). By staying silent it enters far fewer
 races, so its share of victim value under a uniform value model falls from 92.4% to 8.0%
-(T3.1 = T2.4: 92.38 to 7.96); pareto 94.04 to 5.99 (T3.2), lognormal 95.65 to 5.22 (T3.3).
+(T3.1: 92.38 to 7.96); pareto 94.04 to 5.99 (T3.2), lognormal 95.65 to 5.22 (T3.3).
 
 **Tree.** `code/sui`, tests `test_withhold_baseline_asr_dynamic` (control: the hook is removed)
 and `test_withhold_silent_attack_asr_dynamic` (attack) in
@@ -510,7 +510,9 @@ a real Sui mainnet swap on a shared pool object, drawn independently from 1,229 
 of the 1,752 in `sui_mainnet_trade_values.csv` that contain a swap; the other 523 add or remove
 liquidity or collect fees, and the paper does not use them. In every arm the share of value the
 attacker wins is within 0.1 points of the share of races it wins; in-round value gains are +6.5
-(tsolo), +10.2 (tbribe3) and +5.7 (tf4) points.
+(tsolo), +10.2 (tbribe3) and +5.7 (tf4) points. Table II's realized-MEV row (T2.4) is tbribe3
+against tbase1, 70.2 to 80.4%: `stats.py` computes each run's expected in-round value share over
+40,000 value draws, and the run-label permutation gives p < 0.001.
 
 ```bash
 python3 scripts/value/inround_value.py 4000 data/sui_value/sui_swap_values.csv   # swaps only, as in the paper
@@ -767,8 +769,8 @@ such venues (12), or emit no pool-level swap event (3). `combine.py 4000 <out.js
 (`fetch_events.py`, `fetch_objects.py`); the queried objects are shipped, so nothing is fetched.
 
 **Statistics of Table II.** `python3 scripts/review/stats/stats.py` (about 40 seconds) tests every
-row that has per-run data and applies Benjamini-Hochberg at q = 0.05 over the 42 distinct
-executions: 28 survive, and 27 of these also have a 95% interval that excludes zero. Every bold
+row that has per-run data and applies Benjamini-Hochberg at q = 0.05 over the 43 distinct
+executions: 29 survive, and 28 of these also have a 95% interval that excludes zero. Every bold
 mark in Table II matches this rule. Input: `data/review/stats/results.json` (the per-run values);
 `--raw <dir>` recomputes it from the raw logs.
 
