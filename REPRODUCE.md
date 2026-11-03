@@ -352,13 +352,14 @@ node (only its two endpoints, 0.35 and 84.40, are recorded).
 
 ---
 
-## (e) Silent-except-leader on Mysticeti in Sui v1.74 (A2.4, T3.1)
+## (e) Silent-except-leader on Mysticeti in Sui v1.74 (A2.4)
 
 **Claim.** One attacker (validator 0) that proposes only in its own leader rounds wins all of its
 same-round races against the three highest-numbered validators, against 92.4% without the attack
 (A2.4 = A3.1 = P2.1 = P4.1 = D1.1 = D3.1: 92.40 to 100.00). By staying silent it enters far fewer
 races, so its share of victim value under a uniform value model falls from 92.4% to 8.0%
-(T3.1: 92.38 to 7.96); pareto 94.04 to 5.99 (T3.2), lognormal 95.65 to 5.22 (T3.3).
+(92.38 to 7.96); pareto 94.04 to 5.99, lognormal 95.65 to 5.22. The paper reports these in the
+prose of its Value paragraph; Table II's T3 rows score bribed fissure (see the value section below).
 
 **Tree.** `code/sui`, tests `test_withhold_baseline_asr_dynamic` (control: the hook is removed)
 and `test_withhold_silent_attack_asr_dynamic` (attack) in
@@ -512,7 +513,10 @@ liquidity or collect fees, and the paper does not use them. In every arm the sha
 attacker wins is within 0.1 points of the share of races it wins; in-round value gains are +6.5
 (tsolo), +10.2 (tbribe3) and +5.7 (tf4) points. Table II's realized-MEV row (T2.4) is tbribe3
 against tbase1, 70.2 to 80.4%: `stats.py` computes each run's expected in-round value share over
-40,000 value draws, and the run-label permutation gives p < 0.001.
+40,000 value draws, and the run-label permutation gives p < 0.001. The Value rows (T3.1 to T3.3)
+score the same two arms under the paper's three value models (uniform; Pareto, shape 1.16;
+lognormal, mu 1.1 and sigma 2.5, as `scripts/v2/victim_gen.py`), again 70.2 to 80.4% and +10.2
+points under each, p < 0.001.
 
 ```bash
 python3 scripts/value/inround_value.py 4000 data/sui_value/sui_swap_values.csv   # swaps only, as in the paper

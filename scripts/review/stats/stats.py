@@ -97,6 +97,26 @@ def inround_value(arm, D=40000):
     return out
 
 
+def inround_model(arm, model, D=40000):
+    """Per-run expected in-round value share under a synthetic value model of the paper (Pareto shape 1.16,
+    lognormal mu 1.1 and sigma 2.5, as scripts/v2/victim_gen.py), D draws per run; uniform values give the
+    in-round race share exactly."""
+    draw = {"pareto": lambda g: g.paretovariate(1.16), "lognormal": lambda g: g.lognormvariate(1.1, 2.5)}.get(model)
+    g = random.Random(f"{model}-{arm}"); out = []
+    for r in jl(f"{DATA}/bullshark/bullshark_frontrun/txc_pertx.jsonl"):
+        if r["arm"] != arm:
+            continue
+        T = [t for t in r["txs"] if t[3]]
+        if draw is None:
+            out.append(100.0 * sum(1 for t in T if t[2]) / len(T)); continue
+        acc = 0.0
+        for _ in range(D):
+            v = [draw(g) for _ in T]
+            acc += 100.0 * sum(x for x, t in zip(v, T) if t[2]) / sum(v)
+        out.append(acc / D)
+    return out
+
+
 def coal(arm):
     return [(r["succ"], r["total"]) for r in jl(f"{DATA}/bullshark/coal/runs_pooled.jsonl") if r["arm"] == arm and r["total"] > 0]
 
@@ -407,12 +427,9 @@ EXECS = {
     "T2.2": ("pooled", lambda: t2("solo", "m2"), lambda: t2("bribe", "m2"), f"{DATA}/bullshark/coal/t2_pooled_runs.txt, solo vs bribe, m2"),
     "T2.4": ("mean", lambda: inround_value("tbase1"), lambda: inround_value("tbribe3"),
              f"{DATA}/bullshark/bullshark_frontrun/txc_pertx.jsonl tbase1 vs tbribe3, in-round races, values from {DATA}/sui_value/sui_swap_values.csv"),
-    "T3.1": ("median", lambda: v2csv(f"{DATA}/sui_value/valuemodel.csv", "baseline_uniform", "profit_weighted_asr"),
-             lambda: v2csv(f"{DATA}/sui_value/valuemodel.csv", "silent_uniform", "profit_weighted_asr"), f"{DATA}/sui_value/valuemodel.csv, uniform"),
-    "T3.2": ("median", lambda: v2csv(f"{DATA}/sui_value/valuemodel.csv", "baseline_pareto", "profit_weighted_asr"),
-             lambda: v2csv(f"{DATA}/sui_value/valuemodel.csv", "silent_pareto", "profit_weighted_asr"), f"{DATA}/sui_value/valuemodel.csv, pareto"),
-    "T3.3": ("median", lambda: v2csv(f"{DATA}/sui_value/valuemodel.csv", "baseline_lognormal", "profit_weighted_asr"),
-             lambda: v2csv(f"{DATA}/sui_value/valuemodel.csv", "silent_lognormal", "profit_weighted_asr"), f"{DATA}/sui_value/valuemodel.csv, lognormal"),
+    "T3.1": ("mean", lambda: inround_model("tbase1", "uniform"), lambda: inround_model("tbribe3", "uniform"), f"{DATA}/bullshark/bullshark_frontrun/txc_pertx.jsonl tbase1 vs tbribe3, in-round races, uniform values"),
+    "T3.2": ("mean", lambda: inround_model("tbase1", "pareto"), lambda: inround_model("tbribe3", "pareto"), f"{DATA}/bullshark/bullshark_frontrun/txc_pertx.jsonl tbase1 vs tbribe3, in-round races, pareto values"),
+    "T3.3": ("mean", lambda: inround_model("tbase1", "lognormal"), lambda: inround_model("tbribe3", "lognormal"), f"{DATA}/bullshark/bullshark_frontrun/txc_pertx.jsonl tbase1 vs tbribe3, in-round races, lognormal values"),
     "D1.2": ("median", lambda: sel290("n25_base"), lambda: sel290("n25_sel"), f"{P2}/sel290/n25_{{base,sel}}, same-round"),
     "D1.3": ("median", lambda: e5("n49_base"), lambda: e5("n49_sel"), f"{DATA}/sui/e5/scores.jsonl, n49_base vs n49_sel, same_round (strict silence)"),
     "D2.1": ("median", lambda: sel290("d2_sbeq_base"), lambda: sel290("d2_sbeq_sel"), f"{P2}/sel290/d2_sbeq_{{base,sel}}, same-round"),
